@@ -1,0 +1,56 @@
+name: HA-Bandwidth
+slug: ha_bandwidth
+version: "0.10.4"
+description: Netwerkverkeer van de Home Assistant-server en apps
+url: https://github.com/ferrynl/ha-bandwidth
+arch:
+  - amd64
+  - aarch64
+startup: application
+init: false
+host_network: true
+docker_api: true
+homeassistant_api: true
+privileged:
+  - NET_RAW
+ingress: true
+ingress_stream: true
+ingress_port: 63187
+panel_admin: true
+panel_icon: mdi:chart-timeline-variant
+options:
+  interface: auto
+  timezone: Europe/Amsterdam
+  track_peers: true
+  track_app_destinations: true
+  ipinfo_token: ""
+  upstream_modem_name: ""
+  upstream_modem_ip: ""
+  zyxel_direct: false
+  zyxel_username: ""
+  zyxel_password: ""
+  zyxel_allow_unverified_tls: false
+  openwrt_url: ""
+  openwrt_username: root
+  openwrt_password: ""
+  openwrt_interface: wan
+  modem_download_entity: ""
+  modem_upload_entity: ""
+schema:
+  interface: str
+  timezone: str
+  track_peers: bool
+  track_app_destinations: bool
+  ipinfo_token: password
+  upstream_modem_name: str
+  upstream_modem_ip: str
+  zyxel_direct: bool
+  zyxel_username: str
+  zyxel_password: password
+  zyxel_allow_unverified_tls: bool
+  openwrt_url: str
+  openwrt_username: str
+  openwrt_password: password
+  openwrt_interface: str
+  modem_download_entity: str
+  modem_upload_entity: str

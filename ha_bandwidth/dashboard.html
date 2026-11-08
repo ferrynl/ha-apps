@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>HA-Bandwidth</title>
+<link rel="stylesheet" href="./dashboard.css">
+<script defer src="./dashboard.js"></script>
+</head>
+<body>
+<main>
+  <header>
+    <div class="eyebrow">HOME ASSISTANT · NETWERK</div>
+    <h1>HA-Bandwidth</h1>
+    <p id="status" role="status">Metingen ophalen…</p>
+  </header>
+  <nav aria-label="Meetbron">
+    <button type="button" data-kind="host" aria-pressed="true">Server</button>
+    <button type="button" data-kind="app" aria-pressed="false">Apps</button>
+    <button type="button" data-kind="peer" aria-pressed="false">IP-adressen</button>
+    <button type="button" data-kind="device" aria-pressed="false">Apparaten</button>
+    <button type="button" data-kind="compare" aria-pressed="false">OpenWrt vergelijken</button>
+    <button type="button" data-kind="backup" aria-pressed="false">Back-up</button>
+  </nav>
+  <section class="card" id="backup-panel" hidden>
+    <h2>Back-up van meetgegevens</h2>
+    <p>Download een kopie van alle metingen. Terugzetten vervangt de huidige meetgegevens. De app bewaart vóór het terugzetten automatisch een herstelkopie.</p>
+    <a class="action" href="./api/backup" download>Back-up downloaden</a>
+    <a class="action" id="previous-backup" href="./api/backup/previous" download hidden>Kopie van vóór het terugzetten downloaden</a>
+    <form id="restore-form">
+      <label for="restore-file">SQLite-back-up (max. 256 MiB)</label>
+      <input id="restore-file" type="file" accept=".sqlite3,.sqlite,.db" required>
+      <label><input id="restore-confirm" type="checkbox" required> Ik wil de huidige meetgegevens vervangen.</label>
+      <button id="restore-button" type="submit">Back-up terugzetten</button>
+    </form>
+    <p id="backup-status" role="status"></p>
+  </section>
+  <div id="measurement-panel">
+  <p id="explanation"></p>
+  <div id="warnings" hidden></div>
+  <section class="controls" aria-label="Periode kiezen">
+    <nav aria-label="Periode">
+      <button type="button" data-period="day" aria-pressed="true">Dag</button>
+      <button type="button" data-period="week" aria-pressed="false">Week</button>
+      <button type="button" data-period="month" aria-pressed="false">Maand</button>
+      <button type="button" data-period="year" aria-pressed="false">Jaar</button>
+    </nav>
+    <label>Datum <input id="date" type="date"></label>
+    <button type="button" id="today">Vandaag</button>
+  </section>
+  <p id="range"></p>
+  <div id="comparison" class="card" hidden>
+    <h2>Verkeer per bron</h2>
+    <p id="modem-status" role="status"></p>
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th scope="col">Bron</th><th scope="col">Download</th><th scope="col">Upload</th><th scope="col">Totaal</th></tr></thead>
+        <tbody id="comparison-rows"></tbody>
+      </table>
+    </div>
+  </div>
+  <div class="totals" id="totals">
+    <section class="card"><h2>Download</h2><strong id="download">—</strong></section>
+    <section class="card"><h2>Upload</h2><strong id="upload">—</strong></section>
+    <section class="card"><h2>Totaal</h2><strong id="total">—</strong></section>
+  </div>
+  <section class="card" id="destinations" hidden>
+    <h2 id="destinations-title" tabindex="-1">Bestemmingen</h2>
+    <p id="destinations-note" role="status"></p>
+    <div class="table-scroll" id="destinations-table" hidden>
+      <table>
+        <thead><tr>
+          <th scope="col">Domein / apparaat</th><th scope="col">IP-adres</th><th scope="col">Type adres</th>
+          <th scope="col">Protocol</th><th scope="col">Poort wederpartij</th>
+          <th scope="col">Download</th><th scope="col">Upload</th><th scope="col">Totaal</th>
+        </tr></thead>
+        <tbody id="destination-rows"></tbody>
+      </table>
+    </div>
+  </section>
+  <section class="card" id="topology-panel" hidden>
+    <h2>Netwerkdiagram</h2>
+    <p id="topology-note"></p>
+    <input id="topology-search" class="table-filter" type="search" placeholder="Zoek op naam, IP of MAC…" aria-label="Zoek in de apparatenwolk">
+    <div class="topology-cloud" id="topology-cloud">
+      <div class="map-controls" role="group" aria-label="Zoomen op de netwerkkaart">
+        <button type="button" id="topology-zoom-out" aria-label="Uitzoomen">−</button>
+        <button type="button" id="topology-zoom-in" aria-label="Inzoomen">+</button>
+        <button type="button" id="topology-fit">Alles in beeld</button>
+      </div>
+      <svg id="topology-map" viewBox="0 0 960 480" aria-label="Interactieve netwerkkaart">
+        <g id="topology-viewport"></g>
+      </svg>
+      <p id="topology-no-match" hidden>Geen apparaten gevonden.</p>
+    </div>
+    <div id="topology-detail" class="topology-detail" hidden>
+      <strong id="topology-device-name"></strong>
+      <span id="topology-device-address"></span>
+      <span id="topology-device-traffic"></span>
+      <button type="button" id="topology-graph">Toon verkeersgrafiek</button>
+    </div>
+  </section>
+  <section class="card history">
+    <div class="section-head">
+      <h2 id="chart-title">Verkeer over tijd</h2>
+      <button type="button" id="clear" hidden>Alle bronnen</button>
+    </div>
+    <p class="legend" id="legend"><span class="rx">● Download</span><span class="tx">● Upload</span></p>
+    <p class="legend" id="comparison-legend" hidden><span class="rx">HA-download</span><span class="tx">HA-upload</span><span class="modem-rx" id="router-download-legend"></span><span class="modem-tx" id="router-upload-legend"></span><span class="cellular-rx" id="cellular-download-legend"></span><span class="cellular-tx" id="cellular-upload-legend"></span></p>
+    <p id="empty" hidden>Voor deze periode zijn nog geen metingen opgeslagen.</p>
+    <div class="plot-shell">
+      <div id="axis" aria-hidden="true"></div>
+      <div id="chart" role="group" aria-label="Download boven de nullijn en upload eronder"></div>
+    </div>
+    <p id="chart-details" aria-hidden="true"></p>
+  </section>
+  <section class="card table-card" id="ranking-panel">
+    <h2 id="ranking">Verkeer per netwerkinterface</h2>
+    <p id="ranking-detail">Klik op een regel om de grafiek en totalen op die bron te filteren.</p>
+    <div class="table-scroll">
+      <table><thead><tr><th scope="col">Bron</th><th scope="col">Download</th><th scope="col">Upload</th><th scope="col">Totaal</th></tr></thead>
+      <tbody id="rows"></tbody></table>
+    </div>
+  </section>
+  <section class="card" id="shared-section" hidden>
+    <h2>Containers met een gedeeld netwerk</h2>
+    <p id="shared"></p>
+    <p id="unavailable"></p>
+  </section>
+  </div>
+</main>
+</body>
+</html>

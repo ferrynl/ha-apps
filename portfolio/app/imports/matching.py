@@ -1,0 +1,150 @@
+"""Automatic listing resolution. Never guess exchange rates or select a fuzzy hit."""
+import json
+import re
+from provider import search_stocks,fetch_quote,listing,ProviderBusy
+from persistent_cache import cached_json
+from diagnostics import record
+from .listings import CATALOGUE, HISTORICAL_LISTINGS, BROKER_LISTINGS
+from .registry import remember,lookup,discover
+
+def ticker_base(value):
+    value=re.sub(r'_(US|NL|UK|DE|FR|IT|CH)_EQ$','',value.upper())
+    return re.sub(r'\.(AS|PA|DE|MI|L|SW|F|BR|MC)$','',value)
+
+def resolve(store,rows,provider,preferred=None):
+    first=rows[0];ticker=first['ticker'];currency=first['currency'];target=preferred or currency
+    isins={r.get('raw',{}).get('ISIN','').strip().upper() for r in rows}-{''}
+    if len(isins)>1:return {'error':'Meerdere ISIN-codes bij '+ticker+'. Deze brongegevens zijn niet eenduidig.'}
+    isin=next(iter(isins),'');base=ticker_base(ticker)
+    # Historical eligibility changes with the latest source transaction date.
+    identity='|'.join((provider,isin or ticker,currency,preferred or '',max(r.get('day','9999') for r in rows)))
+    def find():
+        # Prefer mappings proven by prior committed imports with the same ISIN/ticker.
+        with store.connect() as db:
+            batches=db.execute("SELECT payload FROM import_batches WHERE provider=? AND status='imported' ORDER BY id DESC LIMIT 200",(provider,)).fetchall()
+        for batch in batches:
+            for row in json.loads(batch['payload']):
+                if row.get('currency')!=currency:continue
+                same=(row.get('raw',{}).get('ISIN','').upper()==isin) if isin else row.get('ticker')==ticker
+                if same and row.get('mapping') and (not preferred or row['mapping']['currency']==target):return {'mapping':row['mapping'],'via':'Bewaarde koppeling'}
+        historical=HISTORICAL_LISTINGS.get(isin)
+        if not isin and provider=='revolut':
+            matches=[item for item in HISTORICAL_LISTINGS.values() if item['symbol']==ticker and item['currency']==currency]
+            if len(matches)==1:historical=matches[0]
+        if historical and all(r.get('day','9999')<=historical['last_day'] for r in rows):
+            return {'mapping':{k:v for k,v in historical.items() if k!='last_day'},'via':'Historische ISIN-notering; actuele koers kan ontbreken'}
+        broker_listing=BROKER_LISTINGS.get((provider,isin))
+        if broker_listing:return {'mapping':dict(broker_listing),'via':'Niet-beursgenoteerd fonds; actuele fondskoers handmatig instellen bij Aandelen' if broker_listing['exchange']=='PRIVATE' else 'Exacte ISIN-notering van de broker; koersbeschikbaarheid apart gecontroleerd'}
+        if provider=='traderepublic' and first.get('raw',{}).get('asset_class','').upper()=='PRIVATE_FUND':
+            return {'error':'Niet-beursgenoteerd fonds: de exacte ISIN-koppeling is nog niet ondersteund. Er wordt geen beursnotering op naam gekozen.'}
+        # Issuer-backed ISIN tables bypass incomplete Yahoo search indexes.
+        catalogue=CATALOGUE.get(isin,[])
+        if catalogue:
+            verified=[]
+            for symbol in catalogue:
+                try:stock=listing(symbol,store=store)
+                except ProviderBusy:raise
+                except Exception:continue
+                verified.append(stock)
+                if stock['currency']==(preferred or currency):return {'mapping':stock,'via':'Gecontroleerde ISIN-notering'}
+            if verified:return {'mapping':verified[0],'via':'Gecontroleerde ISIN-notering met historische valutaomrekening'}
+        # Legacy Revolut exports omit ISIN. Search indexes miss valid symbols,
+        # particularly one-letter US tickers and German venue codes. Validate
+        # the exact symbol and currency against chart metadata instead.
+        if provider=='revolut' and not isin:
+            # Allianz issuer share information: WKN 840400, exchange code ALV.
+            # allianz.com/en/investor_relations/share/share-information.html
+            alias={'840400':'ALV.DE'}.get(ticker) if currency=='EUR' else None
+            symbols=([alias] if alias else [ticker] if currency=='USD' or ticker.endswith(('.DE','.F','.AS','.PA','.MI','.BR','.MC')) else
+                     [ticker+'.DE',ticker+'.F'] if currency=='EUR' else [])
+            for symbol in symbols:
+                try:stock=listing(symbol,store=store)
+                except ProviderBusy:raise
+                except Exception:continue
+                if stock['symbol'].upper()==symbol.upper() and stock['currency']==target:
+                    return {'mapping':stock,'via':'ISIN / ticker en gecontroleerde koersvaluta'}
+        queries=[]
+        for query in (isin,base,first.get('name','')):
+            if 2<=len(query)<=80 and query not in queries:queries.append(query)
+        observed=set();failures=False;convertible=[]
+        for query in queries:
+            try:candidates=search_stocks(query,store=store)
+            except ProviderBusy:raise
+            except Exception:failures=True;continue
+            observed.update(c['currency'] for c in candidates)
+            exact=[c for c in candidates if ticker_base(c['symbol'])==base]
+            # An ISIN lookup identifies the security; otherwise require an exact ticker.
+            accepted=exact or (candidates if isin and query==isin else [])
+            unique={(c['symbol'],c['exchange'],c['currency']):c for c in accepted}
+            verified={}
+            for stock in unique.values():
+                # Search results often omit currency. Check chart metadata instead
+                # of excluding USD listings merely because their exchange is in Europe.
+                try:fetch_quote('',stock['symbol'],stock['exchange'],target,store=store)
+                except ProviderBusy:raise
+                except Exception:
+                    failures=True
+                    try:actual=listing(stock['symbol'],store=store)
+                    except ProviderBusy:raise
+                    except Exception:continue
+                    convertible.append(actual);continue
+                verified[(stock['symbol'],stock['exchange'])]={**stock,'currency':target}
+            if len(verified)==1:return {'mapping':next(iter(verified.values())),'via':'ISIN / ticker en gecontroleerde koersvaluta'}
+        unique={(c['symbol'],c['exchange']):c for c in convertible}
+        if len(unique)==1:return {'mapping':next(iter(unique.values())),'via':'Exacte ticker met historische valutaomrekening'}
+        if observed and currency not in observed:
+            reason='Bronvaluta '+currency+' wijkt af van de gevonden koersvaluta ('+', '.join(sorted(observed))+'). Er kon geen betrouwbare notering worden gecontroleerd; ontbrekende koersen worden niet gegokt.'
+        elif failures:reason='Koersdienst tijdelijk niet beschikbaar of de gevonden notering kon niet worden gecontroleerd. Probeer de automatische koppeling opnieuw.'
+        else:reason='Geen eenduidige ondersteunde notering gevonden voor '+ticker+((' · ISIN '+isin) if isin else '')+'.'
+        return {'error':reason}
+    result=cached_json(store,'import-listing-v6',identity,7*86400,find)
+    # Do not keep transient failures for a week.
+    if result.get('error'):
+        with store.connect() as db:db.execute("DELETE FROM api_cache WHERE namespace='import-listing-v6' AND cache_key=?",(identity,))
+    return result
+
+def resolve_instrument(store,batch_id,key):
+    with store.connect() as db:batch=db.execute('SELECT * FROM import_batches WHERE id=?',(batch_id,)).fetchone()
+    if not batch or batch['status'] not in ('preview','partial'):raise ValueError('Importvoorbeeld niet beschikbaar.')
+    rows=json.loads(batch['payload'])
+    selected=[r for r in rows if r.get('kind') not in (None,'SKIP') and r.get('ticker','')+'|'+r.get('currency','')==key and r.get('currency') and not r.get('error') and not r.get('duplicate')]
+    if not selected:raise ValueError('Instrument niet gevonden in dit importvoorbeeld.')
+    # Dividend settlement currency may differ from the listing currency. Reuse
+    # the quote currency of purchases of the same instrument in this batch.
+    if len({r.get('raw',{}).get('ISIN','').strip().upper() for r in selected}-{''})>1:return {'error':'Meerdere ISIN-codes bij deze bronticker; koppeling kan niet veilig worden gekozen.'}
+    discover(store)
+    saved=lookup(store,batch['account_id'],batch['provider'],selected[0])
+    isin=selected[0].get('raw',{}).get('ISIN','')
+    related=[r for r in rows if r.get('kind') in ('BUY','SELL') and ((isin and r.get('raw',{}).get('ISIN')==isin) or r.get('ticker')==selected[0]['ticker'])]
+    preferred=None
+    held={}
+    if selected[0].get('kind')=='DIVIDEND':
+        mappings=[r['mapping'] for r in related if r.get('mapping')]
+        if not mappings:
+            with store.connect() as db:previous=db.execute("SELECT payload FROM import_batches WHERE account_id=? AND provider=? AND status='imported' ORDER BY id DESC LIMIT 200",(batch['account_id'],batch['provider'])).fetchall()
+            for old in previous:
+                for row in json.loads(old['payload']):
+                    same=(isin and row.get('raw',{}).get('ISIN')==isin) or (not isin and row.get('ticker')==selected[0]['ticker'])
+                    if same and row.get('kind') in ('BUY','SELL') and row.get('mapping'):mappings.append(row['mapping'])
+        for item in mappings:held[(item['symbol'],item['exchange'],item['currency'])]=item
+        if mappings:preferred=mappings[0]['currency']
+        elif related:preferred=related[0]['currency']
+    if saved:result={'mapping':saved,'via':'Bewaarde instrumentkoppeling'}
+    elif len(held)==1:result={'mapping':next(iter(held.values())),'via':'Bestaande aankoop in dit brokeraccount'}
+    elif len(held)>1:result={'error':'Dividend hoort bij meerdere bestaande noteringen. Deze ontvangst kan niet veilig aan één positie worden toegewezen.'}
+    else:
+        try:result=resolve(store,selected,batch['provider'],preferred)
+        except ProviderBusy as error:return {'error':str(error),'retry_later':True}
+    if result.get('mapping'):
+        remember(store,batch['account_id'],batch['provider'],selected[0],result['mapping'])
+    with store.connect() as db:
+        # Re-read after network I/O to preserve other resolved instruments.
+        current=db.execute("SELECT payload FROM import_batches WHERE id=? AND status IN ('preview','partial')",(batch_id,)).fetchone()
+        if not current:raise ValueError('Importvoorbeeld is inmiddels verwerkt.')
+        rows=json.loads(current['payload'])
+        for row in rows:
+            if not row.get('duplicate') and row.get('ticker','')+'|'+row.get('currency','')==key:
+                if result.get('mapping'):row['mapping']=result['mapping']
+        db.execute('UPDATE import_batches SET payload=? WHERE id=?',(json.dumps(rows),batch_id))
+    record(store,'INFO' if result.get('mapping') else 'WARNING','imports','listing_resolved' if result.get('mapping') else 'listing_unresolved','Automatische beurskoppeling afgerond.' if result.get('mapping') else result['error'],{'batch_id':batch_id,'ticker':selected[0]['ticker'],'currency':selected[0]['currency']})
+    return result

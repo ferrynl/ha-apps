@@ -1,0 +1,1057 @@
+# Home Invest — Uitgebreide handleiding
+
+Experimentele versie (0.13.0). Draait volledig als Home Assistant-app
+(voorheen add-on), met een dashboard via de Home Assistant-zijbalk en eigen
+SQLite-database. Geen externe hosting, CDN of browserbibliotheken nodig.
+
+## Installatie via GitHub
+
+1. De app-repository is [ferrynl/ha-apps](https://github.com/ferrynl/ha-apps).
+2. De repository bevat `repository.yaml` direct in de root, met `portfolio/` ernaast.
+3. Open in Home Assistant **Instellingen → Apps → App store → ⋮ → Repositories**
+   (oudere versies noemen dit Add-ons).
+4. Voeg `https://github.com/ferrynl/ha-apps` toe.
+5. Zoek **Home Invest**, installeer en start de app. Het bouwen kan even duren.
+6. Schakel **Weergeven in zijbalk** in en open het dashboard.
+
+Home Assistant OS met Supervisor is de beoogde installatie. Een gewone HA Container
+heeft geen app store. De app is nog niet op een echte Supervisor-installatie getest.
+De app bouwt uit de bron op het apparaat; er is geen containerregister nodig.
+
+## Gebruik
+
+De app heeft een linkerzijbalk zoals Home Assistant, met acht afzonderlijke pagina's:
+
+- **Home**: portefeuilletotalen en de grafiek met alle aandelen.
+- **Aandelen**: posities, een aankoop toevoegen en het aankoopregister.
+- **Dividend**: ontvangen dividend boeken en het dividendregister bekijken.
+- **Valuta**: alle beschikbare valuta, historische omrekening, opgeslagen dagkoersen en importomrekeningen.
+- **Rapporten**: ontvangen dividend per maand met jaarfilter en de actuele stand per valuta.
+- **Logs** (ingelogde admin): foutdetails, Log-ID zoeken, niveau-/bronfilters en JSON-download.
+- **Imports** (admin): Trading 212 CSV/API controleren, beursnoteringen automatisch koppelen en importeren.
+- **Instellingen** (admin): gebruikersbeveiliging, brokeraccounts, versiecontrole, standaard grafiekperiode,
+  versiegegevens, back-up downloaden en terugzetten.
+
+Onder **Instellingen → Koersproblemen en afwikkelingen** zie je noteringen zonder actuele koers en handmatig beheerde noteringen. Gebruik **Koers instellen** als je een geverifieerde laatste koers en datum hebt. Bij een contante overname gebruik je **Contante afwikkeling boeken** met de datum en het bedrag per aandeel uit het brokerafschrift. Controleer eerst of de brokerboeking al is geïmporteerd. De app sluit de positie in dat brokeraccount en stopt koersaanvragen zodra de notering in alle accounts gesloten is. De positie, oorspronkelijke boekingen en opgeslagen koershistorie blijven opvraagbaar. Via **Koers instellen → Automatisch** kun je koersaanvragen weer inschakelen. De TMX-omboeking staat op dezelfde pagina.
+
+Kies onder **Instellingen → Dashboard → Standaardgrafiek op Home** uit tien grafiekweergaven. Op Home kun je via **Grafiekmeting** tijdelijk een andere weergave kiezen. Met **Dashboard aanpassen** open je de instellingen van een module. Kies een grafiek of cijfer met een voorbeeld, stel bij cijferkaarten een titel en stijl in en voeg via **Module toevoegen** extra cijferkaarten toe. Kies **Indeling opslaan** om alles te bewaren.
+
+Klik op een sector op **Aandelen** om de noteringen, landen en sectorinformatie te bekijken. **Vergelijk met de sector** vergelijkt de huidige aantallen met een Amerikaanse sector-ETF op gedeelde koersdagen in EUR. Dividend, kosten en tussentijdse transacties zijn niet inbegrepen.
+
+Op een klein scherm opent het menu via de menuknop. De pagina staat in het
+URL-fragment, zodat herladen en de terugknop blijven werken binnen HA ingress.
+De standaard grafiekperiode wordt in SQLite opgeslagen en blijft na herstart behouden.
+
+Typ minimaal twee tekens in **Zoek een aandeel**, op bedrijfsnaam of symbool.
+Kies een resultaat: naam, symbool, beurs en valuta worden automatisch ingevuld.
+Vul daarna alleen aantal, aankoopprijs per aandeel en aankoopdatum in.
+De lijst toont de passende aandelen die Yahoo teruggeeft (maximaal 50 aangevraagd),
+gefilterd op Amsterdam, Nasdaq en NYSE. Dit is geen volledige beurscatalogus;
+typ meer letters om je zoekopdracht te verfijnen. Verschillende beursnoteringen
+worden afzonderlijk getoond. Zoekresultaten worden een week in SQLite gecachet en kunnen bij
+een storing tijdelijk ontbreken. Een aankoopprijs wordt bewust niet ingevuld met
+de huidige koers: die kan afwijken van wat je hebt betaald.
+Voorbeelden: `ASML.AS` / AMSTERDAM / EUR; `AAPL` / NASDAQ / USD;
+`IBM` / NYSE / USD. Gebruik het symbool van de juiste beursnotering.
+Elke invoer is een afzonderlijke aankoop. Meerdere aankopen worden samengevoegd
+in posities met hun totale inleg. Koersen worden standaard elke 15 minuten
+opgehaald; `refresh_minutes` kan in de app-configuratie worden gewijzigd (5–1440).
+Herstart de app na het wijzigen van deze optie.
+
+Yahoo werkt zonder API-sleutel. Deze koppeling gebruikt een publiek, onofficieel
+chart-endpoint dat Yahoo kan wijzigen of blokkeren. Dit is polling, geen realtime
+stream. De vertraging verschilt per beurs. Het dashboard toont de werkelijke
+koerstijd; bij storingen blijft de oude koers met oude tijd zichtbaar.
+Beurs en valuta worden gecontroleerd voordat een koers wordt opgeslagen.
+
+EUR en USD hebben afzonderlijke totalen. Er is nog geen valutaomrekening.
+Ontbrekende koersen geven een onvolledig totaal in plaats van een misleidende nul.
+De grafiek haalt historische dagkoersen op vanaf de eerste aankoop en toont elke
+kalenderdag tot vandaag. Weekenden en dagen zonder koers gebruiken de laatst
+bekende koers; dit staat ook in de tabel **Dagwaarden bekijken**. Zonder eerdere
+koers blijft de waarde onbekend. Historie wordt bij opstarten, een nieuwe aankoop
+en daarna dagelijks gecontroleerd en in SQLite bewaard. Een eerder gedateerde
+aankoop zorgt automatisch voor het ophalen van de extra historie.
+Gebruik **1W, 1M, 3M, 6M, YTD, 1Y of Alles** om te zoomen. YTD begint op 1 januari;
+er wordt nooit bezit getoond vóór de eerste aankoop. Datum- en waardeassen,
+aanwijzen van een dag en een tabel maken dagelijkse veranderingen zichtbaar.
+Historische koersen zijn Yahoo-dagsluitingen; vandaag kan de laatste beschikbare
+koers zijn. Yahoo kan historische prijzen aanpassen voor splitsingen. De Trading 212-import verwerkt aandelensplitsingen met behoud van de totale kostprijs. Winst/verlies is exclusief
+kosten. Ontvangen dividend kan apart worden geboekt, zoals hieronder beschreven.
+
+### Je dashboard indelen
+
+Klik op Home op **Dashboard aanpassen**. De bewerkmodus verschijnt op het dashboard zelf: ieder onderdeel krijgt een versleepgreep, twee verplaatsknoppen en een tandwiel. Versleep het onderdeel met de muis of met je vinger. Dicht bij de boven- of onderrand schuift de pagina automatisch mee. Je kunt ook de verplaatsknoppen gebruiken, of de versleepgreep met Tab selecteren en de pijltjestoetsen gebruiken.
+
+Open het tandwiel van een onderdeel om **Module tonen** en de **Breedte** te kiezen. **Toepassen** toont het resultaat direct op het dashboard. Verborgen onderdelen blijven tijdens het aanpassen als herkenbare plekken staan, zodat je ze weer kunt inschakelen. Op kleinere schermen past de breedte zich aan; op mobiel staan modules onder elkaar.
+
+Boven de onderdelen staan **Indeling opslaan**, **Annuleren** en **Standaardindeling**. Pas bij opslaan worden alle wijzigingen bewaard. Annuleren, Escape buiten een pop-up en het verlaten van Home herstellen de opgeslagen indeling. Escape tijdens een sleepbeweging maakt alleen die beweging ongedaan. Het sluiten of annuleren van de module-instellingen wijzigt dat onderdeel niet. Ook wanneer alles uitstaat, blijft Dashboard aanpassen bereikbaar.
+
+De indeling wordt op de server bewaard per loginaccount, apart voor demo en eigen portefeuille. Zonder loginaccounts delen bezoekers de Home Assistant-indeling. Portefeuilleherstel behoudt de huidige voorkeuren; voorkeuren uit een geüploade back-up worden niet geïmporteerd. Het verbergen van een module verandert geen beleggingen of toegangsrechten.
+
+### Alle aandelen en dividend
+
+De grafiek opent standaard met **Alle aandelen**. Elk aandeel heeft een eigen lijn
+voor totale winst als percentage van de inleg, inclusief ontvangen netto dividend.
+Hierdoor kun je EUR- en USD-noteringen vergelijken zonder geldbedragen bij elkaar
+op te tellen. Het percentage is sinds aankoop en wordt bij zoomen niet opnieuw op
+nul gezet. Het is geen tijdgewogen rendement; extra aankopen kunnen het veranderen.
+Kies **Totaal portefeuille · EUR/USD** voor de gezamenlijke marktwaarde en inleg
+binnen één valuta, met een aparte lijn voor waarde plus ontvangen dividend.
+Individuele aandelen blijven ook selecteerbaar. Alle bestaande zoomknoppen werken
+voor iedere weergave.
+
+Onder **Ontvangen dividend** kies je een bestaand aandeel en voer je het **totale
+netto ontvangen bedrag**, betaaldatum en eventueel een notitie in. Het bedrag is
+in de valuta die bij het aandeel staat, niet per aandeel. Boek alleen daadwerkelijk
+ontvangen bedragen, geen aangekondigde uitkeringen. Er is geen brokerkoppeling of
+automatische bevestiging van ontvangst. Er is nog geen wisselkoersconversie als
+je broker in een andere valuta uitbetaalt.
+
+Dividend heeft een eigen `dividends`-tabel in SQLite, los van aankopen en koersen.
+Het dividendregister, de dividendkolom en het portefeuilletotaal tonen de ontvangen
+bedragen apart. **Totale winst = marktwaarde − inleg + ontvangen netto dividend**.
+Dividend telt pas vanaf de betaaldatum mee in de historie en wordt niet automatisch
+herbelegd of bij het aantal aandelen opgeteld. Het maakt deel uit van alle bestaande
+SQLite- en Home Assistant-back-ups. De database wordt bij de update uitgebreid;
+je bestaande aankopen en koershistorie blijven behouden.
+
+## Opslag en back-ups
+
+### Brokeraccounts en Trading 212-import
+
+Maak onder **Instellingen → Brokeraccounts** een rekening aan met een eigen naam
+en het bedrijf, bijvoorbeeld `Trading 212`. Dit is los van je loginaccount.
+Meerdere rekeningen bij hetzelfde bedrijf zijn toegestaan. Bestaande gegevens gaan
+bij de update naar **Handmatig**; de app gokt niet bij welke broker je ze bezit.
+Kies bovenaan een rekening of **Alle accounts**. Nieuwe handmatige aankopen en
+dividend krijgen ook een brokeraccount. Koersen worden per beursnotering gedeeld,
+maar aantallen, kostprijs en dividend worden per rekening berekend.
+
+Trading 212 ondersteunt zowel **History CSV** als een **API-verbinding**. De API
+haalt een officieel CSV-rapport op en gebruikt dezelfde preview, beurskoppeling en
+bron-ID-controles als een handmatige upload. Hierdoor worden overlappende API- en
+CSV-imports per rekening gecontroleerd op dubbele transacties.
+
+#### Verbinden via de API
+
+1. Schakel gebruikersbeveiliging in bij Instellingen en meld je aan als admin.
+2. Maak een brokeraccount aan met bedrijf **Trading 212**. Gebruik aparte rekeningen
+   voor Live en Demo; verbind nooit verschillende werkelijke rekeningen aan één brokeraccount.
+3. Maak in Trading 212 een API key en secret met uitsluitend toegang tot historische
+   rapporten/exports. Schakel geen handelsrechten in. Eventuele IP-beperking moet
+   het uitgaande IP-adres van je HA-installatie toestaan.
+4. Ga naar **Imports → Trading 212 API**, kies brokeraccount en Live/Demo en sla
+   de sleutel en secret op. Opgeslagen betekent nog niet dat de API ze heeft geaccepteerd.
+5. Kies de volledige relevante transactieperiode en klik **Rapport via API aanvragen**.
+6. Controleer na circa een minuut **Rapportstatus controleren en ophalen**. Langere
+   perioden worden in delen van maximaal 364 dagen aangevraagd (Trading 212 staat
+   maximaal één jaar per rapport toe). Iedere statuscontrole haalt een gereed deel op
+   en vraagt zo nodig het volgende aan. De teller toont de voortgang; de taak en
+   deelrapporten overleven een app-herstart. Herhaal de statuscontrole ongeveer iedere
+   minuut totdat het complete importvoorbeeld verschijnt. Je hoeft niet per deel te boeken.
+7. Controleer het opgehaalde voorbeeld en de automatische koppelingen en bevestig de import.
+
+De app gebruikt alleen de officiële rapport-endpoints; er worden geen orders geplaatst.
+Statusantwoorden worden 60 seconden gecachet; het rapport en originele transacties
+blijven in SQLite. Ook mislukte verzoeken worden lokaal begrensd. Een volgende import
+start je zelf; er is nog geen geplande automatische brokersynchronisatie.
+Downloaden van het rapport verstuurt nooit de API-credentials naar de downloadhost.
+Alleen HTTPS-downloads vanaf Trading 212, CloudFront en S3 worden geaccepteerd;
+redirects worden geweigerd. Bij een ander downloadadres blijft handmatige CSV beschikbaar.
+
+API-sleutels staan versleuteld met Fernet in `/data/connections/`, met een aparte
+lokale encryptiesleutel en beperkte Linux-bestandsrechten. Ze gaan niet naar de browser,
+provider-cache of de downloadbare SQLite-back-up. De encryptiesleutel staat op hetzelfde
+HA-apparaat: versleuteling beschermt niet tegen volledige toegang tot dat apparaat.
+Neem de volledige appdata op in een Home Assistant-back-up om verbindingen mee te nemen.
+Bij alleen SQLite-herstel blijven lokale verbindingen behouden als het brokeraccount
+hetzelfde is; anders moet je opnieuw verbinden. **Verbinding verwijderen** verwijdert
+alleen de opgeslagen toegang; geïmporteerde gegevens blijven staan. Trek voor definitieve
+intrekking ook de sleutel in bij Trading 212. Deel sleutels nooit via GitHub of chat.
+
+De [officiële API-documentatie](https://docs.trading212.com/api) beschrijft Basic-auth
+met key/secret, Invest/Stocks ISA, de asynchrone rapporten en aanvraaglimieten.
+Dezelfde importbeperkingen voor kosten, acties en dividendvaluta gelden voor API en CSV.
+
+#### CSV handmatig uploaden
+
+1. Exporteer bij Trading 212 via **History → Export** je orders en dividend.
+2. Maak in Home Invest een rekening met bedrijf **Trading 212**.
+3. Open **Imports**, kies rekening en CSV en klik **Voorbeeld controleren**.
+4. Controleer alle regels; de app koppelt tickers automatisch aan de Yahoo-beursnotering.
+   De app kiest geen onduidelijke notering of wisselkoers automatisch.
+5. Bevestig het voorbeeld en klik **Import definitief opslaan**.
+
+Ondersteund: kooporders, verkooporders en ontvangen cashdividend. Verkopen gebruiken
+een voortschrijdende gemiddelde kostprijs. Resterend bezit en gerealiseerde winst
+blijven per rekening gescheiden; de koerswinst bevat gerealiseerde en ongerealiseerde
+winst. **Totale winst = marktwaarde − resterende kostprijs + gerealiseerde winst +
+ontvangen dividend**. Bij verkopen kan de getoonde resterende inleg dalen. De
+procentuele aandeellijn gebruikt de totale historische aankoopinleg als noemer.
+Dit is een praktisch portefeuilleoverzicht, geen fiscale berekening.
+
+Importeer de volledige relevante aankoopgeschiedenis. Een verkoop die groter is
+dan het beschikbare bezit blokkeert de hele import. Ook onbekende acties zoals
+splitsingen blokkeren de import; er worden dan geen gedeeltelijke boekingen gemaakt.
+Bekende stortingen, opnames en renteregels worden zichtbaar overgeslagen omdat de
+app geen bank-/cashsaldo bijhoudt. Expliciete transactiekosten en belastingbedragen worden afzonderlijk geregistreerd;
+verschuldigde belasting, valutawissels en CFD's worden niet berekend. Voor dividend moet `Currency (Total)`
+overeenkomen met de noteringsvaluta. Exporteer bij een afwijkende dividendvaluta
+eerst alleen de orders; omzetting van dat dividend moet je apart controleren.
+
+Bron-ID's en inhoudscontroles voorkomen dubbele import per brokeraccount, ook bij
+overlappende exports en na back-upherstel. Een gewijzigde bestaande bron-ID wordt
+geweigerd. Bij ontbrekende ID's wordt een inhoudsvingerafdruk gebruikt; onduidelijke
+identieke regels worden geweigerd. De originele regels en previews blijven in SQLite
+bewaard. Handmatig geboekte transacties hebben geen brokerbron-ID: importeer dezelfde
+werkelijke transacties niet nogmaals naast je handmatige kopie.
+
+Nieuwe aanbieders krijgen een eigen adapter in `portfolio/app/imports/` en een
+registratie in `ADAPTERS`. Preview, accountkoppeling, bevestiging, bronregistratie en
+deduplicatie zitten in de gemeenschappelijke importservice. Alleen admins kunnen
+brokeraccounts aanmaken of importeren; Basic kan rekeningen bekijken en de bestaande
+handmatige portefeuillefuncties gebruiken.
+
+### Duurzame API-cache en versiecontrole
+
+Succesvolle Yahoo-antwoorden worden volledig als JSON opgeslagen in `api_cache`,
+naast de afzonderlijke koersen en daghistorie. De cache overleeft herstarten en
+zit in back-ups. Zoek-/instrumentresultaten worden **7 dagen** hergebruikt,
+actuele koersen gedurende het ingestelde koersinterval en historieaanvragen één dag.
+Historische dagwaarden blijven in `daily_prices` staan; na de eerste import worden
+alleen ontbrekende/recent overlappende dagen opgehaald, niet steeds de hele historie.
+Een eerder gedateerde aankoop kan wel een extra historische aanvraag vereisen.
+Gelijke beursnoteringen bij verschillende brokers worden maar één keer ververst.
+Foutantwoorden worden niet als succesvolle API-cache bewaard.
+
+Onder **Instellingen → Versiecontrole** controleer je de nieuwste gepubliceerde
+appconfiguratie op GitHub. Het resultaat staat één dag in SQLite, met controletijd.
+De app vergelijkt versienummers numeriek. Deze knop installeert niets; bijwerken
+blijft via de Home Assistant app store lopen.
+
+### Gebruikers en rollen
+
+Onder **Instellingen → Gebruikersbeveiliging** kun je accounts inschakelen.
+Bij de eerste keer maak je zelf een adminaccount met een wachtwoord van minimaal
+12 en maximaal 128 tekens. Er zijn geen standaardaccounts of standaardwachtwoorden.
+Bij uitgeschakelde gebruikersbeveiliging blijft de bestaande Home Assistant-ingress
+de toegang verzorgen. Schakel de optie in voordat je de portefeuille met andere
+HA-gebruikers deelt.
+
+- **Admin**: alle pagina's, invoer, instellingen, gebruikersbeheer en back-ups/herstel.
+- **Basic**: Home, Aandelen, Dividend en Rapporten, inclusief aankopen en dividend
+  invoeren. Geen instellingen, gebruikersbeheer, back-updownload of herstel.
+
+Dit is één gedeelde portefeuille, niet een aparte portefeuille per gebruiker.
+Rechten worden op iedere API-aanvraag op de server afgedwongen. Een rechtstreeks
+API-verzoek omzeilt de rol niet. Admins kunnen accounts aanmaken, rollen wijzigen,
+wachtwoorden resetten en accounts deactiveren. De laatste actieve admin kan niet
+worden gedeactiveerd of tot basic worden teruggezet. Maak bij voorkeur een tweede
+admin aan voor herstel bij een vergeten wachtwoord; er is geen verborgen herstelaccount.
+Linksonder in het zijmenu staat de gebruikershoek met naam, rol, **Account aanpassen**
+en **Uitloggen**. Als je bent uitgelogd staat daar **Inloggen**. Via Account aanpassen
+wijzig je je eigen gebruikersnaam en eventueel je wachtwoord; je huidige wachtwoord
+is altijd vereist. Laat het nieuwe wachtwoord leeg om het bestaande te behouden.
+Gewijzigde accounts moeten
+opnieuw aanmelden. Alleen een admin met het huidige adminwachtwoord kan beveiliging
+uitschakelen. Bij opnieuw inschakelen zijn bestaande admingegevens vereist.
+
+Wachtwoorden worden met een unieke salt en PBKDF2-HMAC-SHA256 (600.000 iteraties)
+opgeslagen. Sessies gebruiken willekeurige tokens in HttpOnly/SameSite=Strict-cookies;
+de server bewaart alleen de tokenhash. Cookies krijgen Secure bij HTTPS-toegang.
+Gebruik Home Assistant via HTTPS; de app publiceert geen eigen hostpoort. Schrijfacties
+hebben CSRF-controle. Een sessie verloopt na 48 uur zonder aanvragen. Bij gebruik worden sessie en cookie
+met 48 uur verlengd. De sessie overleeft een appherstart en vervalt bij uitloggen of accountwijziging. Er is een
+limiet van 10 mislukte pogingen per gebruikersnaam en verbindingsadres in 15 minuten.
+Via ingress kan het verbindingsadres gedeeld zijn; de limiet kan dan meerdere
+gebruikers raken. Sessies en pogingstellers zijn bewust alleen in het geheugen.
+
+### Downloaden en terugzetten
+
+De downloadknop staat alleen op **Instellingen**. Daar kan een admin ook een
+SQLite-back-up van maximaal 25 MB selecteren en na bevestiging terugzetten.
+De app controleert het bestandsformaat, de integriteit, schemaversie en waarden.
+Alleen portefeuillegegevens en de standaard grafiekperiode worden geïmporteerd;
+tabellen, triggers en uitvoerbaar schema uit het bestand worden nooit overgenomen.
+Oudere ondersteunde back-ups worden in het huidige schema ingelezen.
+
+Vóór herstel maakt de app een veiligheidskopie in `/data/backups/restores/`.
+Het vervangen van de portefeuille is transactioneel: een mislukte import draait
+terug. **Huidige gebruikers, wachtwoorden, rollen en de beveiligingsoptie blijven
+behouden**, zodat een oude back-up de beveiliging niet kan uitschakelen. Alle
+sessies vervallen na succesvol herstel. Voor volledig systeemherstel inclusief
+accounts gebruik je een Home Assistant-back-up van de app.
+
+Een gedownloade volledige SQLite-kopie bevat ook accountnamen en wachtwoordhashes.
+Behandel back-ups als vertrouwelijk en bewaar ze veilig; SQLite-bestanden zijn
+niet zelfstandig versleuteld.
+
+Alle gebruikersgegevens blijven buiten de broncode, in de persistente app-map:
+
+```
+/data/portfolio.sqlite3           aankopen en koershistorie
+/data/backups/portfolio-*.sqlite3 consistente SQLite-back-ups
+/data/options.json               configuratie van Home Assistant
+```
+
+De app maakt bij opstarten en daarna dagelijks een SQLite-back-up en bewaart de
+laatste 30. **Back-up downloaden** maakt en downloadt direct een consistente kopie.
+Deze kopieën op hetzelfde apparaat beschermen niet tegen verlies van het apparaat.
+Neem de app op in de automatische Home Assistant-back-ups en bewaar die ook elders.
+Herstel bij voorkeur de volledige app via Home Assistant **Instellingen → Systeem
+→ Back-ups**. Een losse SQLite-kopie kun je met bestandstoegang naar de app-container
+herstellen: stop eerst de app, bewaar de huidige database apart, plaats de kopie als
+`/data/portfolio.sqlite3` en start opnieuw. Bij deze volledige handmatige vervanging
+worden ook de accounts uit die kopie gebruikt.
+
+De download bevat de volledige privéportefeuille. Upload databases, opties en
+back-ups nooit naar GitHub. `.gitignore` sluit lokale gegevens uit, maar geldt niet
+voor handmatige uploads via de GitHub-website.
+
+## Ontwikkeling
+
+### Databaseversies en migraties
+
+Appversie en databaseschema hebben elk een eigen versienummer. Schema **11** gebruikt
+`PRAGMA user_version` als opgeslagen versie. De migratierunner in `migrations.py`
+voert uitsluitend ontbrekende stappen op volgorde uit:
+
+1. Aankopen, koersen en koersindex.
+2. Historische dagkoersen en synchronisatiegegevens.
+3. Ontvangen dividend.
+4. Dashboardinstellingen.
+5. Gebruikers, rollen en de optie voor gebruikersbeveiliging.
+6. Brokeraccounts, aankoop/verkooptype, importbatches, bronregels en blijvende API-cache.
+7. Afgeschermde diagnostische logs.
+8. Valuta, dagreferentiekoersen en importomrekeningen.
+9. Blijvende aandelenkoppelingen.
+10. Te beoordelen importregels en afzonderlijke kapitaalterugbetalingen.
+11. Splitsingsmetadata met behoud van kostprijs, inleg en gerealiseerde winst.
+
+Vóór het aanpassen van een bestaande database wordt een consistente kopie in
+`/data/backups/migrations/before-vN-to-vM-*.sqlite3` gemaakt. Deze kopieën vallen
+buiten de rotatie van de 30 gewone back-ups. De volledige upgrade draait in één
+transactie; bij een fout worden schema én versienummer teruggedraaid en stopt de
+app. Een database uit een nieuwere app wordt geweigerd zonder downgrade. Herhaald
+starten met het actuele schema voert geen migraties opnieuw uit.
+
+Voeg bij toekomstige schemawijzigingen een nieuwe migratie en bijbehorende tests
+toe; verander oude migraties niet. De projectafspraken staan ook in `AGENTS.md`.
+
+Python 3.13, zonder externe Python-pakketten:
+
+```
+cd portfolio/app
+python server.py
+```
+
+Open `http://localhost:8099/`. Gebruik lokaal `BIND=127.0.0.1` en schakel accounts
+in als je de ontwikkelserver met anderen deelt. In Home Assistant loopt toegang via authenticated ingress;
+er is geen hostpoort gepubliceerd. Stel deze server niet rechtstreeks bloot.
+
+```
+python -m unittest discover -s tests -v
+```
+
+## Structuur
+
+- `portfolio/app/storage.py`: schema, validatie, berekeningen, back-ups.
+- `portfolio/app/migrations.py`: geversioneerde, transactionele database-updates.
+- `portfolio/app/security.py`: wachtwoorden, sessies en accountbeheer.
+- `portfolio/app/web.py`: API, authenticatie, rollen en CSRF-controles.
+- `portfolio/app/restore.py`: gevalideerd, transactioneel portefeuilleherstel.
+- `portfolio/app/cache.py`: tijdelijke cache van het portefeuilleoverzicht.
+- `portfolio/app/persistent_cache.py`: blijvende cache voor providerantwoorden.
+- `portfolio/app/imports/`: uitbreidbare brokeradapters en importservice.
+- `portfolio/app/updates.py`: gecachete, alleen-lezen GitHub-versiecontrole.
+- `portfolio/app/provider.py`: vervangbare Yahoo-koerskoppeling.
+- `portfolio/app/history.py`: dagelijkse waardes met aankopen en kalenderdagen.
+- `portfolio/app/server.py`: lokale HTTP-API en geplande taken.
+- `portfolio/app/static/`: afzonderlijke HTML-, CSS- en JavaScript-bestanden.
+- `portfolio/app/static/pages.js`: paginanavigatie, rapporten en dashboardinstellingen.
+- `portfolio/config.yaml` en `Dockerfile`: HA-installatie en container.
+- `tests/`: opslag- en providercontroles, zonder echte privégegevens.
+- `.github/workflows/check.yml`: controles bij GitHub-wijzigingen.
+
+## Grenzen van deze eerste versie
+
+### Caching
+
+Het berekende portefeuilleoverzicht wordt 30 seconden in het servergeheugen bewaard.
+Elke wijziging, koersupdate en herstelactie maakt die cache ongeldig. De browser
+gebruikt ETags om identieke overzichten niet opnieuw te downloaden. Financiële en
+accountantwoorden krijgen `no-store`; er staat geen portefeuillecache in localStorage.
+Het scherm controleert maximaal elke twee minuten zolang het tabblad zichtbaar is.
+Terugkeren naar het tabblad controleert de lokale stand opnieuw. Dat start geen
+Yahoo-koersaanvraag.
+
+Yahoo-koersen worden alleen via de achtergrondtaak gecontroleerd. Een recent in
+SQLite opgeslagen koers wordt gedurende het ingestelde interval hergebruikt, ook
+na een nieuwe aankoop van hetzelfde aandeel. Dagkoersen blijven dagelijks gecachet;
+zoeken gebruikt een korte cache en een typevertraging. Statische bestanden gebruiken
+een appversie in de URL, ETags en maximaal één dag browsercache. Een app-update
+verandert de asset-URL's automatisch.
+
+Aankopen, geïmporteerde verkopen en netto dividend; nog geen splitsingen, bewerkingsinterface,
+transactiekosten of automatische valutawissel.
+Geen HACS-integratie: installatie gaat via een HA app-repository.
+Voor publieke distributie moet de geschiktheid van de koersdienst voor die toepassing
+nog worden vastgesteld. Iedere installatie haalt zelf koersen op; er is geen
+centrale verzameling van portefeuilles of doorlevering van koersen.
+
+## Bronnen
+
+- [Home Assistant app-configuratie](https://contributors.home-assistant.io/apps/reference/configuration/)
+- [Home Assistant ingress](https://developers.home-assistant.io/docs/apps/presentation/)
+- [Yahoo beursdekking en vertraging](https://help.yahoo.com/kb/finance/article-exchanges-data-delays-sln2310.html)
+- [Trading 212 publieke API](https://docs.trading212.com/api)
+- [Trading 212 CSV exporteren](https://helpcentre.trading212.com/hc/en-us/articles/360016898917-Can-I-export-the-trading-data-from-my-account)
+
+
+## Importwijzigingen en versiegeschiedenis
+
+Trading 212 herkent kapitaalterugbetalingen automatisch en bewaart ze apart onder
+**Imports → Te beoordelen**, zonder ze als dividendwinst te tellen.
+**Stock split open** stelt het nieuwe totale aantal in; de totale kostprijs,
+inleg en gerealiseerde winst blijven behouden. Een bijbehorende **Stock split close**
+controleert het oude aantal. Importeer de volledige aankoopgeschiedenis vóór de splitsing.
+Ongeldige aantallen en ontbrekend bezit blijven ter beoordeling staan.
+
+Probeer eerder afgewezen regels opnieuw via **Imports → Te beoordelen → Opnieuw proberen**.
+Eerdere handmatige keuzes en geboekte transacties blijven behouden.
+Het databaseschema is **11**. Zie [CHANGELOG.md](../CHANGELOG.md) voor de versiegeschiedenis
+en [README.md](../README.md) voor aanvullende documentatie.
+
+
+### Aandelensplitsingen en kapitaalterugbetalingen
+
+Een split open stelt het volledige nieuwe aantal aandelen in; het is geen extra aankoop.
+Een close op hetzelfde tijdstip controleert het oude aantal. Een losse close, meerdere
+open/close-regels voor hetzelfde instrument/tijdstip, ontbrekend bezit of een afwijkend
+oud aantal blijft ter beoordeling. De app schat geen kostprijs en maakt geen bezit uit niets.
+De koerskolom in het transactieregister toont bij splitsingen geen aankoopprijs.
+
+Kapitaalterugbetalingen vereisen geen beurskoppeling of historische omrekening en blijven
+in de oorspronkelijke valuta. De ontvangst staat onder Imports → Te beoordelen in het
+afzonderlijke overzicht, ook als er geen openstaande beoordelingen zijn. Er wordt geen
+automatische fiscale kostprijscorrectie gedaan.
+
+Schema 11 voegt purchases.split_before toe. Oudere back-ups krijgen bij herstel lege
+splitsingsmetadata; nieuwe back-ups behouden splitsingen en de bestaande administratie.
+
+
+## Transacties bekijken en wijzigen (0.12.0)
+
+Open **Transacties** in het zijmenu. De rekeningkeuze bovenaan geldt voor deze lijst;
+zoek op aandeel, broker of datum en filter op transactietype. De lijst toont 50 regels
+per pagina. **Bekijken** opent de gegevens en de volledige wijzigingshistorie.
+Basic-gebruikers kunnen bekijken; alleen admins kunnen wijzigingen opslaan.
+
+Bij aankopen en verkopen kun je datum, tijd, aantal, prijs en aankoop/verkooptype wijzigen.
+Bij dividend kun je datum, netto bedrag en notitie wijzigen. Bij kapitaalterugbetalingen
+zijn datum en bedrag aanpasbaar; ze blijven buiten dividendwinst.
+Bij splitsingen kun je datum, tijd en het nieuwe aantal aanpassen. Het oude aantal
+uit de bron blijft als controle behouden. Aandeel en handelsvaluta blijven vaststaan. Het brokeraccount kan vanaf 0.44.0 worden gecorrigeerd, samen met de gekoppelde kosten.
+Een wijziging die latere verkopen of splitsingen ongeldig maakt, wordt volledig teruggedraaid.
+
+De oorspronkelijke importregel, gebruikte bron-ID en oorspronkelijke valutaomrekening
+blijven als bronadministratie bewaard. Een correctie past de geboekte ledger aan;
+de wijzigingshistorie vermeldt vóór/na, tijd en gebruiker. Opnieuw importeren van dezelfde
+bronregel maakt de handmatige correctie niet ongedaan. Vernieuw het overzicht als een
+andere sessie de transactie intussen heeft gewijzigd.
+
+## Portefeuillegegevens verwijderen
+
+Open **Instellingen → Portefeuillegegevens verwijderen**. Kies **Alles** of één
+brokeraccount en bekijk het verwijderoverzicht. Typ **VERWIJDEREN** en kies
+**Getoonde gegevens verwijderen**. Een intussen gewijzigde administratie vereist een
+nieuw overzicht. Zonder succesvolle veiligheidsback-up wordt niets verwijderd.
+
+Verwijderd worden de gekozen aankopen, verkopen, splitsingen, dividend, kapitaalterugbetalingen,
+imports, bron-ID-registraties, importomrekeningen, beoordelingen, aandelenkoppelingen
+en wijzigingshistorie. Bij Alles worden ook gedeelde aandelenkoersen, synchronisatiestatus
+en API-cache gewist. Bij één brokeraccount blijven gedeelde koersen en andere rekeningen behouden.
+Brokeraccounts zelf, gebruikers, wachtwoorden, beveiliging, appinstellingen, referentiekoersen
+voor valuta en opgeslagen API-verbindingen blijven behouden. Lopende API-rapportaanvragen
+blijven eveneens beschikbaar; ophalen maakt een nieuw importvoorbeeld.
+
+Een volledige back-up van de portefeuille vóór verwijderen staat in
+/data/backups/deletions/before-delete-portfolio-*.sqlite3, buiten de gewone rotatie.
+Download deze via de link die na verwijderen verschijnt (alleen admin). Terugzetten
+via de bestaande back-upfunctie herstelt de volledige portefeuille, inclusief andere rekeningen
+zoals ze op het moment van de back-up waren. De bron-ID’s van gewiste imports worden
+eveneens gewist, zodat je die gegevens bewust opnieuw kunt importeren.
+
+Schema **12** voegt transaction_edits toe; de bestaande schema-11-splitsingsmetadata
+blijft ongewijzigd. Back-upherstel ondersteunt wijzigingshistorie en oudere back-ups.
+
+
+## Home en bewerkpop-ups (0.13.0)
+
+Home begint direct bij het portefeuilleoverzicht. De algemene kop met MIJN PORTEFEUILLE,
+Home, de brokerselector en de koersstatusbalk zijn op deze pagina verborgen.
+Op andere pagina’s blijven de rekeningkeuze en status beschikbaar. De mobiele
+menuknop werkt ook op Home.
+
+Bewerken gebeurt altijd in een modale pop-up: transacties, aandelenkoppelingen,
+importclassificatie, gebruikers en instellingen. Toevoegen van aankopen, dividend
+en brokeraccounts, API-verbindingen, beveiliging, herstellen en verwijderen gebruiken
+dezelfde pop-upstijl. Lees- en zoekfilters blijven rechtstreeks op de pagina staan.
+
+Open het formulier via de bijbehorende knop. Sla expliciet op om de wijziging door
+te voeren. Sluiten, Annuleren of Escape slaat niets op. De achtergrond is tijdens
+bewerken niet bedienbaar en de toetsenbordfocus blijft in de pop-up. Bij navigatie
+en afmelden sluiten geopende pop-ups; wachtwoordvelden worden geleegd.
+Databaseschema en bestaande transacties blijven ongewijzigd.
+
+### Kolomfilters en importdiagnostiek (0.14.0)
+Elke tabel heeft onder de kolomkoppen zoekvelden. Meerdere velden worden gecombineerd; leegmaken heft een filter op. Home filtert alle posities binnen de gekozen valuta en algemene filters vóór paginering. Tabellen met een laadlimiet (zoals logs en dagwaarden) filteren de geladen regels; laad zo nodig extra regels. Filters worden alleen in het geheugen van de pagina bewaard.
+
+Aantallen zoals `0E-8` zijn exact nul en worden als `0` getoond. Fractionele aandelen behouden hun decimalen. API-import gebruikt het historische exportbestand, geen live bezitcontrole. Controleer bij afwijkingen de gekozen periode, aandelenkoppelingen en Te beoordelen. Diagnostische logs tonen per import het batchnummer, account, regelaantallen en afgewezen regels. Bij te grote verkopen of afwijkende splitsingen staan de betrokken aantallen in de details; bronbestanden en sleutels worden niet gelogd.
+
+### Aandeeldetails en categorieën (0.15.0)
+Klik in Aandelen op de naam van een positie. De detailpagina toont de opgeslagen prijs per aandeel, met periodekeuze, en de gebeurtenissen voor het gekozen brokeraccount (of alle accounts). Slotkoersen en de laatste koersmeting worden onderscheiden. Er wordt bij het openen geen provider opgevraagd; ontbrekende historie wordt aangevuld door de bestaande automatische koerscontrole.
+
+Sector, land, type belegging en eigen categorie gelden per combinatie van ticker, beurs en valuta. Admins vullen ze in via Categorieën aanpassen. Ontbrekende indelingen blijven Niet ingedeeld; er wordt geen sector of vestigingsland afgeleid uit de beurs. De indeling staat in de aandelenlijst en in de opgeslagen gegevens voor latere rapportages, en wordt meegenomen in back-upherstel. Kapitaalterugbetalingen en openstaande importregels worden alleen getoond bij een eenduidige aandelenkoppeling; onbekende bronregels blijven bij Imports beschikbaar.
+
+Elke kolomkop is een sorteerknop: opnieuw klikken keert de volgorde om. Getallen en datums worden passend gesorteerd, onbekende waarden staan onderaan. Op Home en Transacties werken kolomfilters en sortering over alle pagina’s binnen de gekozen selectie. Andere tabellen sorteren de geladen regels. Een volledige portefeuilleverwijdering wist ook de gedeelde categorieën; verwijderen van één brokeraccount behoudt ze voor de overige accounts.
+
+### Automatische categorieën (0.16.0)
+Bij de automatische koerscontrole haalt de app per beursnotering één keer sector, vestigingsland en type belegging uit de Yahoo-profiel-API. Dit geldt ook voor al aanwezige aandelen en gesloten posities. De app controleert ticker, beurs en valuta. Als de anonieme profiel-API niet toegankelijk is, wordt dezelfde ingesloten API-respons op Yahoo’s publieke profielpagina gelezen. Alleen de geselecteerde categorievelden worden gecachet; anonieme sessiecookies en autorisatiegegevens blijven buiten database, back-ups en logs.
+
+Een succesvol profiel blijft opgeslagen en wordt na een herstart of paginabezoek niet opnieuw opgehaald. Ontbrekende bronvelden blijven leeg; bij ETF’s is bijvoorbeeld niet altijd een sector of vestigingsland beschikbaar. Er wordt niets afgeleid uit de beurs of beursvaluta. De detailpagina toont de API-status en ophaaldatum. Mislukte aanvragen krijgen een wachttijd van minimaal 15 minuten, oplopend tot een dag, met respect voor provider-wachttijden en een veilige diagnostische melding.
+
+Handmatige wijzigingen beschermen alleen het gewijzigde veld, ook als je een automatisch ingevuld veld bewust leegmaakt. De eigen categorie blijft altijd je eigen keuze. Niet-lege categorievelden uit eerdere versies worden bij migratie en oud back-upherstel als handmatig beschermd. Automatische voortgang en handmatige bescherming worden in nieuwe back-ups bewaard.
+
+### Profielaanvragen en HTTP 406 (0.16.1)
+Profielpagina’s worden als HTML aangevraagd, de anonieme sessiecode als tekst en de directe profiel-API als JSON. Bij HTTP 406 op de directe route probeert de app de ingesloten API-respons op de profielpagina. Blijft ook die aanvraag mislukken, dan tonen de diagnostische logs de precieze stap (`cookie_bootstrap`, `session_crumb`, `quote_summary` of `profile_page`), host, verwacht formaat en HTTP-status. Cookies, sessiecodes en antwoordinhoud worden niet gelogd. Een ETF kan een geldig gedeeltelijk profiel hebben: ontbrekend sector- of landinformatie wordt niet geschat.
+
+### Voortgang bij grote portefeuilles (0.16.2)
+De aandelenpagina haalt tijdens het aanvullen iedere vijf seconden alleen de actuele lokaal opgeslagen categorieën en voortgang op. Deze aanvraag gebruikt geen externe API en bouwt geen portefeuillehistorie opnieuw op. Gereed gemelde aandelen verschijnen direct, zonder op het einde van de volledige koersronde of de normale schermverversing te wachten. Als de ronde klaar is, wordt minder vaak gecontroleerd. Weergave vernieuwen controleert uitsluitend de lokale gegevens.
+
+Nog ophalen en Wordt opgehaald geven lopend werk aan. Ophalen mislukt duidt op een aanvraag met wachttijd. Niet beschikbaar bij bron betekent dat het profiel succesvol is opgehaald maar de bron dat veld niet levert; dit komt onder meer bij ETF’s voor. Handmatig leeg is een bewust beschermde correctie. Eigen categorie blijft Zelf te kiezen totdat je deze zelf instelt. De voortgang telt unieke beursnoteringen binnen het gekozen brokeraccount; dezelfde notering op meerdere accounts wordt één keer opgehaald.
+
+### Aandeeloverzicht
+Open een aandeel vanuit Aandelen voor het aantal, de marktwaarde in noteringsvaluta, de eurowaarde en het ontvangen dividend binnen het gekozen brokeraccount. De eurowaarde gebruikt een reeds opgeslagen wisselkoers van uiterlijk de koersdatum; zonder koers blijft het bedrag onbekend. Bedrijfsomschrijving en websitedomein worden uit het Yahoo-profiel bewaard. Het bedrijfsicoon wordt via Google Favicons geladen op basis van dat domein; bij ontbreken blijven de bedrijfsinitialen zichtbaar.
+
+### Dividend en ontbrekende koersen
+Het dividendpercentage is cumulatief: totaal ontvangen dividend gedeeld door de totale aankoopinleg sinds de eerste aankoop, zonder splitsingen als extra inleg te tellen. Het is geen jaarrendement. Home telt de posities met bekende koers op en vermeldt de overgeslagen aandelen met een Log-ID. De log bevat beursnotering, brokeraccount, aantal en rekenbasis, maximaal eenmaal per zes uur bij ongewijzigde gegevens.
+Via Aandelen → aandeel → Koers instellen kan een admin een laatste koers met datum vastleggen, ook nul bij een waardeloos geworden aandeel. Automatische koers- en historieaanvragen stoppen voor die beursnotering bij alle brokeraccounts. Kies Automatisch om deze weer te hervatten. Een vaste laatste koers is geen verkoop of afboeking: transacties en dividend blijven intact.
+
+### Dividenddashboard
+Dividend toont ontvangen bedragen per valuta, over de hele historie, dit jaar en de laatste twaalf maanden. Grafieken tonen maandbedragen, het jaaroverzicht scheidt werkelijk ontvangen en geschat dividend. De kalender en vooruitblik bestrijken de komende 12 volledige maanden, met een horizon tot vijf jaar. Er worden geen toekomstige bedragen geboekt.
+De schatting herhaalt de betaalmaanden van de afgelopen twaalf maanden voor open posities. Historisch dividend wordt met het aantal op de betaaldatum en bekende splitsingsfactoren omgerekend naar huidig bezit. Betaaldatumbezit is slechts een benadering van dividendgerechtigd bezit. Ontbreekt dat aantal of is een latere splitsingsfactor onbekend, dan wordt die betaling niet geschat en staat de reden in de toelichting. Verkochte posities blijven zichtbaar bij ontvangen dividend maar krijgen geen verwachting.
+Het scenario kent geen dividendgroei, herbelegging, nieuwe aankopen, verkopen, belastingwijzigingen of toekomstige wisselkoersen. Bijzondere en eenmalige uitkeringen kunnen de schatting vertekenen. Dit zijn historische schattingen, geen aangekondigde dividendbetalingen. Valuta en brokerselectie blijven gescheiden; er wordt geen extra markt-API aangeroepen. Alle betalingen zijn in stappen van honderd beschikbaar met kolomfilters en sortering voor de geladen regels.
+
+### Alle valuta’s in euro
+Kies op Home Alle valuta’s in euro voor gecombineerde kerncijfers, grafiek, posities en wegingen. Je kunt daarnaast blijven kiezen voor één oorspronkelijke valuta. Het totaaloverzicht rekent aankoopprijzen, verkoopopbrengsten en dividend om op hun eigen datum; gewogen kostprijs en gerealiseerde winst worden opnieuw berekend in euro. Marktwaarde gebruikt de beschikbare wisselkoers bij de huidige datum. Britse pence (GBX) worden eerst naar GBP omgerekend.
+Ontbrekende historische wisselkoersen worden zo nodig via de bestaande koersdienst opgehaald en bewaard. Er wordt nooit een ontbrekende wisselkoers gelijkgesteld aan 1. Posities met ontbrekende noodzakelijke omrekeningen staan apart bij het overzicht, inclusief de betreffende datums. Grafiekdagen tonen bekende marktwaarden en kunnen bij ontbrekende historische koersen onvolledig zijn. Originele transacties en beursnoteringen veranderen niet.
+
+### Dividend in euro en unieke aandelen
+Op Dividend combineert Alle valuta’s in euro de ontvangen betalingen tegen hun wisselkoers op betaaldatum. Verwachtingen rekenen de oorspronkelijke dividendbedragen om met de huidige beschikbare wisselkoers, die voor de hele toekomstige horizon vast blijft. Het scenario voorspelt geen toekomstige wisselkoersen. Ontbrekende omrekeningen worden apart vermeld; de originele bedragen blijven bij de betalingen zichtbaar.
+Aandelen is een gezamenlijk overzicht van alle brokeraccounts, met één regel per symbool, beurs en noteringsvaluta. Aantallen, kostprijs, waarde, gerealiseerde winst en dividend worden binnen die beursnotering opgeteld. Verschillende beursnoteringen of valuta’s worden niet ongemerkt samengevoegd. Een aandeel openen toont alle transacties, dividend en splitsingen van alle brokers. Transactiebeheer blijft onder Transacties; de extra tabel onder het aandelenoverzicht is verwijderd.
+De cirkelgrafieken voor sector, land en beleggingstype tonen aantallen open beursnoteringen, geen verdeling van marktwaarde. Niet ingedeelde aandelen blijven zichtbaar. Nieuwe categoriegegevens verversen de grafieken zonder tabelsortering en filters te wissen.
+
+### Ingelogd blijven
+
+Na aanmelden blijf je 48 uur ingelogd. Elk geauthenticeerd verzoek verlengt dit met 48 uur, ook na het sluiten van de browser of een appherstart. De browser bewaart een HttpOnly-cookie; de server bewaart alleen de hash van de sessiesleutel in SQLite. Uitloggen, accountwijzigingen en herstel trekken sessies in. Na deze update is één keer opnieuw aanmelden nodig.
+
+
+## Importcentrum en Trade Republic (v0.22.0)
+
+Imports toont de beschikbare brokers en de stappen bron → voorbeeld → opslaan. Uploaden en rapporten aanvragen gebeurt in pop-ups. Beheer verbindingen onder **Imports → API-instellingen**; Trading 212 gebruikt de bestaande versleutelde opslag per rekening. Rapporten ophalen blijft een actie op de importpagina.
+
+Maak bij Instellingen een brokeraccount aan met bedrijf **Trade Republic**. Download de oorspronkelijke transactie-export CSV uit je profiel bij Trade Republic (afschriften/transactie-export; labels verschillen per appversie). Kies de volledige geschiedenis en upload het bestand ongewijzigd. De adapter herkent de vaste kolommen `date`, `datetime`, `category`, `type`, `name`, `symbol` (ISIN), `shares`, `price`, `amount`, `currency`, `transaction_id` en `asset_class`. PDF’s en CSV’s van externe downloadtools worden niet ondersteund.
+
+Ondersteund zijn TRADING/BUY, TRADING/SELL en CASH/DIVIDEND voor aandelen en fondsen. Verkoopaantallen worden positief opgeslagen met type Verkoop; de expliciete bronprijs wordt gebruikt. Dividend gebruikt het netto bedrag en de valuta uit de bron; belastingen worden niet nogmaals afgetrokken. Expliciete kostenvelden staan apart in de kostenadministratie; geldmutaties blijven buiten de portefeuille. Bekende cashacties zoals rente, kaartbetalingen en Saveback worden overgeslagen. Negatieve dividendcorrecties, ontbrekende prijzen, crypto, effectenoverdrachten en onbekende acties blijven ter beoordeling. Handmatige classificatie gebruikt dezelfde strikte bronvalidatie. Identiteit en ontdubbeling gebruiken de transactie-ID per aanbieder en brokeraccount; gewijzigde gegevens met dezelfde ID worden geweigerd.
+
+Voor Trade Republic is geen ondersteunde openbare API met rapportrechten bevestigd; de koppeling gebruikt CSV en vraagt geen banklogin. Formaatonderzoek: [libtraderepublic](https://github.com/aritzmmartinez/libtraderepublic), een onafhankelijke parser die het bronformaat documenteert. De regressietests gebruiken uitsluitend verzonnen gegevens. Er is geen echte rekening of gebruikersbestand gebruikt voor deze controle.
+
+
+### Trade Republic: Private Markets en herstel van meldingen (v0.22.1)
+
+`CASH / PRIVATE_MARKET_BUY / PRIVATE_FUND` met lege aantallen en prijzen is een vooruitbetaling, geen aandelenboeking. De import slaat die cashregel over. `TRADING / BUY / PRIVATE_FUND` bevat de daadwerkelijke aankoop en boekt het expliciete aantal maal de bronprijs. Een gewijzigde of onvolledige vorm blijft ter beoordeling.
+
+Apollo Global Private Markets ELTIF A2 UNH (LU3170240538) wordt onder dezelfde ISIN met markt **PRIVATE** in EUR geboekt. Dit is geen beursnotering. Open het fonds bij **Aandelen**, kies **Koers instellen** en vul de actuele fondskoers (intrinsieke waarde per aandeel) met datum in. Zonder die waardering toont de app geen actuele marktwaarde of winst voor deze positie. Er zijn geen automatische Yahoo-koers-, historie- of bedrijfsprofielaanvragen voor dit fonds. Onbekende private fondsen worden niet op naam aan een openbaar aandeel gekoppeld.
+
+Een boekdatum naast de UTC-datum wordt behouden als beide op dezelfde of aangrenzende dagen vallen; een grotere afwijking blijft ter controle staan. De boekdatum bepaalt de historische valutaomrekening. Voor de gemelde beursfondsen gebruikt de ISIN-catalogus `641.F`, `BY6.F`, `RHM.DE`, `3CP.F` en `ABEA.DE`; elke notering wordt bij koppelen nog via de koersmetadata gecontroleerd. Identiteiten zijn gecontroleerd bij Deutsche Börse en Rheinmetall Investor Relations; de EUR-metadata is gecontroleerd bij Yahoo. Bron: [Deutsche Börse](https://live.deutsche-boerse.com/equity/dividend-15-split-a-cd-15), [BYD H](https://live.deutsche-boerse.com/equity/byd-h), [Xiaomi B](https://live.deutsche-boerse.com/equity/xiaomi-corp-cl-b), [Alphabet A](https://live.deutsche-boerse.com/equity/alphabet-inc-class-a), [Rheinmetall](https://www.rheinmetall.com/en/investor-relations/share/basic-information), [Apollo](https://www.apollo.com/agpm-eltif).
+
+Na bijwerken: open je opgeslagen importvoorbeeld opnieuw of kies **Opnieuw proberen** bij **Te beoordelen**. De bronregels worden met de nieuwe adapter gecontroleerd; eerdere boekingen en handmatige beslissingen blijven behouden. Vraag daarna de automatische beurskoppelingen opnieuw aan. Je hoeft geen geboekte portefeuille te wissen of opnieuw op te bouwen.
+
+
+### Trade Republic: stortingen, migraties en Netflix-splitsing (v0.22.2)
+
+Stortingen (`CASH/CUSTOMER_INPAYMENT`) en geldbonussen (`CASH/BONUS`) zonder effect, aantal of prijs worden apart als cashmutatie overgeslagen. Een bonus met aandelenvelden blijft ter beoordeling; een geldbonus is geen dividend.
+
+Bij `DELIVERY/MIGRATION` wordt alleen een exact neutraal uit-/inboekingspaar overgeslagen: twee verschillende bron-ID’s, dezelfde ISIN, accountsoort, bronvaluta, boekdag, prijs en absoluut aantal, tegengestelde aantallen en maximaal één seconde verschil in transactietijd. Dat verandert bezit, kostprijs en rendement niet. Een losse overdracht, afwijkende prijs, ander aantal of een andere accountsoort blijft ter beoordeling. De oorspronkelijke regels blijven in het importvoorbeeld bewaard.
+
+`CORPORATE_ACTION/SPLIT` voor Netflix (US64110L1061) op 17 november 2025 gebruikt de door de uitgever bevestigde 10-op-1-splitsing. De exporthoeveelheid moet exact gelijk zijn aan negen extra aandelen per eerder aandeel of het nieuwe totaal van tien per eerder aandeel. De import controleert dat tegen het daadwerkelijk geboekte voorafgaande bezit in hetzelfde brokeraccount. Zonder passend voorafgaand bezit wordt niets geboekt. Prijs en valuta zijn bij deze corporate action geen geldmutatie: een ontbrekende valuta wordt uitsluitend aangevuld uit een unieke bronvaluta van dezelfde aandelen in het bestand of een unieke bestaande ISIN-koppeling. Er vindt geen wisselkoersconversie plaats voor de splitsing. Kostprijs, inleg en gerealiseerde winst blijven gelijk. Andere ISIN’s, datums of splitsingsverhoudingen blijven ter beoordeling. [Netflix: aankondiging van de splitsing](https://ir.netflix.net/investor-news-and-events/financial-releases/press-release-details/2025/Netflix-Announces-Ten-For-One-Stock-Split/default.aspx).
+
+Na bijwerken kun je het opgeslagen importvoorbeeld opnieuw openen en controleren of openstaande regels via Te beoordelen opnieuw proberen. Volledige aankoophistorie blijft nodig voor een juiste splitcontrole; verwijder eerder geboekte transacties niet.
+
+
+## Sneller laden en blijvende overzichtcache (v0.23.0 / schema 17)
+
+Transacties, dividend, beurskoersen, daghistorie, referentiewisselkoersen en providerantwoorden blijven lokaal in SQLite. Home en de euro-weergave vragen tijdens het laden geen externe koersdienst om gegevens. Ontbrekende historische FX wordt door de achtergrondtaak aangevuld; tot die tijd blijven ontbrekende omrekeningen zichtbaar en worden geen koersen geschat.
+
+Het berekende portefeuilleoverzicht en de euro-/dividendoverzichten worden gecomprimeerd onder een eigen dashboard-namespace in `api_cache` opgeslagen. De app houdt veelgebruikte resultaten ook in het geheugen, begrensd op zestien weergaven en 64 MiB aan geserialiseerde inhoud; grotere resultaten blijven uit de database beschikbaar. Een cache is gekoppeld aan appversie, kalenderdag, brokerselectie en de lokale financiële datarevisie. SQLite-triggers verhogen de revisie binnen dezelfde transactie als wijzigingen aan transacties, dividend, actuele koersen, dagprijzen, handmatige waarderingen, brokeraccounts, instellingen of FX-koersen. Expliciete wijzigingen aan categorieën maken de overzichtcache via de bestaande mutatieroute ongeldig. Sessieverlengingen, diagnostiek en providercache-writes verhogen de financiële revisie niet.
+
+Home laadt eerst kerncijfers, posities en de totaalgrafiek. Individuele lange histories komen pas uit de databasecache wanneer een positie wordt bekeken of maximaal zes posities worden vergeleken. De volledige daghistorie blijft beschikbaar. Verborgen pagina’s bouwen hun tabellen pas bij openen. Een tweede bezoek of een appherstart hergebruikt een passend opgeslagen overzicht; na nieuwe gegevens wordt het overzicht opnieuw berekend.
+
+Database-upgrade 17 maakt vooraf een consistente back-up en installeert alleen de lokale revisietabel en triggers. Back-upherstel importeert geen revisietabel, triggers of dashboard-snapshots uit een upload. De portefeuille wordt uit de echte brongegevens opnieuw berekend; huidige gebruikers en beveiliging blijven behouden. Voor elk antwoord controleert de server opnieuw de sessie en rol. De browser gebruikt geen localStorage, sessionStorage of offlinecache voor financiële antwoorden.
+
+
+## Home Assistant-sensoren (v0.24.0)
+
+De app levert een compacte, alleen-lezen JSON-export op een aparte HTTP-server:
+`http://<lokaal-HA-IP>:8100/api/ha/state`. Het dashboard op poort 8099 blijft uitsluitend
+via ingress toegankelijk. De exportserver start alleen met een geldige
+`home_assistant_token` in `/data/options.json`: 32–128 ASCII-letters, cijfers,
+streepjes of underscores. Gebruik een willekeurig gegenereerde geheime sleutel.
+De optionele hostpoort `8100/tcp` staat standaard uit; zet die in de appconfiguratie
+op 8100 (of een andere vrije hostpoort) en herstart de app. Gebruik deze lokale
+HTTP-poort alleen binnen je vertrouwde netwerk; stel hem niet via je router open.
+Dezelfde sleutel komt als `Authorization: Bearer <sleutel>` in de REST-configuratie.
+De app toont de sleutel nooit in de beheer-API, instellingen, diagnostiek of logs.
+
+Open **Instellingen → Home Assistant-sensoren** voor een actuele configuratie met
+één sensor per aanwezige valuta en één extra sensor voor het gecombineerde eurototaal.
+Deze beheer-API is alleen voor admins. Voeg de getoonde `rest:`-configuratie toe aan
+Home Assistants `configuration.yaml`; voeg bij een bestaande `rest:`-sectie alleen
+het lijstonderdeel toe. Voeg in `secrets.yaml` toe:
+
+```yaml
+home_invest_resource: "http://192.168.1.10:8100/api/ha/state"
+home_invest_authorization: "Bearer VUL_HIER_DEZELFDE_SLEUTEL_IN"
+```
+
+Vervang adres en sleutel. Gebruik de hostpoort die je hebt ingesteld. Controleer de
+HA-configuratie, herstart Home Assistant en voeg de sensoren aan een dashboard toe.
+De standaardsensoren heten bijvoorbeeld `sensor.home_invest_totaal_eur`,
+`sensor.home_invest_eur` en `sensor.home_invest_usd`; Home Assistant kan bij bestaande
+namen een suffix toevoegen. Sensoren hebben vaste unique_id's. Nieuwe valuta worden
+aangeboden door de API; neem daarvoor de vernieuwde configuratie uit Instellingen over.
+Er wordt eenmaal per minuut één lokale aanvraag gedaan voor alle sensoren samen.
+Zie [Home Assistant RESTful](https://www.home-assistant.io/integrations/rest/) en
+[RESTful-sensor](https://www.home-assistant.io/integrations/sensor.rest/).
+
+De export bevat uitsluitend `as_of`, `data_revision`, `oldest_quote_at`, `currencies`
+en `total_eur`. Valutabedragen staan als exacte decimale strings in `value` en
+`known_value`; `value` is null als het totaal onvolledig is. `total_eur` bevat ook
+`complete`, `missing_fx`, `missing_quotes`, `positions` en `fx_dates`. De getoonde
+HA-configuratie bewaart deze volledigheidsinformatie als attributen van de totaalsensor.
+Elke valutasensor blijft onafhankelijk beschikbaar als zijn eigen koersen compleet zijn.
+Een onvolledig totaal wordt `unknown`, nooit stilzwijgend nul of een gedeeltelijke som.
+
+Het gaat om de marktwaarde van open beleggingen over alle brokeraccounts. Gerealiseerde
+winst, uitgekeerd dividend en los brokersaldo worden niet bij de waarde opgeteld.
+Het eurototaal vereist alleen huidige opgeslagen FX, geen historische aankoop-FX.
+De laatste EUR-referentiekoers op of vóór de waarderingsdag mag maximaal zeven dagen
+oud zijn; toekomstige of ontbrekende FX wordt niet gebruikt. GBX is 0,01 GBP.
+De oorspronkelijke quote- en FX-datums blijven zichtbaar: dit is geen realtime feed.
+De export gebruikt de blijvende revisie-/dagcache en doet geen externe aanvragen.
+Een gewijzigde koers, transactie, account of FX-koers vernieuwt ook deze export.
+Geen nieuwe migratie: schema 17 blijft behouden.
+
+De exportpoort levert geen dashboard, transacties, namen van posities, back-ups,
+instellingen of schrijf-API. Ontbrekende/verkeerde bearer geeft 401, andere routes
+404, en schrijfmethoden 405. Financiële antwoorden blijven `no-store` in de browser.
+Een nieuwe sleutel in de appconfiguratie plus herstart trekt de oude sleutel in;
+werk ook `secrets.yaml` bij. Home Assistant-dashboardtoegang wordt door je eigen
+HA-accounts geregeld. Een lokaal voorbeeld op `127.0.0.1:8107` bevat alleen testdata
+op je computer en maakt geen sensoren in je echte Home Assistant-installatie aan.
+
+## Taal kiezen
+
+Bij de eerste start kies je Nederlands, Engels of Spaans. Je kunt de keuze later wijzigen via **Taal / Language / Idioma** onder je account in de zijbalk. Opslaan herlaadt de app in de gekozen taal. Met loginaccounts wordt de voorkeur per gebruiker op de server bewaard en op andere apparaten toegepast. Zonder loginaccounts geldt de servervoorkeur voor toegang via Home Assistant. Op het aanmeldscherm onthoudt de browser alleen de taalvoorkeur; sessies en portefeuilledata worden daar niet opgeslagen.
+
+### Nieuwe teksten toevoegen
+
+Alle vaste schermteksten staan in `app/static/translations.js`, met dezelfde Nederlandse brontekst als sleutel en verplichte `nl`, `en` en `es`-waarden. Voeg bij elke nieuwe tekst direct alle drie de vertalingen toe. JavaScript gebruikt `ui('Nederlandse tekst')`; vertaal nooit namen, notities, tickers, routepaden, API-waarden of gegevens van gebruikers. HTML-teksten en toegankelijkheidslabels worden vóór het openen van de app vertaald. Gebruik `appLocale()` voor datum- en getalnotatie. Formulierwaarden en databasewaarden blijven taalneutraal.
+
+`python scripts/check_translations.py` controleert nieuwe HTML/JavaScript-teksten en serverfoutmeldingen. Dezelfde controle draait in de tests en op GitHub. `scripts/i18n_technical_strings.json` bevat uitsluitend technische identificaties, merknamen en codevoorbeelden die niet vertaald horen te worden; voeg daar geen schermteksten aan toe. Serverberichten worden pas aan de HTTP-grens vertaald, zodat de gedeelde cache en opgeslagen gegevens taalneutraal blijven.
+
+Zoeken bij het toevoegen van een aankoop ondersteunt aandelen, ETF’s en beleggingsfondsen op ondersteunde markten. Voor Hybrid Index Fund NL-I kun je zoeken op `0P0001IV37`; selecteer de Yahoo-notering `0P0001IV37.F` (Frankfurt, EUR). De app controleert de notering en werkelijke koersvaluta voordat de aankoop wordt ingevuld.
+
+## Brokeraccount kiezen op je overzichten
+
+Bovenaan Home, Aandelen en Dividend kies je een brokeraccount of **Alle accounts**. De selectie blijft tijdens het navigeren actief en geldt voor bedragen, posities, grafieken, dividend en aandeeldetails. Op Aandelen wordt dezelfde beursnotering binnen de gekozen selectie één keer getoond. Koersgegevens en categorieën blijven per beursnotering gedeeld.
+
+## Rapporten
+
+Kies de huidige portefeuille, resultaat per aandeel, dividend per maand of dividend per aandeel. Filter op brokeraccount, aandeel en valuta. De jaarkeuze geldt voor dividendrapporten; resultaat en portefeuille tonen de actuele stand inclusief alle geboekte dividenden. Bedragen blijven gescheiden per valuta.
+
+Rapporten slaan regels met ontbrekende of ongeldige gegevens over en tonen hoeveel regels niet zijn meegenomen. Totalen gelden alleen voor de meegenomen regels. Een dividenduitkering kan worden meegenomen zonder actuele aandelenkoers. De opgeslagen transacties blijven behouden.
+
+### Visuele rapporten
+
+Rapporten biedt tien perspectieven: portefeuilleoverzicht, waardeontwikkeling, spreiding en concentratie, winnaars en verliezers, resultaatopbouw, maanddividend, dividend per aandeel, dividendkalender, sectoren en landen. Selecteer een brokeraccount en valuta. Dividendrapporten hebben een jaarkeuze; waardeontwikkeling heeft een periodekeuze. Alle valuta blijven apart, ook als je alle valuta kiest.
+
+Grafieken tonen details bij aanwijzen of toetsenbordfocus. Gebruik links en rechts op een lijngrafiek en Tab voor segmenten, staven en kalendercellen. Onderliggende cijfers toont de meegenomen bronregels. Donuts groeperen kleine posities onder Overige; ranglijsten en resultaattegels tonen maximaal de grootste bijdragen. Groene en rode tegels tonen winst/verlies in geld, geen perioderendement. De kalender toont ontvangen bedragen, geen verwachte uitkeringen. Het jaartotaal gedeeld door twaalf is een rekenkundig gemiddelde, geen voorspelling.
+
+Sectoren en landen zijn gebaseerd op opgeslagen instrumentindelingen, met Niet ingedeeld als aparte categorie. Dit is geen doorkijk in de onderliggende beleggingen van fondsen. Waardeontwikkeling toont bekende dagwaarden en openstaande kostprijs; aankopen en verkopen beïnvloeden de waarde. Dit is geen tijdgewogen rendement of benchmarkvergelijking. Ontbrekende posities worden per dag overgeslagen, inclusief hun kostprijs en dividend, zodat teller en noemer dezelfde dekking houden.
+
+De nieuwe alleen-lezen route `/api/reports/history` gebruikt dezelfde loginbeveiliging en brokerafbakening als het dashboard. Filters zijn `account_id`, optioneel `instrument` (JSON-lijst van ticker, beurs en valuta) en `currency`. Het resultaat bevat `data_revision` en histories per valuta. Berekeningen gebruiken Decimal; laden gebeurt uitsluitend bij openen van Waardeontwikkeling. De weergave negeert antwoorden voor oude filters of sessies.
+
+Ontwerpinspiratie: [Sharesight grafieken](https://help.sharesight.com/ca/show_portfolio/) en [getquin portfolio analytics](https://www.getquin.com/portfolio-tracker), met een eigen uitvoering in de Home Invest-stijl.
+
+Rapporten openen als afzonderlijke pagina via het uitklapmenu links. De dividendkalender toont per aandeel de betaaldatum en ontvangen of geschatte bedragen. Kies tot vijf jaar vooruit en 0%, 3%, 5% of 10% jaarlijkse groei. Standaard is 3% een scenario-aanname, geen gemeten groei. De basis is het netto ontvangen bedrag in de afgelopen twaalf maanden voor nog open posities, zonder correctie voor gewijzigd bezit, belasting of toekomstige valuta. Datums zijn indicatief; aangekondigde uitkeringen zijn niet gekoppeld.
+
+De dividendkalender heeft een maandraster met navigatie en een detailagenda. Klik op een betaaldag om bedragen, aandelen en de basis van schattingen te zien. Op mobiel staan de details onder de kalender. Rapporten benutten de volledige beschikbare breedte.
+
+Rapporten starten met een gecombineerd totaal in EUR en tonen daarna de geselecteerde bronvaluta afzonderlijk. Ook filters voor broker en bronvaluta gelden voor het totaal. Bedragen worden op de server met opgeslagen, gedateerde wisselkoersen omgerekend; ontbrekende omrekeningen worden vermeld. Onderliggende cijfers bevatten het totaal en de uitsplitsing als afzonderlijke regels en mogen niet bij elkaar worden opgeteld.
+
+Eurototalen berekenen de actuele stand zonder daghistorie opnieuw op te bouwen. Alleen Waardeontwikkeling vraagt volledige historie op. Rapportaanvragen hebben een wachttijd van maximaal 15 seconden; bij een fout verschijnt Opnieuw proberen. Berekeningen blokkeren andere opgeslagen dashboardweergaven niet.
+
+Rapporten sluiten onvolledige of ongeldige bronposities ook voor de eurototalen uit. Een onbetrouwbare transactie sluit de bijbehorende positieberekening uit; geldige dividendregels kunnen onafhankelijk worden meegenomen. Een onvolledig totaal wordt vermeld. Er worden geen boekingen verwijderd.
+
+## Demoprofiel
+
+Kies links bij **Profiel** voor **Demoportefeuille**. De demo toont 10 brokers, 150 aandelen in EUR, USD, GBP, CHF, JPY, CAD, AUD, HKD, DKK en SEK, met circa EUR 150.000 marktwaarde en twee jaar fictieve koersen en dividend. De demo is alleen-lezen en gebruikt geen live marktdata.
+
+De eigen portefeuille blijft in `data/portfolio.sqlite3`; de demo krijgt een afzonderlijk bestand `data/demo/portfolio.sqlite3` (in Home Assistant `/data/demo/portfolio.sqlite3`). Loginaccounts en sessies blijven van de eigen installatie. Bij de eerste opening wordt de demo aangemaakt; op een volgende dag worden alleen de fictieve demogegevens vernieuwd. Wissel terug via de profielkeuze of **Eigen portefeuille openen**. Het gekozen profiel staat in het pagina-adres en blijft daardoor bij herladen behouden.
+
+Home bewaart compacte weergaven afzonderlijk van volledige aandeelhistories. Vergelijken vraagt alleen de geselecteerde posities op. Een munt- en grafiekanimatie toont na korte vertraging dat de huidige pagina laadt, zonder bestaande gegevens te blokkeren. Bij verminderde beweging blijft de illustratie stil. Leesaanvragen stoppen na maximaal 30 seconden; rapporten behouden hun kortere eigen wachttijd.
+
+
+## TMX-fusie en Apollo-fondskoers (0.32.0)
+
+Open **Instellingen → TMX omboeken naar TDT** of de link op het TMX-aandeel.
+Kies een brokeraccount en de afwikkeldatum (standaard 2 oktober 2025). Laat het
+ontvangen aantal leeg voor de officiële verhouding van 0,937630 TDT per TMX, of
+vul het werkelijk ontvangen aantal in. Controleer eerst of de TDT-ontvangst niet
+al als aankoop is geïmporteerd; een contante vergoeding voor fracties valt buiten
+deze omboeking. Bekijk het voorbeeld en sla daarna definitief op.
+
+De volledige open TMX-positie wordt afgeboekt en bij TDT bijgeboekt, met dezelfde
+kostprijs en inleg. De oorspronkelijke transacties en dividend blijven bestaan.
+De twee gebeurtenissen veroorzaken geen verkoopwinst of extra storting. Bestaand
+TDT-bezit wordt samengevoegd; eventuele latere verkopen worden opnieuw gevalideerd.
+Een omboeking kan niet als losse aankoop of verkoop worden gewijzigd. Download
+de automatisch gemaakte herstelback-up om de gehele administratie van vóór de
+omboeking terug te kunnen zetten. Dit herstel vervangt ook latere portefeuillewijzigingen.
+
+Voor Apollo **LU3170240538**, beurs **PRIVATE**, valuta **EUR**, gebruikt de app
+[de openbare DivvyDiary-vermelding](https://divvydiary.com/en/apollo-private-markets-aligned-alternatives-a2-eur-acc-LU3170240538).
+De achtergrondcontrole gebruikt een blijvende cache van zes uur en controleert
+ISIN en valuta. DivvyDiary geeft geen koersdatum bij deze waarde; het opgeslagen
+tijdstip is het moment waarop de waarde is waargenomen, geen bevestigde NAV-datum.
+De bronvermelding en aandeelpagina maken dat onderscheid zichtbaar. Alleen
+werkelijke waarnemingen worden opgeslagen; er wordt geen historische NAV ingevuld.
+Een eerdere handmatige waardering blijft gelden totdat je bij **Koers instellen**
+weer **Automatisch** kiest. Bij een bronfout blijft de vorige waarneming behouden.
+
+Schema 19 voegt drie omboekvelden aan de transactietabel toe. Migratie en herstel
+behouden oude gegevens en controleren dat iedere omboeking twee consistente
+boekingen in hetzelfde account en dezelfde valuta heeft.
+
+
+## Rendementsoverzicht (0.32.1)
+
+Open **Rapporten → Rendementsoverzicht**. Het rapport toont eerst het gecombineerde
+totaal in EUR en daarna de geselecteerde bronvaluta’s. Brokeraccount en valutafilter gelden voor alle onderdelen. De periode loopt vanaf de eerste aankoop.
+Groene/rode balken tonen het resultaat per kalenderjaar; grijze balken de aankoopbedragen.
+Het lopende jaar loopt tot vandaag. Navigeer per negen jaren (vijf op mobiel); details zijn ook met
+het toetsenbord bereikbaar en staan in Onderliggende cijfers.
+
+Totale aankoopinleg bevat alle aankoopbedragen zonder verkoopsommen af te trekken.
+Omboekingen verdubbelen de inleg niet. Koersresultaat is actuele waarde minus
+openstaande kostprijs; gerealiseerd resultaat volgt de geboekte verkopen en
+netto dividend volgt de ontvangen boekingen. Componentpercentages delen door de
+totale aankoopinleg. Jaarresultaat is het verschil tussen de cumulatieve resultaten
+op twee jaargrenzen. Ontbreekt een betrouwbare grenswaarde, dan blijft de balk leeg.
+
+XIRR gebruikt negatieve aankoopbedragen, positieve verkopen en ontvangen dividenden,
+en de huidige waarde als laatste positieve geldstroom. Datums tellen op een basis
+van 365 dagen. Het percentage is op jaarbasis, geen rendement van het brokersaldo.
+De berekening zoekt nulpunten op een logaritmische schaal; meerdere gevonden
+oplossingen of geen oplossing blijven niet berekenbaar. Interne omboekingen tellen
+niet als geldstroom; bij een selectie van slechts één zijde blijft XIRR leeg.
+EUR-omrekening gebruikt opgeslagen koersen van de geldstroomdatum en historische
+waarderingsdatum, zonder toekomstige wisselkoersen of 1:1-fallback.
+
+Kosten en belasting staan apart in de kostenadministratie. Het Rendementsoverzicht
+verwerkt vastgelegde aanvullende bedragen in totaal, jaarresultaat en XIRR; netto
+geboekt dividend bevat al de inhoudingen uit de bron en wordt niet nogmaals verminderd.
+Home en de aandelenoverzichten behouden de bronkostprijs; het resultaat na apart
+geboekte kosten staat in het Rendementsoverzicht. Exact tijdgewogen
+rendement kan zonder waarderingen op ieder extern geldstroommoment niet betrouwbaar
+worden berekend en wordt niet door een benadering vervangen.
+
+
+### Laden van het rendementsrapport (0.32.2)
+
+De keuzelijst en het rapport mogen een verschillend gegevensnummer hebben wanneer
+op de achtergrond koersen zijn bijgewerkt. Het rapport gebruikt uitsluitend de
+cijfers uit zijn eigen consistente servermomentopname. Antwoorden voor een eerder
+brokeraccount of filter en antwoorden na uitloggen worden nog steeds genegeerd.
+De jaarberekening gebruikt alleen de bestaande jaargrenzen en de actuele stand.
+Op tragere apparaten kan de aanvraag maximaal zestig seconden duren. Een time-out,
+verbindingsfout of servermelding wordt toegelicht; onverwachte rekenfouten krijgen
+een Log-ID voor de afgeschermde Logs-pagina. Opnieuw proberen start een nieuwe aanvraag.
+
+
+## Opgeschoonde rapporten en wereldkaart (0.33.0)
+
+Het rapportmenu begint met Portefeuilleoverzicht en daarna Rendementsoverzicht.
+Er is geen aandelenkeuze bovenaan de rapporten. Brokeraccount en valuta blijven
+beschikbaar; jaar-, periode- en groeikeuzes verschijnen alleen op relevante pagina’s.
+Algemene marktwaarde en totale winst staan alleen op Portefeuilleoverzicht.
+Andere rapporten tonen hun eigen cijfers en visualisaties.
+
+**Landenverdeling** gebruikt een lokale wereldkaart. Landen met een bekende
+marktwaarde zijn ingekleurd; vlaggen en percentages tonen hun weging. Klik op een
+land, vlag of landenregel voor het bedrag. De Europa-knop vergroot de kleine landen;
+Wereld herstelt de gehele kaart. De lijst en Onderliggende cijfers bevatten alle
+landen, ook wanneer een vlaglabel op een drukke kaart niet past. Bediening met
+Tab en Enter is mogelijk. Op mobiel staat de landenlijst onder de kaart.
+
+Landen volgen de opgeslagen indeling van de belegging, niet de locatie van de
+beurs. Landcodes en Nederlandse, Engelse en Spaanse landnamen worden herkend.
+Bijvoorbeeld US, USA en Verenigde Staten tellen als hetzelfde land. Niet herkende
+landen blijven onder hun eigen naam apart in de lijst; ze worden niet aan een
+willekeurige locatie toegewezen en tellen wel mee in de procentbasis. De verdeling
+is naar bekende marktwaarde; ontbrekende koersen en EUR-omrekeningen blijven
+vermeld. Eerst wordt de EUR-verdeling getoond, daarna de bronvaluta afzonderlijk.
+Er is geen doorkijk in de onderliggende posities van ETF’s of fondsen.
+
+De kaart (Natural Earth, publiek domein) en vlaggen (flag-icons, MIT) worden vanuit
+de app geleverd. Er zijn geen externe kaartaanvragen en er wordt geen
+portefeuille-informatie naar een kaartdienst gestuurd. Bronnen en licentie staan
+bij de gebundelde bestanden in portfolio/app/static/WORLD_MAP_SOURCES.md.
+
+## Wensen & bugs
+
+Meldingen worden binnen Home Invest ingediend en gevolgd; gebruikers hebben geen GitHub-account nodig. De beheerder stelt `feedback_service_url` in de Home Assistant-appconfiguratie in (bijvoorbeeld `https://meldingen.home-invest.nl`) en activeert de installatie via **Wensen & bugs → Meldservice activeren** met een eenmalige code. Zonder deze inrichting staat verzenden uit. Per installatie geldt een limiet van vijf meldingen per 24 uur. Alleen de bewust ingevulde tekst en de appversie worden verstuurd; meldingen worden openbaar op GitHub.
+
+De aparte centrale container wordt in Coolify gebouwd met `feedback_service/Dockerfile` en buildcontext `/`. Zie [installatie, GitHub App en beheer](../feedback_service/README.md) voor Coolify.
+
+De lokale wachtrij en installatiegegevens staan versleuteld in de aparte map `feedback/` in de app-datafolder, buiten het portefeuilledatabestand. Ze blijven behouden bij portefeuilleherstel; een volledige Home Assistant-appback-up is nodig om de meldverbinding mee te herstellen. Versturen wordt automatisch hervat. Bij een onduidelijke GitHub-verzenduitkomst controleert de centrale beheerder de melding om dubbele issues te voorkomen.
+
+
+### Importpagina’s vanaf 0.40.0
+
+Open **Imports** en kies Trading 212, Trade Republic of Revolut. Iedere broker heeft
+zijn eigen pagina met vier stappen, een CSV-importknop en vergrootbare schermafbeeldingen
+met fictieve gegevens. Trading 212 biedt daarnaast een API-rapportknop; de verbinding
+beheer je apart bij **API-instellingen**. De uitleg bij de broker opent in een nieuw tabblad.
+
+Na uploaden opent **Importvoorbeeld**. Controleer daar de transacties en beurskoppelingen,
+vink de bevestiging aan en sla op. **Importgeschiedenis** toont opgeslagen voorbeelden en
+verwerkte imports. Regels met problemen vind je op **Te beoordelen**; vaste koppelingen
+beheer je bij **Aandelenkoppelingen**. Downloaden staat op de aparte pagina **Exporteren**.
+De logo’s en schermafbeeldingen worden lokaal geleverd; de browser vraagt geen externe
+logo- of afbeeldingsdienst aan. Brokerbenamingen en logo’s behoren aan hun eigenaren.
+
+Bij een lege rekeningkeuze klik je in de importpop-up op **Brokeraccount toevoegen**.
+De broker staat al ingevuld. Na opslaan keer je terug naar je upload en is de nieuwe
+rekening geselecteerd. Een eventueel gekozen CSV-bestand blijft behouden.
+
+
+### Brokeraccounts beheren
+
+Onder **Instellingen → Brokeraccounts** heeft iedere rekening **Aanpassen** en
+**Verwijderen**. Aanpassen opent een pop-up. Een nieuwe naam behoudt dezelfde rekening-ID,
+boekingen en importkoppelingen. De broker zelf wijzigen kan alleen als de rekening geen
+administratie of opgeslagen API-verbinding heeft.
+
+Verwijderen toont eerst de aantallen boekingen, dividend, kapitaalterugbetalingen, imports
+en beoordelingen. Typ **VERWIJDEREN** om de rekening inclusief gekoppelde administratie
+te verwijderen. De app bewaart vooraf een herstelback-up die je daarna kunt downloaden.
+Andere rekeningen en gedeelde koersen blijven behouden. Een opgeslagen API-verbinding
+wordt eveneens verwijderd; stel deze na eventueel portefeuilleherstel opnieuw in.
+
+### Revolut: kosten en bijzondere transacties
+
+Bewaarloon en dividendbelastingcorrecties worden afzonderlijk als kosten, belasting of
+terugbetaling geboekt; ook een tegengesteld correctiepaar blijft controleerbaar.
+Kapitaalterugbetalingen blijven buiten dividendwinst. De bevestigde NOW-splitsing vereist
+aansluitende aankoophistorie en behoudt de oorspronkelijke kostprijs. Fusies en onbekende
+splitsingen blijven apart ter beoordeling. Open een oud gedeeltelijk importvoorbeeld
+opnieuw of upload de oorspronkelijke export nogmaals om gemiste kosten te herkennen;
+bekende aankopen en verkopen worden niet dubbel geboekt. Eerder expliciet overgeslagen
+bronregels worden niet automatisch alsnog als kosten verwerkt.
+
+Het verwijderen van een brokerrekening wacht niet op koersverversing. Bij een lopende
+API-import of administratiebewerking verschijnt een melding om later opnieuw te proberen.
+Bij een verbindingstime-out is de uitkomst mogelijk nog onbekend: vernieuw eerst de
+rekeninglijst en controleer of de rekening nog bestaat voordat je opnieuw verwijdert.
+
+
+### Bedrijfscijfers en bronnen (0.42.0)
+
+Op de aandelendetailpagina staan maximaal vier jaarlijkse rapportages uit Defeat Beta:
+omzet, nettowinst, operationele kasstroom, vrije kasstroom en de daaruit berekende nettomarge.
+De koppeling leest de openbare `defeatbeta/yahoo-finance-data`-dataset op Hugging Face
+rechtstreeks met DuckDB; de volledige notebook/AI-API is niet nodig. Een API-sleutel is niet nodig.
+Alleen Amerikaanse NASDAQ/NYSE/AMEX-noteringen in USD waarvan het symbool exact in de
+Amerikaanse catalogus voorkomt worden ondersteund. Europese noteringen, private fondsen en
+onbekende tickers worden niet naar een andere notering vertaald. De rapportagevaluta komt
+uit de catalogus en kan afwijken van USD. Er vindt geen valutaomrekening plaats.
+
+De pagina toont het einde van het boekjaar, de update van de dataset en het ophaalmoment.
+Ontbrekende posten blijven onbekend; de nettomarge gebruikt alleen omzet en nettowinst uit
+hetzelfde boekjaar. De gegevens worden per notering 24 uur in `api_cache` opgeslagen en
+blijven bij een bronstoring zichtbaar als verouderde cijfers. Na een fout geldt 15 minuten
+wachttijd. Externe queries draaien één tegelijk in een apart proces met een limiet van
+40 seconden en 192 MB DuckDB-werkgeheugen; laden blokkeert de overige aandelendetails niet.
+De bron ontvangt alleen de ticker voor de query, geen posities, bedragen of brokergegevens.
+De dataset heeft ODC-By als licentie en beschrijft gebruik voor onderzoek en onderwijs.
+
+**Over ons** in het hoofdmenu en de voettekst vermeldt de markt- en wisselkoersbronnen,
+brokerimporten, fondswaarderingen, kaartmateriaal, vlaggen en bedrijfsiconen met bronlinks.
+De appcontainer gebruikt Python 3.13 op Debian slim voor DuckDB-wheels op amd64 en aarch64;
+de officiële httpfs-uitbreiding wordt tijdens de imagebuild geïnstalleerd.
+Bij handmatige installatie: installeer `portfolio/requirements.txt` en voer eenmaal
+`python -c "import duckdb; duckdb.connect().execute('INSTALL httpfs')"` uit als dezelfde gebruiker
+waarmee de app draait. Het databaseschema en de administratie blijven gelijk.
+
+### Kosten, belastingen en aanvullende import (0.43.0)
+
+Schema 20 voegt `charges` toe. Positieve bedragen zijn betaald; negatieve bedragen
+zijn terugbetalingen. De administratie bewaart account, provider, bron-ID, component,
+soort, oorspronkelijke valuta, datum en de keuze `included_in_net`. Ontbrekende
+kostengegevens worden niet als nul aangemerkt en er worden geen belastingtarieven toegepast.
+Btw wordt geregistreerd als bronbedrag, niet berekend of automatisch als terugvorderbaar aangemerkt.
+
+Revolut ondersteunt losse kosten- en belastingregels en expliciete velden `Fee`,
+`Commission`, `Tax Amt.`, `Taxes` en `VAT`, met eventuele eigen valutakolommen.
+Meerdere overlappende kostenkolommen en negatieve kostenkolommen vragen beoordeling.
+Bij `Fee` naast `VAT` is `Fee includes VAT` (0/1) nodig; bij 1 wordt btw uit de fee
+gehaald voordat beide onderdelen apart worden geboekt. `Fee (excl. VAT)` is direct
+onderscheiden. Een legacy-dividend met onduidelijke kostenverrekening blijft ter beoordeling.
+Trading 212 leest expliciete Transaction fee, Currency conversion fee, Withholding tax,
+Stamp duty reserve tax, Financial transaction tax en VAT met hun valutakolommen.
+Trade Republic herkent expliciete fee/tax/vat-velden en CASH/FEE of CASH/TAX.
+Een onbekend exportformaat wordt niet via een verschil tussen prijs en totaalbedrag geraden.
+
+Revolut heeft ook een afzonderlijk kosten- en lastenrapport. Niet alle kosten staan
+in iedere transactie-CSV. Neem ontbrekende bedragen alleen over uit een bronoverzicht;
+PDF-kostenrapporten worden niet automatisch door de transactieadapter verwerkt.
+Via **Rapporten → Kosten en belastingen → Kosten of belasting toevoegen** kun je een
+bedrag boeken of een aanvullende CSV uploaden. Het sjabloon gebruikt:
+`date,reference,category,amount,currency,ticker,included_in_net,description`.
+Datum is ISO (YYYY-MM-DD), bedrag gebruikt een decimale punt en is positief voor kosten,
+negatief voor een terugbetaling. Referentie is uniek per rekening en kostensoort.
+Soorten: COMMISSION, CUSTODY, FX_FEE, OTHER_FEE, VAT, WITHHOLDING_TAX,
+TRANSACTION_TAX en OTHER_TAX. `ticker` is optioneel. `included_in_net` is 1 als het
+bedrag al in het bestaande nettoresultaat zit (bijvoorbeeld ingehouden dividendbelasting),
+anders 0. Boek voor kosten exclusief btw en btw afzonderlijke categorieën. Neem een
+jaartotaal niet nogmaals op wanneer dezelfde kosten al per transactie zijn geboekt;
+ontdubbeling kan verschillende documenten zonder gedeelde bron-ID niet automatisch herkennen.
+
+De rapporten starten met EUR en tonen daarna elke bronvaluta. Ze gebruiken opgeslagen
+historische koersen op of vóór de boekdatum, maximaal zeven kalenderdagen eerder, inclusief
+GBX/pence. Ontbrekende omrekeningen worden expliciet vermeld en niet als 1:1 gewaardeerd.
+Een admin kan ontbrekende wisselkoersen ophalen. Het detail toont origineel bedrag,
+EUR-bedrag, factor, koersdatum en bronreferentie; de CSV-export is alleen voor ingelogde admins.
+De belastingrapporten tonen geboekte bedragen, geen berekening van een belastingaangifte.
+
+Kosten worden samen met hun bronregel geboekt; een ongeldige verkoop laat geen losse
+kosten achter. Opnieuw importeren kan ontbrekende kosten van een bestaande bron-ID aanvullen
+zonder de aankoop, verkoop of het dividend opnieuw te boeken. Een gewijzigde kostenreferentie
+wordt geweigerd. Een expliciete oversla-keuze blijft geldig. Oude boekingen veranderen niet
+bij de migratie. Herstel en accountverwijdering nemen de nieuwe kostenadministratie mee;
+het demoprofiel blijft afzonderlijk en alleen-lezen.
+
+### Kosten bij een handmatige transactie (0.43.1)
+
+Open **Transactie toevoegen** bij Aandelen. Kies aankoop of verkoop, het brokeraccount,
+het aandeel, aantal, prijs per aandeel en transactiedatum. Vul **Kosten exclusief btw**
+en **Btw op kosten** als afzonderlijke bedragen in. Dit zijn bedragen, geen percentages;
+btw wordt niet berekend. Laat ongebruikte velden leeg. De prijs per aandeel bevat deze
+kosten niet. Standaard gebruiken kosten en btw de transactievaluta; een eigen kostenvaluta
+is mogelijk via het optionele valutaveld en wordt in de oorspronkelijke eenheid bewaard.
+
+Opslaan boekt de transactie en eventuele kosten atomair. De kosten horen bij hetzelfde
+account en dezelfde datum; de bronverwijzing bevat de transactie-ID. Een ongeldige verkoop
+of ongeldig kostenbedrag boekt niets. De oorspronkelijke aandelenkostprijs blijft intact;
+de aanvullende kosten verschijnen in **Kosten en belastingen**, **Belastingoverzicht** en
+het netto **Rendementsoverzicht**, met dezelfde regels voor historische wisselkoersen.
+Handmatige mutaties vereisen een beheerder en geldige sessiebeveiliging.
+
+### Een handmatige aandelenprijs vanuit EUR omrekenen (0.43.2)
+
+Na selectie van een aandeel met een andere handelsvaluta verschijnt **Prijs per aandeel
+in EUR**. Vul de transactiedatum en het EUR-bedrag per aandeel in, zonder kosten of btw.
+JavaScript vraagt de gedeelde historische valutarekenaar aan en vult de prijs in de
+handelsvaluta automatisch in. **Omrekenen** herhaalt de aanvraag. Bij EUR-noteringen blijft
+het extra veld verborgen. Een ontbrekende koers of datum levert geen geschatte prijs op.
+
+De factor en werkelijke koersdatum zijn zichtbaar. Dit is een historische dagreferentie,
+geen gegarandeerde brokerafrekening. De omrekening gebruikt geen toekomstige koers en
+houdt rekening met GBX/pence. Veranderen van datum of aandeel maakt oude resultaten ongeldig.
+Als je de handelsprijs zelf wijzigt, wordt de EUR-invoer gewist en geldt die handmatige prijs.
+Sluiten of resetten van het formulier maakt nog lopende antwoorden onbruikbaar.
+
+Bij opslaan controleert de server EUR-bedrag, datum en handelsvaluta opnieuw. Afwijkende
+of verouderde omrekeningen worden geweigerd. De oorspronkelijke EUR-prijs, omrekenfactor,
+koersdatum en handelsprijs blijven bij de bronverwijzing bewaard in `import_fx` en de
+handmatige transactiebron. Herstel neemt deze gegevens mee; een mislukte verkoop laat
+geen losse omrekening of kosten achter. De kosten- en btw-velden behouden hun eigen
+valutakeuze en worden niet door het EUR-prijsveld omgerekend.
+
+### Bestaande transacties en kosten wijzigen (0.44.0)
+
+Open **Transacties → Bekijken** bij de gewenste boeking. Als beheerder kun je het
+brokeraccount, de datum en de beschikbare transactiegegevens aanpassen. Voeg onder
+**Kosten en belastingen** afzonderlijke regels toe voor transactiekosten, btw, bewaarloon,
+valutakosten of andere belastingen. Bedragen en valuta blijven expliciet; percentages
+worden niet geschat. Negatieve bedragen zijn terugbetalingen. **Reeds netto verwerkt**
+voorkomt dat reeds ingehouden bedragen dubbel van het resultaat worden afgetrokken.
+
+Gekoppelde kosten staan direct in de pop-up en volgen wijzigingen van broker en datum.
+Oudere, los geïmporteerde kosten kun je met **Bestaande kosten koppelen** expliciet kiezen
+of rechtstreeks als losse boeking openen en wijzigen. Een gekoppelde kostenregel krijgt
+een ander brokeraccount via de bovenliggende transactie. Verwijderen uit het formulier
+boekt een nulcorrectie met behoud van de bronreferentie.
+
+**Wijzigingen opslaan** verwerkt alles samen en berekent portefeuille en rapporten opnieuw.
+Een verouderde wijziging, ongeldige verkoopgeschiedenis of ongeldige kostenregel slaat
+niets op. Bij verplaatsen controleert de app beide brokeraccounts. Originele importregels
+en hun rekening blijven bewaard voor deduplicatie; handmatige correcties worden bij
+herimport niet teruggedraaid. Elke wijziging blijft terug te zien in de wijzigingshistorie.
+Aandeel, handelsvaluta en splitsingscontrole blijven vaststaan. Omboekingen blijven
+alleen via hun herstelback-up terug te draaien.
+
+Databaseversie 21 koppelt bestaande handmatige kosten aan hun transactie en bewaart
+ook wijzigingen aan losse kosten. De upgrade maakt vooraf een veiligheidskopie.
+Back-upherstel valideert de koppelingen en ondersteunt ook eerdere databaseversies.
+
+
+### ETF-samenstelling
+
+Databaseversie 22 voegt `fund_compositions` toe, gedeeld per symbool/beurs/noteringsvaluta. De migratie maakt vooraf een veiligheidskopie. Bronregels worden gevalideerd en met bron-URL, peildatum en ophaalmoment opgeslagen; herstel importeert uitsluitend gevalideerde gegevens, nooit providerschema of toegangsinstellingen. De snapshot en rapportcache worden via revisietriggers ongeldig bij wijzigingen.
+
+`GET /api/instrument/holdings` leest uitsluitend opgeslagen gegevens na eigendoms-/brokerscopecontrole. `POST /api/instrument/holdings` vereist admin en CSRF en bewaart een bronkoppeling of CSV-import atomair. Externe bronnen gebruiken HTTPS, een vaste lijst aanbieders, gecontroleerde redirects, limieten en wachttijden. Rapporten zelf roepen geen aanbieders op. Een nieuwe aanbieder met afwijkende kolommen kan via de CSV-adapter worden toegevoegd; iedere ETF ondersteunt de standaard CSV-kolommen. EXV1.DE is getest met de volledige iShares-bron, inclusief negatieve kasposities.
+
+### Gratis ETF-gegevens ophalen
+
+Open **Instellingen > Taken** als beheerder. Start alle ETF-noteringen, ontbrekende/verouderde samenstellingen of mislukte taken opnieuw. Invesco, VanEck, Vanguard en iShares gebruiken gratis officiële bronnen zonder API-sleutel; een ISIN-koppeling uit de brokerimport helpt bij herkenning. De taak werkt over alle brokeraccounts, toont voortgang en kan worden gestopt. Bij een bronfout blijft de vorige samenstelling behouden. Ontbrekende sectoren/landen worden niet gegokt. Niet elk fonds wordt door de gratis bronnen gedekt. Na een app-herstart moet een onderbroken taak opnieuw worden gestart. Gekoppelde bronnen worden daarna door de bestaande dagelijkse controle bijgewerkt.
+
+### ETF-beleggingen en Home-grafiek
+
+Klik in een ETF-samenstelling of rapport op een belegging om de aandeelpagina te openen. Die vermeldt dat de belegging via de ETF wordt aangehouden, met weging en peildatum. Dit maakt geen rechtstreekse positie of boeking aan. Bedrijfsprofielen worden alleen gekoppeld bij een gecontroleerde identiteit; ontbrekende informatie blijft zichtbaar.
+
+Home toont standaard het resultaat sinds aankoop als percentage van de totale aankoopinleg. Groen is positief en rood negatief. Kies **Grafiekmeting** voor de bestaande marktwaarde/kostprijsgrafiek. Periodeknoppen kiezen de getoonde dagwaarden; 1D is een dagwaarde, geen intraday-koers. De grafiek is geen tijdgewogen rendement van de gekozen periode. Handelsvolume voor een portefeuille wordt niet gesimuleerd.
+
+Bij ontbrekende koersen toont de resultaatgrafiek het bekende deel. Winst en aankoopinleg komen per dag van dezelfde posities. De grafiek vermeldt het ontbrekende aantal; het getoonde deel kan per dag verschillen. Dit is geen volledig portefeuillerendement. Dagen waarop geen resultaat kan worden berekend blijven leeg.
+
+Het EUR-overzicht laadt eerst de totalen en daarna de historische grafiek op de achtergrond. Een trage grafiek blokkeert de pagina niet. Bij een grafiekfout blijven de totalen staan en kun je **Grafiek opnieuw laden** kiezen. Ongewijzigde portefeuillegegevens en berekende historie worden hergebruikt.
+
+Onder **Instellingen > Statistieken** zien admins het CPU- en geheugenverbruik van de app, het containergeheugen (indien beschikbaar), de overzichtcache en opslag. CPU 100% staat voor één processorkern. De pagina meet elke 15 seconden zolang zij zichtbaar is; opslag wordt maximaal elke 30 seconden gemeten. De databasecache is onderdeel van het databasebestand, geen extra opslag bovenop dat bestand. Herbruikbare databaseruimte blijft beschikbaar voor volgende schrijfacties.
+
+De statistiekenpagina bevat ook diagnostiek voor geheugenpieken, actieve berekeningen, cache-afwijzingen en berekeningstijden. **Diagnose downloaden** bewaart deze technische metingen en aantallen lokaal als JSON, zonder posities, bedragen, accountnamen of sleutels. Deel dit bestand bij aanhoudend hoog verbruik.
+
+Bij transacties met een jaartal vóór 1900 voorkomt de app dat er eeuwen aan dagwaarden worden opgebouwd. De boekingen blijven behouden. Home en Statistieken waarschuwen en linken naar de betrokken transacties; controleer en corrigeer de datum via de bestaande transactiepopup. De app gokt niet welke datum bedoeld was.
+
+**Instellingen > Gegevens opschonen** opent een controlevenster. De app maakt vóór het opschonen een volledige herstelback-up. Per beursnotering en dag kan alleen de laatste koerswaarneming worden bewaard; dagelijkse koershistorie en alle boekingen blijven behouden. Cacheopschoning bewaart bronwachttijden, ETF-taakstatus en Trading 212-brongegevens. Bij back-upopschoning blijven de vijf nieuwste kopieën staan, inclusief de veiligheidskopie; ook toekomstige app-back-ups gebruiken dan die limiet. Opschonen wacht niet op achtergrondtaken: probeer het opnieuw wanneer de lopende taak gereed is.
+
+## Bedrijfslogo’s in de dividendkalender
+
+Logo’s laden automatisch via lokale afbeeldingen en [Ticker Logos van AllInvestView](https://www.allinvestview.com/tools/ticker-logos/). De externe bron ontvangt alleen het bedrijfsdomein en vereist geen account of sleutel. Bij een ontbrekend logo blijft de ticker zichtbaar.
+
+Home Invest bewaart opgehaalde logo’s onder `/data/logos/about/` en `/data/logos/dividend/`, met per domein een aparte map. De browser haalt afbeeldingen op bij Home Invest.
+
+De map `/data/logos/dividend/` wordt ook gebruikt door Home, Stijgers en dalers en Aandeeldetails. Een eerder opgeslagen bedrijfslogo wordt op deze pagina’s hergebruikt.

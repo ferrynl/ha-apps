@@ -1,0 +1,98 @@
+"""Explicit final prices and actionable diagnostics for omitted valuations."""
+import hashlib
+import json
+from datetime import date,datetime,timedelta,timezone
+from decimal import Decimal,InvalidOperation
+from diagnostics import record
+
+def validate_price(value):
+    try:price=Decimal(str(value))
+    except InvalidOperation:raise ValueError('Vul een geldige laatste koers in.') from None
+    if not price.is_finite() or price<0 or price>Decimal('1e15'):raise ValueError('De laatste koers moet nul of positief zijn, maximaal 10^15.')
+    return str(price)
+
+def final_quote(row):
+    return dict(symbol=row['symbol'],exchange=row['exchange'],currency=row['currency'],price=row['price'],quoted_at=row['day']+'T00:00:00+00:00',fetched_at=row['updated_at'],source='Handmatige laatste koers',manual=True)
+
+def apply_final_prices(quotes,daily,manual):
+    keys={tuple(row[k] for k in ('symbol','exchange','currency')):row for row in manual}
+    def keep(row):
+        setting=keys.get(tuple(row[k] for k in ('symbol','exchange','currency')))
+        return not setting or (row.get('day') or row['quoted_at'][:10])<setting['day']
+    quotes=[row for row in quotes if keep(row)]+[final_quote(row) for row in manual]
+    daily=[row for row in daily if keep(row)]+[{**row,'day':row['day']} for row in manual]
+    return quotes,daily
+
+def save(store,data):
+    from instruments import identity
+    from storage import now
+    key=identity(data);automatic=data.get('automatic')
+    if not isinstance(automatic,bool):raise ValueError('Kies automatisch ophalen of een laatste koers.')
+    from fund_quotes import supported
+    if automatic and key[1]=='PRIVATE' and not supported(*key):raise ValueError('Dit fonds is niet beursgenoteerd. Vul de fondskoers en koersdatum handmatig in.')
+    if not automatic:
+        price=validate_price(data.get('price'));day=date.fromisoformat(data.get('day',''))
+        if day>date.today():raise ValueError('De koersdatum mag niet in de toekomst liggen.')
+    with store.connect() as db:
+        if not db.execute('SELECT 1 FROM purchases WHERE symbol=? AND exchange=? AND currency=?',key).fetchone():raise ValueError('Aandeel niet gevonden.')
+        db.execute('DELETE FROM instrument_quote_pauses WHERE symbol=? AND exchange=? AND currency=?',key)
+        if automatic:db.execute('DELETE FROM instrument_valuations WHERE symbol=? AND exchange=? AND currency=?',key)
+        else:db.execute('INSERT OR REPLACE INTO instrument_valuations VALUES(?,?,?,?,?,?)',(*key,price,day.isoformat(),now()))
+    record(store,'INFO','market','valuation_changed','Koersinstelling aangepast.',dict(symbol=key[0],exchange=key[1],currency=key[2],automatic=automatic,**({} if automatic else dict(price=price,day=day.isoformat()))))
+    return dict(ok=True)
+
+def missing_diagnostics(store,positions):
+    for p in positions:
+        if p['value'] is not None:continue
+        details={k:p[k] for k in ('account_id','name','symbol','exchange','currency','quantity','cost','dividend')}
+        details.update(reason='no_quote',excluded_from_known_profit=True,last_quote=p.get('quote'))
+        reference=hashlib.sha256(json.dumps(details,sort_keys=True).encode()).hexdigest()[:12]
+        since=(datetime.now(timezone.utc)-timedelta(hours=6)).isoformat()
+        with store.read() as db:previous=db.execute('SELECT 1 FROM app_logs WHERE reference=? AND event=? AND created_at>?',(reference,'valuation_missing',since)).fetchone()
+        if not previous:record(store,'WARNING','valuation','valuation_missing','Positie zonder koers overgeslagen bij bekende marktwaarde en winst.',details,reference=reference)
+        p['valuation_log_id']=reference
+
+
+def settle(store,data):
+    """Book verified cash proceeds and pause the listing once every account is closed."""
+    from history import daily_values
+    from instruments import identity
+    from storage import now,positive
+    from transactions import scope
+
+    key=identity(data)
+    day=date.fromisoformat(str(data.get('day','')))
+    if day.year<1900 or day>date.today():
+        raise ValueError('Kies een afwikkeldatum vanaf 1900 tot en met vandaag.')
+    price=positive(data.get('price'))
+    expected=Decimal(positive(data.get('quantity')))
+    with store.connect() as db:
+        db.execute('BEGIN IMMEDIATE')
+        account=scope(db,data.get('account_id'))
+        if account is None:raise ValueError('Kies één brokeraccount voor de afwikkeling.')
+        rows=[dict(row) for row in db.execute(
+            'SELECT * FROM purchases WHERE symbol=? AND exchange=? AND currency=? ORDER BY id',key)]
+        trades=[row for row in rows if row['account_id']==account]
+        if not trades or any(row['purchased_on']>day.isoformat() for row in trades):
+            raise ValueError('Controleer de afwikkeldatum. Er ontbreken transacties of er staan latere transacties.')
+        quantity=Decimal(daily_values(trades,[],[],day,summary_only=True)[-1]['quantity'])
+        if quantity!=expected:
+            raise ValueError('De open positie is gewijzigd. Vernieuw de pagina en controleer de afwikkeling opnieuw.')
+        created=now()
+        cursor=db.execute(
+            "INSERT INTO purchases(symbol,exchange,currency,name,quantity,price,purchased_on,created_at,account_id,side,trade_time) VALUES(?,?,?,?,?,?,?,?,?,'SELL',?)",
+            (*key,trades[-1]['name'],str(quantity),price,day.isoformat(),created,account,day.isoformat()+'T23:59:59'))
+        trade_id=cursor.lastrowid
+        booked=[dict(row) for row in db.execute(
+            'SELECT * FROM purchases WHERE account_id=? AND symbol=? AND exchange=? AND currency=?',
+            (account,*key))]
+        daily_values(booked,[],[],summary_only=True)
+        grouped={}
+        for row in rows:
+            if row['account_id']!=account:grouped.setdefault(row['account_id'],[]).append(row)
+        closed=all(Decimal(daily_values(other,[],[],summary_only=True)[-1]['quantity'])==0 for other in grouped.values())
+        if closed:
+            db.execute('INSERT OR REPLACE INTO instrument_quote_pauses VALUES(?,?,?,?)',(*key,created))
+    record(store,'INFO','valuation','position_settled','Positie met een contante afwikkeling gesloten.',
+           dict(symbol=key[0],exchange=key[1],currency=key[2],account_id=account,trade_id=trade_id,quotes_paused=closed))
+    return dict(ok=True,quotes_paused=closed)
