@@ -5,7 +5,7 @@ on:
       - .github/workflows/sync-apps.yml
   workflow_dispatch:
   schedule:
-    - cron: '23 3 * * *'
+    - cron: '7,22,37,52 * * * *'
 permissions:
   contents: write
 concurrency:
