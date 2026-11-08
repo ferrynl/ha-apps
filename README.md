@@ -19,4 +19,4 @@ Home Assistant behandelt dezelfde app uit deze repository als een aparte install
 
 ## Updates
 
-De centrale repository synchroniseert dagelijks de installatiemappen van de vier bronrepositories. Onder **Actions** kan de beheerder ook handmatig synchroniseren. Home Assistant toont een app-update wanneer de versie in de appconfiguratie is verhoogd.
+De centrale repository synchroniseert normaal gesproken elk kwartier de installatiemappen van de vier bronrepositories. Onder **Actions** kan de beheerder ook handmatig synchroniseren. Home Assistant toont een app-update wanneer de versie in de appconfiguratie is verhoogd.
