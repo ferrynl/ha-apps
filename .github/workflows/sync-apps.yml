@@ -15,7 +15,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Kopieer de installatiemappen
+      - name: Synchroniseer de installatiemappen en handleidingen
         shell: bash
         run: |
           set -euo pipefail
