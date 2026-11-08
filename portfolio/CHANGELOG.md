@@ -1,3 +1,47 @@
+## 0.70.21
+
+- Vernieuw de portefeuille en transactielijst op de achtergrond na het opslaan van een correctie. Begrens de wachttijd op het opslagantwoord.
+
+## 0.70.20
+
+- Corrigeer het ontvangen aantal van een omboeking vanuit Transacties, met veiligheidsback-up en controle op latere verkopen.
+
+## 0.70.19
+
+- Toon de meegenomen kostprijs van bestaande omboekingen in Transacties en op de aandeeldetailpagina.
+
+## 0.70.18
+
+- Zoek alle Amsterdamse noteringen op ticker zonder .AS, ook als ze nog niet in de portefeuille staan.
+
+## 0.70.17
+
+- Behoud brokeraccount en transactiedatum na het opslaan van een transactie.
+
+## 0.70.16
+
+- Zoek NN Group met NN of NN.AS. Opgeslagen noteringen zijn ook vindbaar zonder beursachtervoegsel.
+
+## 0.70.15
+
+- Ondersteun noteringen op Euronext Dublin in euro met Yahoo-tickers die eindigen op .IR.
+
+## 0.70.14
+
+- Toon opgeslagen noteringen bovenaan bij zoeken op exacte ticker, ook als Yahoo niet bereikbaar is.
+
+## 0.70.13
+
+- Resultaten in beeld toont bij 1D de koersbeweging van de laatste beschikbare sessie en opent die sessie op de aandeeldetailpagina.
+
+## 0.70.12
+
+- Toon bij een enkele grafiekdag een punt en geef de klikbare resultaten een groene aanwijskleur.
+
+## 0.70.11
+
+- Open aandeeldetails direct vanuit Resultaten in beeld op Home.
+
 ## 0.70.10
 
 - Home, Stijgers en dalers en Aandeeldetails gebruiken dezelfde lokale bedrijfslogo-opslag als Dividend. De bronvermelding staat in de voettekst.

@@ -11,9 +11,9 @@ function money(n,c){
  return moneyFormats.get(key).format(Number(n));
 }
 function cell(row,value){const td=document.createElement('td');td.textContent=value;row.append(td);return td;}
-async function load(){
+async function load({background=false,refreshTransactions=true}={}){
  try{
- const request=++stateRequest;const response=await apiFetch('api/state?account_id='+encodeURIComponent(currentBroker)+'&compact=1');
+ const request=++stateRequest;const response=await apiFetch('api/state?account_id='+encodeURIComponent(currentBroker)+'&compact=1',{background});
  if(response.status===304){
   if(request===stateRequest&&state&&accessSession?.user&&document.body.classList.contains('home-page')){
    renderHomeDailyMovers();
@@ -23,7 +23,7 @@ async function load(){
  }
  if(!response.ok)throw Error();const result=await response.json();if(request!==stateRequest||!accessSession?.user)return;state=result;
  $('status').textContent=state.status.message+ui(' Automatische controle elke ')+state.refresh_minutes+ui(' minuten.');
- if(location.hash==='#transacties'||location.hash.startsWith('#transacties-'))loadTransactions();
+ if(refreshTransactions&&(location.hash==='#transacties'||location.hash.startsWith('#transacties-')))loadTransactions();
  if(location.hash==='#aandelen')renderStockPage();
  if(location.hash==='#stijgers-dalers')loadStockMovers();
  if(location.hash.startsWith('#aandeel?'))loadStockDetail();
@@ -49,7 +49,7 @@ function draw(){
  drawDashboardChart(view,chartRange,selection,homeChartMembers());
  if(homeIsCombined()&&selection.startsWith('portfolio:'))showHomeEuroChartProgress(homeChartNearView);
 }
-$('chart-ranges').addEventListener('click',event=>{const button=event.target.closest('button[data-range]');if(!button)return;chartRange=button.dataset.range;for(const choice of $('chart-ranges').querySelectorAll('button'))choice.setAttribute('aria-pressed',String(choice===button));draw();});
+$('chart-ranges').addEventListener('click',event=>{const button=event.target.closest('button[data-range]');if(!button)return;chartRange=button.dataset.range;for(const choice of $('chart-ranges').querySelectorAll('button'))choice.setAttribute('aria-pressed',String(choice===button));renderHomeInsights();draw();});
 $('instrument').addEventListener('change',()=>{homeChartChanged();draw();});
 $('chart-measure').addEventListener('change',draw);
 window.addEventListener('resize',()=>{clearTimeout(homeResizeTimer);homeResizeTimer=setTimeout(()=>{if(document.body.classList.contains('home-page'))draw();},120);});
@@ -77,13 +77,13 @@ $('stock-search').addEventListener('input',()=>{
    if(version!==searchVersion)return;if(!response.ok)throw Error(data.error);
    for(const stock of data.results){const button=document.createElement('button');button.type='button';button.setAttribute('role','option');button.setAttribute('aria-selected','false');button.textContent=stock.name+' · '+stock.symbol+' · '+stock.exchange+' · '+stock.currency;button.addEventListener('click',()=>chooseStock(stock));$('search-results').append(button);}
    $('search-results').hidden=!data.results.length;$('stock-search').setAttribute('aria-expanded',String(Boolean(data.results.length)));
-   $('search-status').textContent=data.results.length?data.results.length+ui(' resultaten van Yahoo. Kies de juiste notering; typ verder om te verfijnen.'):ui('Geen passende aandelen, ETF’s of fondsen gevonden. Probeer meer letters of het symbool.');
+   $('search-status').textContent=data.results.length?data.results.length+ui(' resultaten gevonden. Kies de juiste notering; typ verder om te verfijnen.'):ui('Geen passende aandelen, ETF’s of fondsen gevonden. Probeer meer letters of het symbool.');
   }catch(error){if(error.name!=='AbortError'&&version===searchVersion)$('search-status').textContent=error.message||ui('Zoeken mislukt. Probeer opnieuw.');}
  },350);
 });
 $('stock-search').addEventListener('keydown',event=>{if(event.key==='ArrowDown'){const first=$('search-results').querySelector('button');if(first){event.preventDefault();first.focus();}}if(event.key==='Escape'){clearTimeout(searchTimer);searchController?.abort();searchVersion++;closeSearch();}if(event.key==='Enter'){event.preventDefault();$('search-results').querySelector('button')?.focus();}});
 $('search-results').addEventListener('keydown',event=>{const buttons=[...$('search-results').querySelectorAll('button')],index=buttons.indexOf(document.activeElement);if(event.key==='ArrowDown'||event.key==='ArrowUp'){event.preventDefault();buttons[(index+(event.key==='ArrowDown'?1:-1)+buttons.length)%buttons.length]?.focus();}if(event.key==='Escape'){closeSearch();$('stock-search').focus();}});
-$('purchase').addEventListener('submit',async event=>{event.preventDefault();if(!selectedStock){$('feedback').textContent=ui('Zoek en selecteer eerst een aandeel.');$('stock-search').focus();return;}const button=event.target.querySelector('button[type="submit"]');button.disabled=true;try{if(typeof preparePurchaseFx==='function')await preparePurchaseFx();const response=await apiFetch('api/purchases',{method:'POST',headers:{'Content-Type':'application/json','X-Portfolio-Request':'1'},body:JSON.stringify(Object.fromEntries(new FormData(event.target)))});const result=await response.json();if(!response.ok)throw Error(result.error);$('feedback').textContent=ui('Transactie opgeslagen; eventuele kosten en btw zijn apart geboekt.');event.target.reset();clearSelection();closeSearch();$('search-status').textContent=ui('Zoek op bedrijfsnaam of symbool. Aandelen, ETF’s en fondsen.');await load();}catch(error){$('feedback').textContent=error.message;}finally{button.disabled=false;}});
+$('purchase').addEventListener('submit',async event=>{event.preventDefault();if(!selectedStock){$('feedback').textContent=ui('Zoek en selecteer eerst een aandeel.');$('stock-search').focus();return;}const button=event.target.querySelector('button[type="submit"]');button.disabled=true;try{if(typeof preparePurchaseFx==='function')await preparePurchaseFx();const fields=Object.fromEntries(new FormData(event.target));const response=await apiFetch('api/purchases',{method:'POST',headers:{'Content-Type':'application/json','X-Portfolio-Request':'1'},body:JSON.stringify(fields)});const result=await response.json();if(!response.ok)throw Error(result.error);$('feedback').textContent=ui('Transactie opgeslagen; eventuele kosten en btw zijn apart geboekt.');event.target.reset();$('purchase-account').value=fields.account_id;event.target.elements.namedItem('purchased_on').value=fields.purchased_on;clearSelection();closeSearch();$('search-status').textContent=ui('Zoek op bedrijfsnaam of symbool. Aandelen, ETF’s en fondsen.');await load();}catch(error){$('feedback').textContent=error.message;}finally{button.disabled=false;}});
 $('dividend-form').addEventListener('submit',async event=>{
  event.preventDefault();const selected=$('dividend-stock').value;if(!selected){$('dividend-feedback').textContent=ui('Voeg eerst een aankoop toe.');return;}
  const [symbol,exchange,currency,account_id]=JSON.parse(selected);const button=event.target.querySelector('button');button.disabled=true;
