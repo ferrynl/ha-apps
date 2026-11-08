@@ -27,7 +27,7 @@ jobs:
             test -s "$RUNNER_TEMP/$repo/$folder/config.yaml"
             test -s "$RUNNER_TEMP/$repo/$folder/Dockerfile"
             mkdir -p "$folder"
-            rsync -a --delete "$RUNNER_TEMP/$repo/$folder/" "$folder/"
+            rsync -a --checksum --delete "$RUNNER_TEMP/$repo/$folder/" "$folder/"
           }
           sync_app ha-twinkly twinkly
           sync_app ha-invest portfolio
