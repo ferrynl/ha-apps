@@ -1,0 +1,46 @@
+name: Synchroniseer Home Assistant-apps
+on:
+  push:
+    paths:
+      - .github/workflows/sync-apps.yml
+  workflow_dispatch:
+  schedule:
+    - cron: '23 3 * * *'
+permissions:
+  contents: write
+concurrency:
+  group: sync-ha-apps
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Kopieer de installatiemappen
+        shell: bash
+        run: |
+          set -euo pipefail
+          sync_app() {
+            local repo="$1" folder="$2"
+            git clone --depth 1 "https://github.com/ferrynl/$repo.git" "$RUNNER_TEMP/$repo"
+            test -s "$RUNNER_TEMP/$repo/$folder/config.yaml"
+            test -s "$RUNNER_TEMP/$repo/$folder/Dockerfile"
+            mkdir -p "$folder"
+            rsync -a --delete "$RUNNER_TEMP/$repo/$folder/" "$folder/"
+          }
+          sync_app ha-twinkly twinkly
+          sync_app ha-invest portfolio
+          cp "$RUNNER_TEMP/ha-invest/LICENSE" portfolio/LICENSE
+          sync_app ha-bandwidth ha_bandwidth
+          sync_app ha-mybanksflow mybanksflow
+          cp "$RUNNER_TEMP/ha-twinkly/README.md" twinkly/DOCS.md
+          cp "$RUNNER_TEMP/ha-bandwidth/README.md" ha_bandwidth/DOCS.md
+          sed -i 's@`https://github.com/ferrynl/ha-twinkly`@`https://github.com/ferrynl/ha-apps`@g' twinkly/DOCS.md
+          sed -i 's@`https://github.com/ferrynl/ha-bandwidth`@`https://github.com/ferrynl/ha-apps`@g' ha_bandwidth/DOCS.md
+          sed -i 's@https://github.com/ferrynl/ha-invest)@https://github.com/ferrynl/ha-apps)@g; s@\[ferrynl/ha-invest\]@[ferrynl/ha-apps]@g; s@`https://github.com/ferrynl/ha-invest`@`https://github.com/ferrynl/ha-apps`@g' portfolio/DOCS.md
+          sed -i 's@(../README.md)@(https://github.com/ferrynl/ha-mybanksflow#installatie-in-home-assistant)@g' mybanksflow/DOCS.md
+          git add twinkly portfolio ha_bandwidth mybanksflow
+          if git diff --cached --quiet; then exit 0; fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'Synchroniseer Home Assistant-apps'
+          git push
