@@ -1,3 +1,19 @@
+## 0.70.25
+
+- Zoek automatisch naar mogelijke noteringen als de exacte controle van een importkoppeling mislukt.
+
+## 0.70.24
+
+- Voeg de geverifieerde CIBEY-notering toe voor Trading 212 en toon een begrijpelijke melding bij een onverwacht antwoord tijdens noteringcontrole.
+
+## 0.70.23
+
+- Toon mogelijke beurzen bij ontbrekende importkoppelingen, met een expliciete melding als de beurs onbekend is.
+
+## 0.70.22
+
+- Laat transactiewijzigingen opslaan tijdens een lopende koersverversing. Databasewijzigingen blijven geserialiseerd.
+
 ## 0.70.21
 
 - Vernieuw de portefeuille en transactielijst op de achtergrond na het opslaan van een correctie. Begrens de wachttijd op het opslagantwoord.
