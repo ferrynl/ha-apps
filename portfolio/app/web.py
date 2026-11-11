@@ -3,6 +3,8 @@ import gzip
 import hashlib
 import hmac
 import json
+import os
+import shutil
 import re
 import sqlite3
 import time
@@ -12,6 +14,7 @@ from urllib.parse import quote,urlsplit,parse_qs
 from pathlib import Path
 from provider import search_stocks,listing as resolve_listing,quote_symbol
 from restore import restore_backup
+from backup_crypto import LIMIT as BACKUP_LIMIT, OVERHEAD, decrypt, encrypt
 from security import verify_password,SESSION_TTL
 import passkeys
 from version import APP_VERSION
@@ -115,6 +118,13 @@ def make_handler(store,auth,cache,status,interval,refresh_lock,refresh_requested
             if not user:self.respond({'error':'Meld je aan om Home Invest te gebruiken.'},401);return False
             if admin and user['role']!='admin':self.respond({'error':'Alleen een admin heeft toegang tot deze functie.'},403);return False
             return True
+        def confirm_sensitive(self,user):
+            if not auth.enabled():
+                return
+            from urllib.parse import unquote
+            password=unquote(self.headers.get('X-Confirm-Password',''))
+            auth.verify_credentials(user['username'],password,self.client_address[0])
+
         def do_GET(self):
             path=urlsplit(self.path).path
             if path in assets:
@@ -130,7 +140,7 @@ def make_handler(store,auth,cache,status,interval,refresh_lock,refresh_requested
             if path=='/api/passkeys':
                 try:return self.respond(passkeys.list_keys(store,user)) if self.allowed(user) else None
                 except ValueError as error:return self.respond({'error':str(error)},400)
-            if not self.allowed(user,admin=path.startswith('/api/accounts/') or path.startswith('/api/portfolio/') or path=='/api/charges/export' or path in ('/api/home-assistant','/api/users','/api/backup','/api/export','/api/imports','/api/imports/mappings','/api/imports/issues','/api/logs','/api/resource-stats')):return
+            if not self.allowed(user,admin=path.startswith('/api/accounts/') or path.startswith('/api/portfolio/') or path=='/api/charges/export' or path in ('/api/home-assistant','/api/users','/api/backup','/api/export','/api/imports','/api/imports/mappings','/api/imports/issues','/api/logs','/api/resource-stats','/api/health-center')):return
             if path=='/api/company-logo':
                 query=parse_qs(urlsplit(self.path).query)
                 image=logos.get(query.get('group',[''])[0],query.get('domain',[''])[0])
@@ -161,6 +171,8 @@ def make_handler(store,auth,cache,status,interval,refresh_lock,refresh_requested
             if path=='/api/portfolio/conversions':
                 from conversions import overview
                 return self.respond(overview(store))
+            if path in ('/api/backup','/api/portfolio/file','/api/portfolio/conversion-backup','/api/portfolio/deletion-backup') and auth.enabled():
+                return self.respond({'error':'Bevestig het downloaden vanuit de app.'},403)
             if path=='/api/portfolio/conversion-backup':
                 from conversions import safety_backup
                 try:
@@ -367,6 +379,9 @@ def make_handler(store,auth,cache,status,interval,refresh_lock,refresh_requested
                     key='home-selected-history:'+json.dumps([account,combined,selections],separators=(',',':'))
                     return self.respond(cache.derived(key,selected_histories),etag=True)
                 except (ValueError,TypeError,KeyError):return self.respond({'error':'Kies één tot zes bestaande posities in dit brokeraccount.'},400)
+            if path=='/api/health-center':
+                from health_center import snapshot
+                return self.respond(snapshot(store,auth))
             if path=='/api/resource-stats':return self.respond(resources.snapshot())
             if path=='/api/state':
                 query=parse_qs(urlsplit(self.path).query);account=query.get('account_id',['all'])[0]
@@ -462,17 +477,17 @@ def make_handler(store,auth,cache,status,interval,refresh_lock,refresh_requested
             path=urlsplit(self.path).path
             try:
                 length=int(self.headers.get('Content-Length','0'))
-                limit=25*1024*1024 if path=='/api/restore' else 12*1024*1024 if path=='/api/instrument/holdings' else 8*1024*1024 if path=='/api/imports/preview' else 65536
+                limit=BACKUP_LIMIT+OVERHEAD if path in ('/api/restore','/api/restore-preview') else 12*1024*1024 if path=='/api/instrument/holdings' else 8*1024*1024 if path=='/api/imports/preview' else 65536
                 if not 0<length<=limit:raise ValueError('Bestand of aanvraag is te groot of leeg.')
             except (ValueError,TimeoutError):
                 return self.respond({'error':'Bestand of aanvraag is te groot, leeg of onvolledig.'},400)
-            expected='application/octet-stream' if path=='/api/restore' else 'application/json'
+            expected='application/octet-stream' if path in ('/api/restore','/api/restore-preview') else 'application/json'
             if self.headers.get('X-Portfolio-Request')!='1' or self.headers.get('Content-Type')!=expected:
                 return self.respond({'error':'Ongeldige aanvraag.'},403)
             user=auth.user(self.token())
             self.renew_cookie=self.cookie(self.token()) if user and user.get('csrf') else None
             if path not in ('/api/auth/login','/api/passkey/login/begin','/api/passkey/login/finish'):
-                if not self.allowed(user,admin=path.startswith('/api/accounts/') or path.startswith('/api/portfolio/') or path in ('/api/feedback/connect','/api/transactions/edit','/api/instrument/categories','/api/instrument/valuation','/api/instrument/holdings','/api/tasks/etf') or path in ('/api/purchases','/api/dividends','/api/settings','/api/restore','/api/users','/api/auth/enable','/api/auth/disable','/api/accounts','/api/updates') or path.startswith('/api/imports/') or path.startswith('/api/charges/')):return
+                if not self.allowed(user,admin=path.startswith('/api/accounts/') or path.startswith('/api/portfolio/') or path in ('/api/health-action','/api/feedback/connect','/api/transactions/edit','/api/instrument/categories','/api/instrument/valuation','/api/instrument/holdings','/api/tasks/etf') or path in ('/api/purchases','/api/dividends','/api/settings','/api/backup-download','/api/restore','/api/restore-preview','/api/users','/api/auth/enable','/api/auth/disable','/api/accounts','/api/updates') or path.startswith('/api/imports/') or path.startswith('/api/charges/')):return
                 if auth.enabled() and not hmac.compare_digest(self.headers.get('X-CSRF-Token',''),user['csrf'] or ''):
                     return self.respond({'error':'Ongeldige sessiebeveiliging. Meld je opnieuw aan.'},403)
             try:
@@ -491,18 +506,75 @@ def make_handler(store,auth,cache,status,interval,refresh_lock,refresh_requested
             finally:
                 self.connection.settimeout(self.timeout)
             try:
+                if path=='/api/restore-preview':
+                    from urllib.parse import unquote
+                    with store.lock:
+                        content=decrypt(bytes(body),unquote(self.headers.get('X-Backup-Password','')))
+                        return self.respond(restore_backup(store,content,preview=True))
                 if path=='/api/restore':
                     if self.headers.get('X-Confirm-Restore')!='yes':raise ValueError('Bevestig het terugzetten van de portefeuille.')
-                    with refresh_lock:
-                        result=restore_backup(store,bytes(body));cache.invalidate()
+                    self.confirm_sensitive(user)
+                    from urllib.parse import unquote
+                    with refresh_lock,store.lock:
+                        content=decrypt(bytes(body),unquote(self.headers.get('X-Backup-Password','')))
+                        result=restore_backup(store,content);cache.invalidate()
                         auth.clear_sessions()
                     refresh_requested.set()
                     return self.respond({'ok':True,'restored':result},cookie=self.cookie(''))
                 data=json.loads(body)
                 if not isinstance(data,dict):raise ValueError('Ongeldige aanvraag.')
+                if path=='/api/health-action':
+                    if data.get('action')=='refresh':
+                        refresh_requested.set()
+                        return self.respond({'ok':True},202)
+                    if data.get('action')=='cache':
+                        cache.invalidate()
+                        return self.respond({'ok':True})
+                    return self.respond({'error':'Ongeldige aanvraag.'},400)
+                if path=='/api/backup-download':
+                    self.confirm_sensitive(user)
+                    from backup_files import file_path
+                    from conversions import safety_backup
+                    password=data.get('password')
+                    name=data.get('name','')
+                    kind=data.get('kind','backup')
+                    with store.lock:
+                        if kind=='file':
+                            backup=file_path(store,name)
+                        elif kind=='conversion':
+                            backup=safety_backup(store,name)
+                        elif kind=='deletion':
+                            backup=transactions.deletion_backup(store,name)
+                        elif kind=='backup':
+                            backup=store.backup()
+                        else:
+                            raise ValueError('Ongeldige back-upsoort.')
+                        if password and backup.stat().st_size>BACKUP_LIMIT:
+                            raise ValueError('Deze back-up is groter dan 25 MB.')
+                        if password:
+                            content=encrypt(backup.read_bytes(),password)
+                            return self.respond(content,kind='application/octet-stream',filename=backup.name+'.hib')
+                        stream=backup.open('rb')
+                    with stream:
+                        self.send_response(200)
+                        self.send_header('Content-Type','application/octet-stream')
+                        self.send_header('Content-Length',str(os.fstat(stream.fileno()).st_size))
+                        self.send_header('Cache-Control','no-store')
+                        self.send_header('Content-Disposition',"attachment; filename*=UTF-8''"+quote(backup.name,safe=''))
+                        self.send_header('X-Content-Type-Options','nosniff')
+                        if self.renew_cookie:self.send_header('Set-Cookie',self.renew_cookie)
+                        self.end_headers()
+                        shutil.copyfileobj(stream,self.wfile,65536)
+                    return
+                if path=='/api/portfolio/file-restore-preview':
+                    from backup_files import reviewed_file
+                    with store.lock:
+                        selected=reviewed_file(store,data)
+                        return self.respond(restore_backup(store,source_path=selected,preview=True))
                 if path in ('/api/portfolio/file-delete','/api/portfolio/file-restore'):
                     from backup_files import reviewed_file
                     restoring=path.endswith('file-restore')
+                    if restoring:self.confirm_sensitive(user)
                     if data.get('confirmation')!=('RESTORE' if restoring else 'DELETE'):raise ValueError('Bevestig de bestandsactie.')
                     if not refresh_lock.acquire(blocking=False):return self.respond({'error':'Er loopt een achtergrondtaak. Probeer het later opnieuw.'},409)
                     try:
@@ -595,6 +667,7 @@ def make_handler(store,auth,cache,status,interval,refresh_lock,refresh_requested
                     account_id=int(data['account_id'])
                     action=path.rsplit('/',1)[-1]
                     try:
+                        if action in ('save','forget'):self.confirm_sensitive(user)
                         if action=='save':result=trading212_api.save_connection(store,account_id,data.get('key'),data.get('secret'),data.get('environment'))
                         elif action=='status':result=trading212_api.connection_status(store,account_id)
                         elif action=='forget':result=trading212_api.forget(store,account_id)
