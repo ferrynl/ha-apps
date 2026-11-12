@@ -1,4 +1,5 @@
 # A change to this workflow file triggers a sync immediately after an upstream release.
+# Trigger sync for Home Invest v0.70.32 release.
 name: Synchroniseer Home Assistant-apps
 on:
   push:
