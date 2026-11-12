@@ -1,3 +1,4 @@
+# A change to this workflow file triggers a sync immediately after an upstream release.
 name: Synchroniseer Home Assistant-apps
 on:
   push:
