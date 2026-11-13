@@ -1,3 +1,20 @@
+## 0.70.37
+
+- Vertel op Over ons het verhaal achter Home Invest in het Nederlands, Engels en Spaans.
+
+## 0.70.36
+
+- Vermeld op Over ons dat Home Invest is ontwikkeld voor alle inwoners van de EU en voeg het Made in Europe-logo toe.
+
+## 0.70.35
+
+- Maak het Home Invest-logo beter leesbaar in lichte en donkere thema’s.
+- Breid de appbeschrijving uit en voeg uitleg toe in het Nederlands, Engels en Spaans.
+
+## 0.70.34
+
+- Nieuw 3D-logo voor Home Invest op het welkomstscherm, in de app en in de appwinkel van Home Assistant.
+
 ## 0.70.33
 
 - Voeg regressiecontroles toe voor de veilige Home Assistant-ingressconfiguratie en standaard niet-gepubliceerde sensorpoort.
