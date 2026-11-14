@@ -4,7 +4,7 @@ from pathlib import Path
 from datetime import datetime, timezone
 from contextlib import closing
 
-SCHEMA_VERSION = 25
+SCHEMA_VERSION = 27
 MIGRATIONS = {
     1: (
         'CREATE TABLE IF NOT EXISTS purchases (id INTEGER PRIMARY KEY, symbol TEXT NOT NULL, exchange TEXT NOT NULL, name TEXT NOT NULL, quantity TEXT NOT NULL, price TEXT NOT NULL, currency TEXT NOT NULL, purchased_on TEXT NOT NULL, created_at TEXT NOT NULL)',
@@ -131,6 +131,15 @@ MIGRATIONS = {
     25: (
         'DELETE FROM auth_sessions',
         'ALTER TABLE auth_sessions ADD COLUMN absolute_expiry REAL NOT NULL DEFAULT 0',
+    ),
+    26: (
+        'ALTER TABLE users RENAME COLUMN language TO previous_language',
+        "ALTER TABLE users ADD COLUMN language TEXT NOT NULL DEFAULT ''",
+        'UPDATE users SET language=previous_language',
+        'ALTER TABLE users DROP COLUMN previous_language',
+    ),
+    27: (
+        'CREATE TABLE corporate_action_rights (id INTEGER PRIMARY KEY, batch_id INTEGER NOT NULL REFERENCES import_batches(id) ON DELETE CASCADE, account_id INTEGER NOT NULL REFERENCES broker_accounts(id) ON DELETE CASCADE, provider TEXT NOT NULL, external_id TEXT NOT NULL, source_external_id TEXT NOT NULL, ticker TEXT NOT NULL, quantity TEXT NOT NULL, currency TEXT NOT NULL, received_on TEXT NOT NULL, created_at TEXT NOT NULL, UNIQUE(account_id,provider,external_id))',
     ),
 }
 

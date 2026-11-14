@@ -22,7 +22,7 @@ def scrub(value,secrets=(),depth=0):
     text=re.sub(r'https?://[^\s<>"\']+', '[URL afgeschermd]',text,flags=re.I)
     text=re.sub(r'\b(?:Basic|Bearer)\s+[A-Za-z0-9+/=._-]+','[autorisatie afgeschermd]',text,flags=re.I)
     text=re.sub(r'(?i)(api[_ -]?key|secret|password|token|authorization|cookie|signature)\s*[=:]\s*[^\s,;]+',r'\1=[afgeschermd]',text)
-    text=re.sub(r'[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}','[e-mail afgeschermd]',text)
+    text=re.sub(r'(?<![\w.+-])[\w.+-]+@[\w.-]+','[e-mail afgeschermd]',text)
     return ''.join(c for c in text if c.isprintable() or c=='\n')[:1200]
 
 def auth_secrets(authorization):
@@ -94,7 +94,7 @@ def read_logs(store,level='',source='',before=0,query=''):
         if value:clauses.append(column+'=?');values.append(value)
     if before:clauses.append('id<?');values.append(before)
     if query:
-        clauses.append('(instr(reference,?)>0 OR instr(lower(message),lower(?))>0 OR instr(lower(event),lower(?))>0)');values.extend([query]*3)
+        clauses.append('(instr(reference,?)>0 OR instr(lower(message),lower(?))>0 OR instr(lower(event),lower(?))>0 OR instr(lower(details),lower(?))>0)');values.extend([query]*4)
     with store.connect() as db:
         cutoff=(datetime.now(timezone.utc)-timedelta(days=7)).isoformat()
         db.execute('DELETE FROM app_logs WHERE created_at<?',(cutoff,))

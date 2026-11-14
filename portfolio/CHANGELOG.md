@@ -1,3 +1,20 @@
+## 0.70.41
+
+- Verbeterde beveiliging van logredactie, logodomeinen en sessiecookies.
+- Ondersteuning voor de OTCQX-koersnotering van CIBEY.
+
+## 0.70.40
+
+- Uitgebreide importdiagnoses voor openstaande regels en ondersteuning voor Trade Republic-stortingen met nulwaarden bij aantal of prijs.
+
+## 0.70.39
+
+- Verwerk de openstaande importregels opnieuw met één knop onder Te beoordelen. Geldige regels worden verwerkt met de beschikbare koppelingen.
+
+## 0.70.38
+
+- Voeg alle 24 officiële EU-talen toe.
+
 ## 0.70.37
 
 - Vertel op Over ons het verhaal achter Home Invest in het Nederlands, Engels en Spaans.
