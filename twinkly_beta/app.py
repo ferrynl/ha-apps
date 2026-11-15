@@ -650,6 +650,9 @@ class Controller:
         self.show = (json.loads(SHOW_STATE.read_text(encoding="utf-8")) if SHOW_STATE.exists()
                      else {"master": 100, "scenes": {}})
         self.groups = json.loads(GROUPS.read_text(encoding='utf-8')) if GROUPS.exists() else {}
+        self.native_group_names_path = DATA.with_name("native_group_names.json")
+        self.native_group_names = (json.loads(self.native_group_names_path.read_text(encoding="utf-8"))
+                                   if self.native_group_names_path.exists() else {})
         self.music = set()
         self.patterns = {}
         self.sequence_data = (json.loads(SEQUENCES.read_text(encoding="utf-8"))
@@ -903,8 +906,35 @@ class Controller:
             offsets = {info["offset"] for _, info in entries if info["offset"] is not None}
             if len(sizes) == 1 and len(offsets) >= 2 and max(offsets) < min(sizes):
                 group["layout_size"] = next(iter(sizes))
-            groups["native:" + group_id] = group
+            key = "native:" + group_id
+            group["name"] = self.native_group_names.get(key, group["name"])
+            groups[key] = group
         return groups
+
+    async def rename_network_group(self, request):
+        data = await request.json()
+        if not isinstance(data, dict):
+            raise web.HTTPBadRequest()
+        key, name = data.get("id"), data.get("name")
+        if not isinstance(key, str) or not isinstance(name, str) or not 1 <= len(name.strip()) <= 60:
+            raise web.HTTPBadRequest()
+        name = name.strip()
+        async with self.edit:
+            if key in self.groups:
+                updated = dict(self.groups, **{key: dict(self.groups[key], name=name)})
+                temp = GROUPS.with_suffix(".tmp")
+                temp.write_text(json.dumps(updated), encoding="utf-8")
+                temp.replace(GROUPS)
+                self.groups = updated
+            else:
+                if key not in self.native_groups():
+                    raise web.HTTPNotFound()
+                updated = dict(self.native_group_names, **{key: name})
+                temp = self.native_group_names_path.with_suffix(".tmp")
+                temp.write_text(json.dumps(updated), encoding="utf-8")
+                temp.replace(self.native_group_names_path)
+                self.native_group_names = updated
+        return web.json_response({"name": name})
 
     async def observe_wifi(self, device):
         ok = await device.run(device.load_details, automatic=True)
@@ -1828,6 +1858,7 @@ class Controller:
         app.router.add_get("/twinkly-wordmark.svg", self.twinkly_wordmark)
         app.router.add_get("/status", self.status)
         app.router.add_get("/network", self.network)
+        app.router.add_post("/network/groups/name", self.rename_network_group)
         app.router.add_get("/effects", self.effects)
         app.router.add_get("/layout", self.layout)
         app.router.add_get("/details", self.details)

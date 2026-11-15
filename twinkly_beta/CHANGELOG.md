@@ -1,3 +1,7 @@
+# 0.1.44-beta.11
+
+- Geef groepen rechtstreeks op de netwerkkaart een naam. Namen voor herkende Twinkly-groepen blijven aan hun groeps-ID gekoppeld.
+
 # 0.1.44-beta.10
 
 - Herken groepen die Twinkly via `summary.group.uid` rapporteert.
