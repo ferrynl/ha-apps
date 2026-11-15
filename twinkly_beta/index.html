@@ -57,7 +57,6 @@ main{width:100%;max-width:none;padding:clamp(12px,2vw,32px)}
 .network-group{border-color:#7bc8a7}
 .network-group .controls{margin-top:7px;gap:5px}
 .network-group .controls button{padding:3px 8px;cursor:pointer}
-.network-group-members{margin:5px 0 0;padding:0;list-style:none;font-size:.8rem;color:#c2d8e4}
 .network-device{border:1px solid #526d7d;border-radius:14px;background:#122430}
 .network-device strong,.network-device small,.network-device span,.network-hub strong,.network-hub small{display:block}
 .network-device small,.network-hub small{color:#c2d8e4}
@@ -68,6 +67,7 @@ main{width:100%;max-width:none;padding:clamp(12px,2vw,32px)}
 #network-page.is-expanded .network-map{height:calc(100dvh - 155px);min-height:220px;max-height:none}
 .network-key{display:flex;flex-wrap:wrap;gap:8px 20px;margin:.75rem 0;color:#c2d8e4}
 .network-key span::before{content:'';display:inline-block;width:22px;margin-right:6px;vertical-align:middle;border-top:2px solid #6ccde7}
+.network-key #network-member-key::before{border-color:#91e8b5;border-top-style:solid}
 .network-key span+span::before{border-color:#d0a4ff;border-top-style:dashed}
 </style>
 <main>
@@ -125,7 +125,7 @@ main{width:100%;max-width:none;padding:clamp(12px,2vw,32px)}
 <div id="network-map" class="network-map" aria-labelledby="network-title" tabindex="0" hidden>
 <canvas id="network-lines" aria-hidden="true"></canvas><div id="network-world" class="network-world"></div>
 </div>
-<div class="network-key"><span id="network-wifi-key"></span><span id="network-peer-key"></span></div>
+<div class="network-key"><span id="network-wifi-key"></span><span id="network-peer-key"></span><span id="network-member-key"></span></div>
 </section>
 <div id="settings-page" hidden><div class="settings-grid">
 <section><h2 id="settings-general"></h2><select id="language" aria-label="Language"><option value="nl">Nederlands</option><option value="en">English</option><option value="es">Español</option><option value="de">Deutsch</option></select></section>
@@ -1112,7 +1112,10 @@ const networkGroupText = {
   es:['Mostrar luces individuales','luces','sin conexión'],
   de:['Einzelne Leuchten anzeigen','Leuchten','offline'],
 };
-const networkSharedLayout = {nl:'Gedeelde indeling', en:'Shared layout', es:'Disposición compartida', de:'Gemeinsames Layout'};
+const networkMembership = {
+  nl:['Lid van groep','Koppelen (afgeleid)'], en:['Group membership','Join (inferred)'],
+  es:['Pertenencia al grupo','Unión (inferida)'], de:['Gruppenmitgliedschaft','Verbinden (abgeleitet)'],
+};
 const networkGroupStatus = {
   nl:['Groep · Type niet gemeld','Lokale groep','Groepsleider','Groepslid'],
   en:['Group · Type not reported','Local group','Group leader','Group member'],
@@ -1167,9 +1170,9 @@ function drawNetwork() {
     const y1 = (a.y + a.height / 2) * scale + y, y2 = (b.y + b.height / 2) * scale + y;
     const curve = Math.abs(y1-y2) < 12 ? y1 - (Math.max(a.height,b.height) / 2 + 35) * scale : (y1+y2)/2;
     ctx.beginPath();
-    ctx.strokeStyle = peer ? '#d0a4ff' : '#6ccde7a6';
+    ctx.strokeStyle = peer === 'member' ? '#91e8b5' : peer ? '#d0a4ff' : '#6ccde7a6';
     ctx.lineWidth = peer ? 2 : 1.25;
-    ctx.setLineDash(peer ? [6,4] : []);
+    ctx.setLineDash(peer === true ? [6,4] : []);
     ctx.moveTo(x1,y1);
     ctx.bezierCurveTo(x1,curve,x2,curve,x2,y2);
     ctx.stroke();
@@ -1199,24 +1202,32 @@ function zoomNetwork(scale,x,y) {
 function zoomNetworkCenter(factor) {
   zoomNetwork(networkCamera.scale*factor,networkMap.clientWidth/2,networkMap.clientHeight/2);
 }
-function positionNetworkRows(hubs, devices) {
-  const columns = Math.ceil(Math.sqrt(devices.length * 1.25));
+function positionNetworkRows(hubs, devices, groupChildren) {
+  const columns = Math.max(1,Math.ceil(Math.sqrt(devices.length * 1.25)));
   const stepX = 232;
   const stepY = Math.max(130,...devices.map(node => node.height)) + 52;
-  const layout = (nodes,columns,y,stepY) => nodes.forEach((node,i) => {
+  const layout = (nodes,columns,y,stepY,centerX=0) => nodes.forEach((node,i) => {
     const row = Math.floor(i/columns);
     const rowSize = Math.min(columns,nodes.length-row*columns);
     const saved = networkPositions.get(node.id);
     if (Array.isArray(saved) && saved.length === 2 && saved.every(Number.isFinite)) {
       placeNetworkNode(node,...saved);
     } else {
-      placeNetworkNode(node,(i%columns-(rowSize-1)/2)*stepX,y+row*stepY);
+      placeNetworkNode(node,centerX+(i%columns-(rowSize-1)/2)*stepX,y+row*stepY);
     }
   });
   const hubColumns = Math.max(1,columns);
   const hubStep = Math.max(40,...hubs.map(node => node.height)) + 35;
   layout(hubs,hubColumns,0,hubStep);
-  layout(devices,columns,hubs.length ? Math.ceil(hubs.length/hubColumns)*hubStep+38 : 0,stepY);
+  const deviceTop = hubs.length ? Math.ceil(hubs.length/hubColumns)*hubStep+38 : 0;
+  layout(devices,columns,deviceTop,stepY);
+  let childTop = deviceTop + Math.ceil(devices.length/columns)*stepY;
+  for (const [group, children] of groupChildren) {
+    const childColumns = Math.min(children.length,Math.max(4,columns));
+    const childStep = Math.max(130,...children.map(node => node.height)) + 52;
+    layout(children,childColumns,childTop,childStep,group.x);
+    childTop += Math.ceil(children.length/childColumns)*childStep;
+  }
 }
 new ResizeObserver(() => {
   if (networkAutoFit) fitNetwork();
@@ -1373,29 +1384,24 @@ function renderNetwork(rows, labels) {
   };
   const groupLabels = networkGroupText[lang.value];
   const groupStatus = networkGroupStatus[lang.value];
-  const groupNodes = [];
+  const groupNodes = [], parents = new Map(), groupChildren = new Map();
   byId('network-members').hidden = !Object.values(networkGroups).some(group => group.members.length >= 2);
   if (!showNetworkMembers) {
     for (const [id,group] of Object.entries(networkGroups)) {
       const members = group.members.map(key => byDevice.get(key)).filter(Boolean);
-      if (members.length < 2 || members.some(row => deviceNodes.has(row.id))) continue;
+      if (members.length < 2 || members.some(row => parents.has(row.id))) continue;
       const card = document.createElement('article');
       card.className = 'network-device network-group';
       const node = makeNode(card,'group:'+id,group.name);
       groupNodes.push(node);
       addText(card,'strong',group.name);
-      addText(card,'small',groupStatus[group.native || id.startsWith('native:') ? 0 : 1]);
+      const reportedGroup = group.native || id.startsWith('native:');
+      addText(card,'small',group.layout_size ? networkMembership[lang.value][1] + ' · ' +
+        group.layout_size + ' LEDs' : groupStatus[reportedGroup ? 0 : 1]);
       const offline = members.filter(row => row.kind === 'offline').length;
       addText(card,'small',members.length + ' ' + groupLabels[1] + (offline ? ' · ' + offline + ' ' + groupLabels[2] : ''));
-      const list = document.createElement('ul');
-      list.className = 'network-group-members';
-      for (const row of members) {
-        deviceNodes.set(row.id,node);
-        const detail = row.kind === 'offline' ? labels[8] : row.rssi != null ? row.rssi + ' dBm' : row.kind === 'wifi' ? row.ssid : labels[9];
-        addText(list,'li',row.name + ' · ' + detail);
-      }
-      card.append(list);
-      if (group.layout_size) addText(card,'small',networkSharedLayout[lang.value] + ' · ' + group.layout_size + ' LEDs');
+      groupChildren.set(node,members.map(row => row.id));
+      for (const row of members) parents.set(row.id,node);
       const actions = document.createElement('div');
       actions.className = 'controls';
       for (const action of ['on','off']) button(actions,action,() => run(undefined,action,undefined,id));
@@ -1404,12 +1410,11 @@ function renderNetwork(rows, labels) {
   }
   const individualNodes = [];
   for (const row of rows) {
-    if (deviceNodes.has(row.id)) continue;
     const card = document.createElement('article');
     card.className = 'network-device';
     const device = makeNode(card,'device:'+row.id,row.name);
     deviceNodes.set(row.id,device);
-    individualNodes.push(device);
+    if (!parents.has(row.id)) individualNodes.push(device);
     addText(card,'strong',row.name);
     addText(card,'small',row.ip);
     if (row.group_role) addText(card,'small',groupStatus[row.group_role === 'master' ? 2 : 3]);
@@ -1438,11 +1443,12 @@ function renderNetwork(rows, labels) {
     linkKeys.add(key);
     networkLinks.push([source,target,peer]);
   };
+  for (const [id, parent] of parents) link(parent,deviceNodes.get(id),'member');
   for (const row of rows) {
     if (row.kind !== 'wifi') continue;
-    const device = deviceNodes.get(row.id);
+    const device = parents.get(row.id) || deviceNodes.get(row.id);
     if (row.peer) {
-      link(device,deviceNodes.get(row.peer),true);
+      link(device,parents.get(row.peer) || deviceNodes.get(row.peer),true);
       continue;
     }
     const key = JSON.stringify([row.ssid,row.gateway,row.bssid]);
@@ -1461,7 +1467,9 @@ function renderNetwork(rows, labels) {
     node.width = node.el.offsetWidth || 190;
     node.height = node.el.offsetHeight || 130;
   }
-  positionNetworkRows([...hubNodes.values()],[...groupNodes,...individualNodes]);
+  const orderedChildren = [...groupChildren].map(([group,ids]) => [group,ids.map(id => deviceNodes.get(id))]);
+  positionNetworkRows([...hubNodes.values()],[...groupNodes,...individualNodes],orderedChildren);
+  byId('network-member-key').hidden = !parents.size;
   if (networkFocus) networkNodes.get(networkFocus)?.el.focus({preventScroll:true});
   if (networkAutoFit) fitNetwork();
   queueNetworkDraw();
@@ -1502,6 +1510,7 @@ function showPage() {
   byId('network-help').textContent = labels[2];
   byId('network-wifi-key').textContent = labels[6];
   byId('network-peer-key').textContent = labels[7];
+  byId('network-member-key').textContent = networkMembership[lang.value][0];
   const controls = networkControls[lang.value];
   byId('network-zoom-out').setAttribute('aria-label',controls[0]);
   byId('network-zoom-in').setAttribute('aria-label',controls[1]);
