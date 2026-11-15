@@ -1,0 +1,64 @@
+name: Publiceer Twinkly in de appwinkel
+on:
+  pull_request:
+    paths:
+      - .github/workflows/sync-twinkly.yml
+      - scripts/*twinkly.py
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/sync-twinkly.yml
+      - scripts/sync_twinkly.py
+  workflow_dispatch:
+  schedule:
+    - cron: '9,24,39,54 * * * *'
+permissions:
+  contents: read
+concurrency:
+  group: sync-ha-apps
+jobs:
+  tests:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install PyYAML==6.0.2
+      - run: python -m unittest discover -s scripts -p 'test_sync_twinkly.py' -v
+  sync:
+    if: github.event_name != 'pull_request'
+    needs: tests
+    permissions:
+      contents: write
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install PyYAML==6.0.2
+      - name: Controleer de nieuwste release per kanaal
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python scripts/sync_twinkly.py
+      - name: Publiceer de geteste installatie
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          git add twinkly
+          if [ -d twinkly_beta ]; then git add twinkly_beta; fi
+          if git diff --cached --quiet; then exit 0; fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'Publiceer geteste Twinkly-releases'
+          gh auth setup-git
+          if ! git push; then
+            git pull --rebase origin main
+            git push
+          fi

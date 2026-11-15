@@ -8,7 +8,8 @@ Voeg één keer [deze repository](https://github.com/ferrynl/ha-apps) toe aan de
 
 | App | Installatie en configuratie |
 | --- | --- |
-| Twinkly Control Center | [Handleiding](twinkly/DOCS.md) |
+| Twinkly Control Center | [Stabiele app](twinkly/DOCS.md) voor dagelijks gebruik. |
+| Twinkly Control Center Beta | Aparte app voor nieuwe licht-, groeps- en muziekeffecten. Zoek deze naam in de Appwinkel zodra er een [bètarelease](https://github.com/ferrynl/ha-twinkly/releases) is. |
 | Home Invest | [Handleiding](portfolio/DOCS.md) |
 | HA-Bandwidth | [Handleiding](ha_bandwidth/DOCS.md) |
 | MyBanksFlow (amd64) | [Handleiding](mybanksflow/DOCS.md) |
@@ -19,4 +20,4 @@ Home Assistant behandelt dezelfde app uit deze repository als een aparte install
 
 ## Updates
 
-De centrale repository synchroniseert normaal gesproken elk kwartier de installatiemappen van de vier bronrepositories. Onder **Actions** kan de beheerder ook handmatig synchroniseren. Home Assistant toont een app-update wanneer de versie in de appconfiguratie is verhoogd.
+De centrale repository synchroniseert normaal gesproken elk kwartier de installatiemappen van de bronrepositories. Onder **Actions** kan de beheerder ook handmatig synchroniseren. Twinkly volgt gepubliceerde, geteste GitHub-releases per kanaal. Home Assistant toont een app-update wanneer de versie in de appconfiguratie is verhoogd.
