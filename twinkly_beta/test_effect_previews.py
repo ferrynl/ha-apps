@@ -9,7 +9,7 @@ from unittest.mock import patch
 from aiohttp import web
 from PIL import Image
 
-from app import Controller
+from app import BUNDLED_EFFECT_PREVIEWS, Controller, EFFECT_PREVIEWS
 
 
 class EffectPreviewTests(unittest.IsolatedAsyncioTestCase):
@@ -45,3 +45,38 @@ class EffectPreviewTests(unittest.IsolatedAsyncioTestCase):
         first = {"kind": "movie", "id": 1, "name": "Flare"}
         second = dict(first, name="Showtime")
         self.assertNotEqual(Controller.effect_gif_path("lamp", first), Controller.effect_gif_path("lamp", second))
+
+    def test_all_seven_bundled_effects_are_animated(self):
+        self.assertEqual(len(BUNDLED_EFFECT_PREVIEWS), 7)
+        self.assertEqual(
+            set(BUNDLED_EFFECT_PREVIEWS.values()), {path.name for path in EFFECT_PREVIEWS.glob("*.gif")}
+        )
+        for name, filename in BUNDLED_EFFECT_PREVIEWS.items():
+            with self.subTest(name=name):
+                path = Controller.bundled_effect_image({"kind": "movie", "name": name.upper()})
+                self.assertEqual(path.name, filename)
+                with Image.open(path) as image:
+                    self.assertEqual(image.format, "GIF")
+                    self.assertGreater(image.n_frames, 1)
+        self.assertIsNone(Controller.bundled_effect_image({"kind": "movie", "name": "Rainbow Plasma"}))
+        self.assertIsNone(Controller.bundled_effect_image({"kind": "effect", "name": "Rainbow"}))
+
+    async def test_local_image_overrides_default_and_deletion_restores_default(self):
+        controller = Controller.__new__(Controller)
+        effect = {"kind": "movie", "id": 1, "name": "  Cotton   Candy  "}
+        controller.devices = {"lamp": SimpleNamespace(effects=[effect])}
+        with tempfile.TemporaryDirectory() as folder, patch("app.IMAGES", Path(folder)):
+            custom = controller.effect_gif_path("lamp", effect)
+            query = {"id": "lamp", "kind": "movie", "index": "1", "ref": custom.stem}
+            default = await controller.effect_image(SimpleNamespace(query=query, method="GET"))
+            self.assertEqual(default._path.name, "cotton-candy.gif")
+            custom.write_bytes(default._path.read_bytes())
+            override = await controller.effect_image(SimpleNamespace(query=query, method="GET"))
+            self.assertEqual(override._path, custom)
+
+            async def body():
+                return {"image": None}
+
+            await controller.effect_image(SimpleNamespace(query=query, method="POST", json=body))
+            restored = await controller.effect_image(SimpleNamespace(query=query, method="GET"))
+            self.assertEqual(restored._path, default._path)
