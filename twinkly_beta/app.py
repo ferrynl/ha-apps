@@ -452,18 +452,30 @@ class Device:
                 continue
             if not isinstance(group, dict):
                 continue
-            role, master = group.get("mode"), group.get("master_id")
+            role = group.get("mode")
             if role == "none":
                 break
-            if role in ("master", "slave"):
-                name = group.get("name")
-                label = name.strip() if isinstance(name, str) else ""
-                master = master.strip() if isinstance(master, str) else ""
-                if master:
-                    self.native_group = (master, role, label)
-                    return
-                if reported is None:
-                    reported = ("", role, label)
+            if role not in ("master", "slave"):
+                continue
+            uid = group.get("uid")
+            uid = uid.strip() if isinstance(uid, str) else ""
+            master = group.get("master_id")
+            master = master.strip() if isinstance(master, str) else ""
+            name = group.get("name")
+            offset, size = group.get("offset"), group.get("size")
+            if offset is None and uid and role == "master":
+                offset = 0
+            entry = {
+                "id": uid or master, "uid": bool(uid), "role": role,
+                "name": name.strip() if isinstance(name, str) else "",
+                "offset": offset if type(offset) is int and offset >= 0 else None,
+                "size": size if type(size) is int and size > 0 else None,
+            }
+            if entry["id"]:
+                self.native_group = entry
+                return
+            if reported is None:
+                reported = entry
         self.native_group = reported
 
     def load_layout(self):
@@ -856,25 +868,42 @@ class Controller:
                 groups[key] = group
             else:
                 local["native"] = True
+                if "layout_size" in group:
+                    local["layout_size"] = group["layout_size"]
+                    local["members"] = group["members"]
         return web.json_response({"devices": rows, "groups": groups}, headers={"Cache-Control": "no-store"})
 
     def native_groups(self):
-        by_master = {}
+        by_id = {}
         for key, device in self.devices.items():
-            if device.native_group:
-                master, role, name = device.native_group
-                if master:
-                    by_master.setdefault(master, []).append((key, role, name))
+            info = device.native_group
+            if info and info["id"]:
+                by_id.setdefault(info["id"], []).append((key, info))
+
         groups = {}
-        for master, entries in by_master.items():
-            leaders = [key for key, role, _ in entries if role == "master"]
-            if len(entries) < 2 or len(leaders) != 1:
+        for group_id, entries in by_id.items():
+            leaders = [key for key, info in entries if info["role"] == "master"]
+            has_uid = any(info["uid"] for _, info in entries)
+            if len(entries) < 2 or len(leaders) > 1 or (not leaders and not has_uid):
                 continue
-            names = {name for _, _, name in entries if name}
-            groups["native:" + master] = {
-                "name": next(iter(names)) if len(names) == 1 else self.devices[leaders[0]].row["name"],
-                "members": [key for key, _, _ in entries],
-            }
+            entries.sort(key=lambda entry: (
+                entry[1]["offset"] is None, entry[1]["offset"] or 0))
+            members = [key for key, _ in entries]
+            names = {info["name"] for _, info in entries if info["name"]}
+            numbered = [re.fullmatch(r"(.+?)\s+\d+", self.devices[key].row["name"].strip())
+                        for key in members]
+            prefixes = {match[1] for match in numbered if match}
+            name = self.devices[(leaders or members)[0]].row["name"]
+            if len(names) == 1:
+                name = next(iter(names))
+            elif all(numbered) and len(prefixes) == 1:
+                name = next(iter(prefixes))
+            group = {"name": name, "members": members}
+            sizes = {info["size"] for _, info in entries if info["size"] is not None}
+            offsets = {info["offset"] for _, info in entries if info["offset"] is not None}
+            if len(sizes) == 1 and len(offsets) >= 2 and max(offsets) < min(sizes):
+                group["layout_size"] = next(iter(sizes))
+            groups["native:" + group_id] = group
         return groups
 
     async def observe_wifi(self, device):
@@ -901,7 +930,7 @@ class Controller:
         row = {key: device.row[key] for key in ("id", "name", "ip")}
         details = device.network_details
         if device.native_group and not device.offline:
-            row["group_role"] = device.native_group[1]
+            row["group_role"] = device.native_group["role"]
         row["kind"] = "unknown"
         if device.offline:
             row["kind"] = "offline"

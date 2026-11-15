@@ -177,6 +177,34 @@ class OfflineDeviceTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(payload["devices"][0]["group_role"], "slave")
         self.assertFalse(any(key.startswith("native:") for key in payload["groups"]))
 
+    async def test_group_uid_with_wall_layout_uses_led_order_and_common_name(self):
+        uid = "c925f829-a571-40d7-9761-f6b9161337da"
+        master = app.Device(dict(ROW, id="master", name="Muur 1", ip="192.168.1.150"),
+                            self.controller.limit, self.controller.realtime_socket)
+        fourth = app.Device(dict(ROW, id="fourth", name="Muur 4", ip="192.168.1.188"),
+                            self.controller.limit, self.controller.realtime_socket)
+        for device in (master, fourth):
+            self.addCleanup(device.client.session.close)
+            self.controller.devices[device.row["id"]] = device
+        for device, fields in (
+            (self.device, {"mode": "slave", "offset": 420}),
+            (master, {"mode": "master"}),
+            (fourth, {"mode": "slave", "offset": 630}),
+        ):
+            with patch.object(device, "api", return_value={
+                "group": dict(fields, uid=uid, size=840, time_sync=False, sync_on_time=False)
+            }) as api:
+                device.load_native_group()
+            api.assert_called_once_with("summary")
+            device.details_until = app.time.monotonic() + 60
+
+        response = await self.client.get("/network")
+        self.assertEqual(response.status, 200)
+        groups = (await response.json())["groups"]
+        self.assertEqual(groups["native:" + uid], {
+            "name": "Muur", "members": ["master", "wall", "fourth"], "layout_size": 840,
+        })
+
     async def test_removal_is_saved_and_group_still_works(self):
         online = await self.client.post("/remove-device", json={"id": "wall"})
         self.assertEqual(await online.json(), {"ok": False})

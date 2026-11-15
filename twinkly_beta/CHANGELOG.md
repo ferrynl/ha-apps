@@ -1,3 +1,8 @@
+# 0.1.44-beta.10
+
+- Herken groepen die Twinkly via `summary.group.uid` rapporteert.
+- Sorteer lampen op hun ledpositie, toon de totale indeling en herken de gezamenlijke naam bij genummerde lampen zoals Muur 1 en Muur 3.
+
 # 0.1.44-beta.9
 
 - Toon op de netwerkkaart of een lamp groepsleider of groepslid meldt, ook als de groeps-ID ontbreekt.
