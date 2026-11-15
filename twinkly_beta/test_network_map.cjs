@@ -105,11 +105,20 @@ test('shows four grouped lights as one target with a single shared Wi-Fi link',(
   assert.equal(map.nodes().size,3);
   const group = map.nodes().get('group:wall');
   assert.equal(group.el.children[0].textContent,'Muur');
-  assert.equal(group.el.children[1].textContent,'4 lights · 1 offline');
-  assert.equal(group.el.children[2].children.length,4);
-  assert.deepEqual(group.el.children[3].children.map(button=>button.key),['on','off']);
+  assert.equal(group.el.children[1].textContent,'Local group');
+  assert.equal(group.el.children[2].textContent,'4 lights · 1 offline');
+  assert.equal(group.el.children[3].children.length,4);
+  assert.deepEqual(group.el.children[4].children.map(button=>button.key),['on','off']);
   assert.equal(map.links().filter(([source])=>source===group).length,1);
   byId('network-members').onclick();
   assert.equal(map.nodes().size,6);
   assert.equal(map.nodes().has('group:wall'),false);
+});
+
+test('shows a reported group role even without a matched group',()=>{
+  const {map} = createMap();
+  const [row] = lamps(1);
+  row.group_role = 'slave';
+  map.renderNetwork([row],map.networkText.en);
+  assert.ok(map.nodes().get('device:0').el.children.some(child=>child.textContent==='Group member'));
 });
