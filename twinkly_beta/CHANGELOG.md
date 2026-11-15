@@ -1,3 +1,7 @@
+# 0.1.44-beta.2
+
+- Toon productfoto’s met een transparante achtergrond. De PNG-bestanden worden met de bèta meegeleverd.
+
 # 0.1.44-beta.1
 
 - Herken de Twinkly Curtain TWW210SPP met 210 RGB+W-leds en toon de officiële productfoto.
