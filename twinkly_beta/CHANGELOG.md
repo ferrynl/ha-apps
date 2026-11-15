@@ -1,3 +1,7 @@
+# 0.1.44-beta.14
+
+- Voeg onder Klassiek een realtime RGB-test toe voor het gekozen apparaat.
+
 # 0.1.44-beta.13
 
 - Log automatisch één waarschuwing wanneer een lamp offline gaat. Blijf op de achtergrond proberen en log het herstel zodra de lamp terug is.
