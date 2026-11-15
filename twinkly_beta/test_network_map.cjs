@@ -96,20 +96,24 @@ test('dragged light keeps its position and link after refresh; the backdrop pans
   assert.ok(Math.abs((200-map.networkCamera.x)/map.networkCamera.scale-worldX)<1e-9);
 });
 
-test('shows four grouped lights as one target with a single shared Wi-Fi link',()=>{
+test('shows the join parent and four separate cards with membership links',()=>{
   const {map,byId} = createMap();
   const rows = lamps(5);
   rows[3].kind = 'offline';
-  map.setGroups({wall:{name:'Muur',members:['0','1','2','3']}});
+  map.setGroups({wall:{name:'Muur',native:true,layout_size:840,members:['2','0','1','3']}});
   map.renderNetwork(rows,map.networkText.en);
-  assert.equal(map.nodes().size,3);
+  assert.equal(map.nodes().size,7);
   const group = map.nodes().get('group:wall');
   assert.equal(group.el.children[0].textContent,'Muur');
-  assert.equal(group.el.children[1].textContent,'Local group');
+  assert.equal(group.el.children[1].textContent,'Join (inferred) · 840 LEDs');
   assert.equal(group.el.children[2].textContent,'4 lights · 1 offline');
-  assert.equal(group.el.children[3].children.length,4);
-  assert.deepEqual(group.el.children[4].children.map(button=>button.key),['on','off']);
-  assert.equal(map.links().filter(([source])=>source===group).length,1);
+  assert.deepEqual(group.el.children[3].children.map(button=>button.key),['on','off']);
+  assert.equal(group.y,map.nodes().get('device:4').y);
+  const memberLinks = map.links().filter(([source,,kind])=>source===group && kind==='member');
+  assert.deepEqual(memberLinks.map(([,target])=>target.id),['device:2','device:0','device:1','device:3']);
+  assert.ok(memberLinks.every(([,target])=>target.y > group.y));
+  assert.ok(map.nodes().get('device:3').el.children.some(child=>child.textContent==='Offline'));
+  assert.equal(map.links().filter(([source,,kind])=>source===group && !kind).length,1);
   byId('network-members').onclick();
   assert.equal(map.nodes().size,6);
   assert.equal(map.nodes().has('group:wall'),false);
