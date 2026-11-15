@@ -39,6 +39,16 @@ SEQUENCES = DATA.with_name("sequences.json")
 TV_STATE = DATA.with_name("tv-state.json")
 SILENCE_MODES = ("restore", "warm", "fade")
 IMAGES = DATA.with_name("effect-images")
+EFFECT_PREVIEWS = Path(__file__).resolve().with_name("effect_previews")
+BUNDLED_EFFECT_PREVIEWS = {
+    "24k future": "24k-future.gif",
+    "cotton candy": "cotton-candy.gif",
+    "flare": "flare.gif",
+    "paradise": "paradise.gif",
+    "peachy": "peachy.gif",
+    "rainbow": "rainbow.gif",
+    "solar sparks": "solar-sparks.gif",
+}
 GIF_LIBRARY = DATA.with_name("gif-library")
 MATRIX_GIFS = Path(__file__).resolve().with_name("matrix_gifs")
 MATRIX_ID = re.compile(r"(?:winter|festive|neon|ocean|gold|cosmic|tropical|retro|pastel|midnight)-(?:[1-9]|10)")
@@ -897,6 +907,17 @@ class Controller:
         fingerprint = hashlib.sha256(json.dumps([key, entry["kind"], identity]).encode()).hexdigest()
         return IMAGES / (fingerprint + ".gif")
 
+    @staticmethod
+    def bundled_effect_image(entry):
+        name = entry.get("name")
+        if entry["kind"] != "movie" or not isinstance(name, str):
+            return None
+        filename = BUNDLED_EFFECT_PREVIEWS.get(" ".join(name.casefold().split()))
+        if filename is None:
+            return None
+        path = EFFECT_PREVIEWS / filename
+        return path if path.is_file() else None
+
     async def twinkly_wordmark(self, request):
         if not WORDMARK.is_file():
             async with self.photo_lock:
@@ -953,6 +974,8 @@ class Controller:
         if request.method == "GET":
             path = gif if gif.is_file() else still
             if not path.is_file():
+                path = self.bundled_effect_image(entry)
+            if path is None:
                 raise web.HTTPNotFound()
             return web.FileResponse(path, headers={"Cache-Control": "no-cache", "X-Content-Type-Options": "nosniff"})
         data = await request.json()
@@ -1181,7 +1204,10 @@ class Controller:
             for entry in device.effects:
                 gif = self.effect_gif_path(key, entry)
                 still = self.image_path(key, entry["kind"], entry["id"])
-                catalog.append(dict(entry, preview_ref=gif.stem, has_image=gif.is_file() or still.is_file()))
+                custom = gif.is_file() or still.is_file()
+                bundled = self.bundled_effect_image(entry) is not None
+                catalog.append(dict(entry, preview_ref=gif.stem, has_image=custom or bundled,
+                                    has_custom_image=custom, has_default_image=bundled))
         return web.json_response({"effects": catalog, "error": None if ok else device.error})
 
     @staticmethod

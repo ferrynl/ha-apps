@@ -439,8 +439,8 @@ function renderEffects(card) {
     const image = document.createElement('img');
     image.className = 'effect-image'; image.alt = title.textContent; image.hidden = true;
     const remove = document.createElement('button');
-    remove.textContent = extra(8); remove.hidden = !entry.has_image;
-    image.onload = () => { image.hidden = false; remove.hidden = false; };
+    remove.textContent = extra(8); remove.hidden = !entry.has_custom_image;
+    image.onload = () => { image.hidden = false; remove.hidden = !entry.has_custom_image; };
     image.onerror = () => { image.hidden = true; remove.hidden = true; };
     const upload = document.createElement('input');
     upload.type = 'file'; upload.accept = 'image/gif,.gif,image/jpeg,image/png,image/webp';
@@ -459,15 +459,18 @@ function renderEffects(card) {
         await request(imagePath,{image:encoded});
         upload.value = '';
         entry.has_image = true;
+        entry.has_custom_image = true;
         image.src = './' + imagePath + '&v=' + Date.now();
         return t('done');
       });
     };
     remove.onclick = () => perform(remove, async () => {
       await request(imagePath,{image:null});
-      entry.has_image = false;
-      image.hidden = true; remove.hidden = true;
-      image.removeAttribute('src');
+      entry.has_custom_image = false;
+      entry.has_image = entry.has_default_image;
+      remove.hidden = true;
+      if (entry.has_image) image.src = './' + imagePath + '&v=' + Date.now();
+      else { image.hidden = true; image.removeAttribute('src'); }
       return t('done');
     });
     if (entry.has_image) image.src = './' + imagePath;

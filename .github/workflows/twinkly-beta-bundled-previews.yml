@@ -1,0 +1,16 @@
+name: Twinkly Beta meegeleverde effectpreviews
+on:
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  build:
+    if: github.head_ref == 'beta/twinkly-bundled-previews'
+    strategy:
+      matrix:
+        runner: [ubuntu-24.04, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t twinkly-beta twinkly_beta

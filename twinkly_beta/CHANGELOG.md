@@ -1,3 +1,8 @@
+# 0.1.44-beta.4
+
+- Toon automatisch geanimeerde previews van Rainbow, Peachy, 24K Future, Paradise, Cotton Candy, Flare en Solar Sparks bij gelijknamige opgeslagen Twinkly-effecten.
+- Eigen afbeeldingen en GIF’s hebben voorrang. Na verwijderen verschijnt de meegeleverde preview weer.
+
 # 0.1.44-beta.3
 
 - Koppel een geanimeerde GIF aan een opgeslagen Twinkly-effect. De preview volgt de ID van de animatie als de lamp de volgorde wijzigt.
