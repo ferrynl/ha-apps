@@ -37,3 +37,15 @@ class DashboardSmokeTest(unittest.IsolatedAsyncioTestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class RealtimeRGBTest(unittest.TestCase):
+    def test_primary_colors_and_cycle(self):
+        from app import PIXELS, live_pattern
+
+        for fps in (5, 20, 25):
+            for second, color in ((0, (255, 0, 0)), (3, (0, 255, 0)),
+                                  (6, (0, 0, 255)), (9, (255, 0, 0))):
+                with self.subTest(fps=fps, second=second):
+                    self.assertEqual(live_pattern('rgb-test', second * fps, fps),
+                                     bytes(color) * PIXELS)
