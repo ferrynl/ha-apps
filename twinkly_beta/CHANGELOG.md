@@ -1,3 +1,8 @@
+# 0.1.44-beta.6
+
+- Bekijk op de nieuwe pagina Netwerk alle geregistreerde lampen, hun wifi-signaal en de gemeten verbindingsduur.
+- Toon bevestigde directe verbindingen tussen Twinkly-lampen als stippellijnen.
+
 # 0.1.44-beta.5
 
 - Verwijder de donkere horizontale en verticale strepen uit de zeven meegeleverde effectpreviews.
