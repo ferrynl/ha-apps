@@ -1,3 +1,7 @@
+# 0.1.44-beta.5
+
+- Verwijder de donkere horizontale en verticale strepen uit de zeven meegeleverde effectpreviews.
+
 # 0.1.44-beta.4
 
 - Toon automatisch geanimeerde previews van Rainbow, Peachy, 24K Future, Paradise, Cotton Candy, Flare en Solar Sparks bij gelijknamige opgeslagen Twinkly-effecten.

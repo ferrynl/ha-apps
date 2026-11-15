@@ -58,6 +58,9 @@ class EffectPreviewTests(unittest.IsolatedAsyncioTestCase):
                 with Image.open(path) as image:
                     self.assertEqual(image.format, "GIF")
                     self.assertGreater(image.n_frames, 1)
+                    for frame in range(image.n_frames):
+                        image.seek(frame)
+                        image.load()
         self.assertIsNone(Controller.bundled_effect_image({"kind": "movie", "name": "Rainbow Plasma"}))
         self.assertIsNone(Controller.bundled_effect_image({"kind": "effect", "name": "Rainbow"}))
 
