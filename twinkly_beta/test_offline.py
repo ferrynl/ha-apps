@@ -76,6 +76,30 @@ class OfflineDeviceTest(unittest.IsolatedAsyncioTestCase):
         self.assertIn("status=online", logged.output[0])
         self.assertFalse((await self.get_status())["devices"][0]["offline"])
 
+    async def test_offline_background_checks_share_backoff_and_log_once(self):
+        calls = []
+
+        def read_mode():
+            calls.append("read_mode")
+            raise ConnectionError("No route to host")
+
+        def load_details():
+            calls.append("load_details")
+            raise Timeout("connection timed out")
+
+        with self.assertLogs("twinkly", level="WARNING") as logged:
+            self.assertFalse(await self.device.run(read_mode, automatic=True))
+        self.assertEqual(len(logged.output), 1)
+        with self.assertNoLogs("twinkly", level="WARNING"):
+            self.assertFalse(await self.device.run(load_details, automatic=True))
+            self.assertEqual(calls, ["read_mode"])
+            for _ in range(3):
+                self.device.retry = 0
+                self.device.last_warning_at -= 120
+                self.assertFalse(await self.device.run(load_details, automatic=True))
+        self.assertEqual(calls, ["read_mode", "load_details", "load_details", "load_details"])
+        self.assertTrue((await self.get_status())["devices"][0]["offline"])
+
     async def test_http_failure_is_not_offline(self):
         def reject():
             raise HTTPError("private response")

@@ -1,3 +1,8 @@
+# 0.1.44-beta.13
+
+- Log automatisch één waarschuwing wanneer een lamp offline gaat. Blijf op de achtergrond proberen en log het herstel zodra de lamp terug is.
+- Laat de netwerkkaart de bestaande wachttijd voor offline lampen respecteren.
+
 # 0.1.44-beta.12
 
 - Toon herkende Twinkly-groepen in Instellingen en als één bedienbaar apparaat op de homepage.
