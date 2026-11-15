@@ -2,11 +2,11 @@ name: Twinkly Beta meegeleverde effectpreviews
 on:
   pull_request:
     branches: [main]
+    paths: ['twinkly_beta/**', '.github/workflows/twinkly-beta-bundled-previews.yml']
 permissions:
   contents: read
 jobs:
   build:
-    if: github.head_ref == 'beta/twinkly-bundled-previews'
     strategy:
       matrix:
         runner: [ubuntu-24.04, ubuntu-24.04-arm]
