@@ -1,3 +1,7 @@
+# 0.1.44-beta.15
+
+- Geef Kerstrood, Groen en Paars verzadigde snelkleuren.
+
 # 0.1.44-beta.14
 
 - Voeg onder Klassiek een realtime RGB-test toe voor het gekozen apparaat.
