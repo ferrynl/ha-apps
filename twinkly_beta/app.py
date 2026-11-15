@@ -97,7 +97,9 @@ PRODUCT_PHOTO_KEYS = frozenset({
 })
 PIXELS = 120
 FRAME_BYTES = PIXELS * 3
-MAX_DEVICES = 40
+MAX_DEVICES = 80
+MAX_SAVED_GROUPS = 40
+MAX_SAVED_SCENES = 40
 MUSIC_STYLES = frozenset(('energy', 'spectrum', 'power', 'wavelength', 'strobe', 'scroll', 'bands', 'blade_power_plus', 'magnitude', 'fire', 'rain', 'melt', 'melt_and_sparkle', 'scan', 'water', 'energy2', 'bar', 'blocks', 'equalizer', 'lava_lamp', 'pitchSpectrum', 'scan_multi', 'scan_and_flare', 'scroll_plus', 'vumeter', 'multiBar'))
 LOG = logging.getLogger("twinkly")
 
@@ -926,7 +928,7 @@ class Controller:
                         or not isinstance(group, str) or (group != "*" and group not in self.groups)
                         or not isinstance(style, str) or style not in MUSIC_STYLES
                         or type(level) is not int or not 0 <= level <= 100
-                        or mode not in ("music", "off") or len(scenes) >= MAX_DEVICES):
+                        or mode not in ("music", "off") or len(scenes) >= MAX_SAVED_SCENES):
                     raise web.HTTPBadRequest()
                 scenes[uuid.uuid4().hex] = {"name": name.strip(), "group": group, "style": style,
                                            "level": level, "mode": mode}
@@ -951,7 +953,7 @@ class Controller:
                         or not isinstance(members, list) or not 1 <= len(members) <= MAX_DEVICES
                         or any(not isinstance(key, str) or key not in self.devices for key in members)):
                     raise web.HTTPBadRequest()
-                if group_id is None and len(groups) >= MAX_DEVICES:
+                if group_id is None and len(groups) >= MAX_SAVED_GROUPS:
                     raise web.HTTPBadRequest()
                 silence = data.get("silence", "restore")
                 if silence not in SILENCE_MODES:

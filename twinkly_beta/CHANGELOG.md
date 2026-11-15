@@ -1,3 +1,9 @@
+# 0.1.44-beta.7
+
+- Vergroot de netwerkkaart en voeg een schermvullende weergave toe.
+- Versleep apparaten, verschuif en zoom de kaart, en zet alle apparaten weer in beeld met één knop. Versleepte posities blijven lokaal bewaard.
+- Registreer tot 80 Twinkly-apparaten.
+
 # 0.1.44-beta.6
 
 - Bekijk op de nieuwe pagina Netwerk alle geregistreerde lampen, hun wifi-signaal en de gemeten verbindingsduur.
