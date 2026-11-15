@@ -869,7 +869,7 @@ class Controller:
 
     async def observe_wifi(self, device):
         ok = await device.run(device.load_details, automatic=True)
-        details = device.details if ok and not device.offline else {}
+        details = (device.details or {}) if ok and not device.offline else {}
         ssid = details.get("ssid")
         station_ip = details.get("ip")
         if (details.get("network_mode") != 1 or details.get("status") not in (None, 5, "5")
