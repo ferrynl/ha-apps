@@ -28,7 +28,7 @@ main{width:100%;max-width:none;padding:clamp(12px,2vw,32px)}
 .device-info{margin-top:12px}.device-info dl[hidden]{display:none}.device-info dl{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);margin:10px 0 0;gap:1px;background:#3a5851;border:1px solid #3a5851;border-radius:10px;overflow:hidden}
 .device-info dt,.device-info dd{margin:0;padding:7px;background:#122422;overflow-wrap:anywhere;font-size:.86rem}.device-info dt{color:#d1e6df}.device-info dd{color:#ffe4a8}
 @media(max-width:760px){.desk-grid{grid-template-columns:1fr}.desk-controls button{flex:1 1 auto}.mixdesk{border-radius:16px}}
-.product-card{display:flex;align-items:center;gap:12px;margin:0 0 12px;padding:8px 10px;border:1px solid #45645a;border-radius:12px;background:#101f1c}.product-card[hidden],.product-card img[hidden]{display:none}.product-card img{width:clamp(106px,32%,148px);height:105px;object-fit:contain;background:#fff;border-radius:7px}.product-card small{display:block;margin-top:3px;overflow-wrap:anywhere}
+.product-card{display:flex;align-items:center;gap:12px;margin:0 0 12px;padding:8px 10px;border:1px solid #45645a;border-radius:12px;background:#101f1c}.product-card[hidden],.product-card img[hidden]{display:none}.product-card img{width:clamp(106px,32%,148px);height:105px;object-fit:contain}.product-card small{display:block;margin-top:3px;overflow-wrap:anywhere}
 .scene-pad{display:inline-flex;gap:4px;padding:5px;border:1px solid #617587;border-radius:11px;background:#121922}.mixdesk .scene-pad button:first-child{background:linear-gradient(#673f82,#382549);border-color:#ab82c0}
 .track-screen{display:flex;align-items:center;gap:12px;min-height:88px;padding:12px;margin-bottom:12px;border:1px solid #3b5e58;border-radius:12px;background:radial-gradient(ellipse at top right,#1c4038,#080f13 72%);box-shadow:inset 0 2px 7px #0009}.track-screen img{width:66px;height:66px;object-fit:cover;border-radius:6px}.track-screen p{margin:3px 0;color:#a5c4be;font-size:.83rem;overflow-wrap:anywhere}.track-screen strong{display:block;color:#b7ffe5;overflow-wrap:anywhere}.track-screen #track-label{letter-spacing:.12em;text-transform:uppercase}
 .track-tv{max-width:590px;margin-bottom:14px;padding:9px;border:1px solid #59677a;border-radius:16px;background:linear-gradient(155deg,#46515e,#181e27 45%);box-shadow:0 5px 0 #080b10,0 10px 18px #0008}.track-display{position:relative;display:grid;place-items:center;aspect-ratio:16/9;max-height:275px;background:radial-gradient(ellipse,#183830,#05090c 72%);overflow:hidden;border:1px solid #080b10;border-radius:10px}.track-display img,.track-display video{position:absolute;width:100%;height:100%;object-fit:contain}.track-display [hidden]{display:none}.track-tv .track-screen{border:0;box-shadow:none;margin:0;background:none;padding:8px 4px 2px;min-height:0}#track-idle{font-size:clamp(2rem,6vw,4rem);color:#82dabb}
@@ -237,7 +237,7 @@ function drawProduct(card, device) {
     photo.alt = '';
     photo.src = './twinkly.svg';
   };
-  photo.src = model.photo ? './product-photo/' + model.photo : './twinkly.svg';
+  photo.src = model.photo ? './product-photo/' + model.photo + '?v=2' : './twinkly.svg';
   card.product.append(photo);
   card.product.append(body);
 }
