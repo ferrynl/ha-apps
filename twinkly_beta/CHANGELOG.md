@@ -1,3 +1,7 @@
+# 0.1.44-beta.3
+
+- Koppel een geanimeerde GIF aan een opgeslagen Twinkly-effect. De preview volgt de ID van de animatie als de lamp de volgorde wijzigt.
+
 # 0.1.44-beta.2
 
 - Toon productfoto’s met een transparante achtergrond. De PNG-bestanden worden met de bèta meegeleverd.
