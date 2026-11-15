@@ -131,3 +131,34 @@ test('shows a reported group role even without a matched group',()=>{
   map.renderNetwork([row],map.networkText.en);
   assert.ok(map.nodes().get('device:0').el.children.some(child=>child.textContent==='Group member'));
 });
+
+test('the same discovered group appears in settings and as one controllable home card',()=>{
+  const elements = new Map();
+  const make = () => ({
+    children: [], append(...values) { this.children.push(...values); },
+    replaceChildren() { this.children = []; }, querySelectorAll() { return []; },
+  });
+  const byId = id => {
+    if (!elements.has(id)) elements.set(id,make());
+    return elements.get(id);
+  };
+  const devices = [{id:'a',name:'Muur 1'},{id:'b',name:'Muur 2'}];
+  const status = {devices,groups:{},display_groups:{
+    'native:wall':{name:'Kerstmuur',members:['b','a']},
+  }};
+  const source = html.slice(html.indexOf('const groupCards ='),html.indexOf("byId('group-cancel').onclick"));
+  new Function('byId','document','status','lang','extra','controls','networkNameLabels',
+    'memberSignature','groupSignature',source + '\nrenderGroups();')(
+    byId,{createElement:make},status,{value:'en'},()=>'',(actions,id,group)=>{ actions.group = group; },
+    {en:['Rename']},'',null,
+  );
+  const [card] = byId('group-cards').children;
+  assert.equal(byId('group-cards').children.length,1);
+  assert.equal(card.children[0].textContent,'Kerstmuur');
+  assert.equal(card.children[1].textContent,'Contains · Muur 2 · Muur 1');
+  assert.equal(card.children[2].group,'native:wall');
+  const [settings] = byId('group-management').children;
+  assert.equal(settings.children[0].textContent,'Kerstmuur');
+  assert.equal(settings.children[1].textContent,'Twinkly group · Contains · Muur 2 · Muur 1');
+  assert.equal(settings.children[2].textContent,'Rename');
+});

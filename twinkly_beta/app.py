@@ -335,6 +335,7 @@ class Device:
         self.wifi_observation = None
         self.network_details = {}
         self.native_group = None
+        self.native_group_until = 0
         self.removed = False
         self.replies = 0
         self.mapping = tuple(3 * (i * PIXELS // row["leds"]) for i in range(row["leds"]))
@@ -444,7 +445,11 @@ class Device:
         self.details_until = time.monotonic() + 60
 
     def load_native_group(self):
+        if time.monotonic() < self.native_group_until:
+            return
+        self.native_group_until = time.monotonic() + 60
         reported = None
+        received = False
         for path, field in (("summary", "group"), ("led/movie/config", "sync")):
             try:
                 group = self.api(path).get(field)
@@ -452,6 +457,7 @@ class Device:
                 continue
             if not isinstance(group, dict):
                 continue
+            received = True
             role = group.get("mode")
             if role == "none":
                 break
@@ -476,7 +482,8 @@ class Device:
                 return
             if reported is None:
                 reported = entry
-        self.native_group = reported
+        if received:
+            self.native_group = reported
 
     def load_layout(self):
         if time.monotonic() < self.layout_until:
@@ -789,8 +796,11 @@ class Controller:
                     device.mode_check = now + 30
                     if not await device.run(device.read_mode, automatic=True):
                         device.mode = None
-                    elif not device.model_checked:
-                        await device.run(device.read_product_code, automatic=True)
+                    else:
+                        if not device.model_checked:
+                            await device.run(device.read_product_code, automatic=True)
+                        if now >= device.native_group_until:
+                            await device.run(device.load_native_group, automatic=True)
             await asyncio.sleep(1 / self.fps if pattern or active or fading else 0.2)
 
     async def stream(self, app):
@@ -835,6 +845,7 @@ class Controller:
                 key: dict(group, members=[member for member in group["members"] if member in self.devices])
                 for key, group in self.groups.items()
             },
+            "display_groups": self.display_groups(),
             "sequence": self.sequence_status,
             "sequence_error": self.sequence_error,
             "sequence_data": self.sequence_data,
@@ -860,8 +871,11 @@ class Controller:
                      and peer["ssid"] == row["ssid"] and peer["ap_ip"] == row["gateway"]]
             if len(peers) == 1:
                 row["peer"] = peers[0]["id"]
+        return web.json_response({"devices": rows, "groups": self.display_groups()}, headers={"Cache-Control": "no-store"})
+
+    def display_groups(self):
         groups = {
-            key: {"name": group["name"], "members": [member for member in group["members"] if member in self.devices]}
+            key: dict(group, members=[member for member in group["members"] if member in self.devices])
             for key, group in self.groups.items()
         }
         for key, group in self.native_groups().items():
@@ -874,7 +888,7 @@ class Controller:
                 if "layout_size" in group:
                     local["layout_size"] = group["layout_size"]
                     local["members"] = group["members"]
-        return web.json_response({"devices": rows, "groups": groups}, headers={"Cache-Control": "no-store"})
+        return groups
 
     def native_groups(self):
         by_id = {}
