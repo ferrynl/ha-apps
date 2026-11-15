@@ -1,6 +1,11 @@
-# 0.1.41-beta.1
+# 0.1.42-beta.1
 
 Bètaversie van Twinkly Control Center.
+
+# 0.1.42
+
+- Geef beide Home Assistant-appkaarten een eigen icoon en een korte beschrijving.
+- Voeg een logo en introductie toe aan beide apppagina’s.
 
 # 0.1.41
 
