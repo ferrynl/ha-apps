@@ -334,6 +334,7 @@ class Device:
         self.offline = False
         self.wifi_observation = None
         self.network_details = {}
+        self.native_group = None
         self.removed = False
         self.replies = 0
         self.mapping = tuple(3 * (i * PIXELS // row["leds"]) for i in range(row["leds"]))
@@ -439,7 +440,26 @@ class Device:
                 details["channel"] = channel
         self.details = {key: value for key, value in details.items()
                         if isinstance(value, (str, int, float, bool)) and value != ""}
+        self.load_native_group()
         self.details_until = time.monotonic() + 60
+
+    def load_native_group(self):
+        for path, field in (("summary", "group"), ("led/movie/config", "sync")):
+            try:
+                group = self.api(path).get(field)
+            except (ApplicationError, ValueError, RequestException):
+                continue
+            if not isinstance(group, dict):
+                continue
+            role, master = group.get("mode"), group.get("master_id")
+            if role == "none":
+                self.native_group = None
+                return
+            if role in ("master", "slave") and isinstance(master, str) and master.strip():
+                name = group.get("name")
+                self.native_group = (master.strip(), role, name.strip() if isinstance(name, str) else "")
+                return
+        self.native_group = None
 
     def load_layout(self):
         if time.monotonic() < self.layout_until:
@@ -820,7 +840,32 @@ class Controller:
                      and peer["ssid"] == row["ssid"] and peer["ap_ip"] == row["gateway"]]
             if len(peers) == 1:
                 row["peer"] = peers[0]["id"]
-        return web.json_response({"devices": rows}, headers={"Cache-Control": "no-store"})
+        groups = {
+            key: {"name": group["name"], "members": [member for member in group["members"] if member in self.devices]}
+            for key, group in self.groups.items()
+        }
+        for key, group in self.native_groups().items():
+            if not any(set(group["members"]) == set(local["members"]) for local in groups.values()):
+                groups[key] = group
+        return web.json_response({"devices": rows, "groups": groups}, headers={"Cache-Control": "no-store"})
+
+    def native_groups(self):
+        by_master = {}
+        for key, device in self.devices.items():
+            if device.native_group:
+                master, role, name = device.native_group
+                by_master.setdefault(master, []).append((key, role, name))
+        groups = {}
+        for master, entries in by_master.items():
+            leaders = [key for key, role, _ in entries if role == "master"]
+            if len(entries) < 2 or len(leaders) != 1:
+                continue
+            names = {name for _, _, name in entries if name}
+            groups["native:" + master] = {
+                "name": next(iter(names)) if len(names) == 1 else self.devices[leaders[0]].row["name"],
+                "members": [key for key, _, _ in entries],
+            }
+        return groups
 
     async def observe_wifi(self, device):
         ok = await device.run(device.load_details, automatic=True)
@@ -1107,9 +1152,12 @@ class Controller:
         async with self.edit:
             group_id = data.get("group")
             if group_id is not None:
-                if not isinstance(group_id, str) or group_id not in self.groups or action == "effect":
+                if not isinstance(group_id, str) or action == "effect":
                     raise web.HTTPBadRequest()
-                keys = [key for key in self.groups[group_id]["members"] if key in self.devices]
+                group = self.groups.get(group_id) or self.native_groups().get(group_id)
+                if not group:
+                    raise web.HTTPBadRequest()
+                keys = [key for key in group["members"] if key in self.devices]
             else:
                 keys = list(self.devices) if data.get("id") == "*" else [data.get("id")]
             if any(key not in self.devices for key in keys):
