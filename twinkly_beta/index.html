@@ -6,11 +6,11 @@
 *{box-sizing:border-box}body{margin:0;color:#fff7e9;background:radial-gradient(ellipse at 85% 0,#304e43 0,transparent 42%),#0b1616;font:16px system-ui}main{max-width:1140px;margin:auto;padding:clamp(16px,4vw,44px)}header{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap}h1{font:700 clamp(2.6rem,7vw,5rem) Georgia;margin:0;color:#ffe2a5}h2,h3,p{margin:0 0 12px}p{color:#c5d8d2}section,article{padding:20px;border:1px solid #3b5951;border-radius:22px;background:linear-gradient(145deg,#1c3430,#122422);box-shadow:0 12px 26px #0005}section{margin-top:18px}.eyebrow{letter-spacing:.16em;font-size:.78rem;color:#facb7e;text-transform:uppercase}.status{display:inline-block;border-radius:100px;background:#213e34;padding:8px 14px;margin:12px 0 0}#devices{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr));gap:16px;margin-top:18px}.controls{display:flex;flex-wrap:wrap;gap:8px;align-items:center}button,select,input{font:inherit;border:1px solid #66877b;background:#213c34;color:#fff7e9;border-radius:10px;padding:8px 11px;max-width:100%}button{cursor:pointer}button:hover{background:#38584a}.primary{background:#f6ce88;color:#132721;border-color:#f6ce88;font-weight:700}.primary:hover{background:#ffdfa6}button:disabled{opacity:.55}input[type=color]{width:48px;height:40px;padding:4px}input[type=number]{width:76px}.gap{margin-top:14px}#message{margin:12px 0 0;overflow-wrap:anywhere}.effects{margin-top:12px;width:100%}.error{color:#ffb5a0;overflow-wrap:anywhere}
 .power-active{background:#f6ce88;color:#132721;border-color:#f6ce88;font-weight:700}.effect-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,180px),1fr));gap:10px;margin-top:10px}.effect-card{display:grid;gap:7px;min-width:0;padding:10px;background:#142925;border:1px solid #48665d;border-radius:12px;text-align:left;overflow-wrap:anywhere;font-size:.9rem}.effect-card input,.effect-card button{width:100%}.preview-note{font-size:.82rem;margin-top:10px}
 .led-map{margin-top:12px}.led-map [hidden]{display:none}.led-map canvas{display:block;width:100%;height:auto;background:#0b1616;border:1px solid #48665d;border-radius:12px}.led-map input{width:100%;margin-top:8px}
-#group-cards{display:grid;gap:12px;margin-top:14px}#group-members label{display:inline-flex;align-items:center;gap:5px}.effect-image{width:100%;aspect-ratio:16/9;object-fit:cover;border-radius:8px}.effect-card input[type=file]{padding:5px}
+#group-cards,#grouped-devices{display:grid;gap:12px;margin-top:14px}#group-member-devices{margin-top:14px}#group-member-devices summary{cursor:pointer}#group-members label{display:inline-flex;align-items:center;gap:5px}.effect-image{width:100%;aspect-ratio:16/9;object-fit:cover;border-radius:8px}.effect-card input[type=file]{padding:5px}
 #music-preview,#music-gif{display:block;width:min(100%,480px);height:auto;border:1px solid #48665d;border-radius:10px}#music-gif{max-width:300px}#music-gif-link,#music-demo-link{display:inline-block;margin-top:8px;color:#ffe2a5}
 
 main{width:100%;max-width:none;padding:clamp(12px,2vw,32px)}
-#devices{grid-template-columns:repeat(auto-fit,minmax(min(100%,350px),1fr))}
+#devices,#grouped-devices,#group-cards{grid-template-columns:repeat(auto-fit,minmax(min(100%,350px),1fr))}
 .mixdesk{color:#f4f6fa;border:1px solid #586271;background:linear-gradient(155deg,#363d47,#161b23 32%,#0d1118 79%);box-shadow:0 10px 0 #080b10,0 17px 0 #38404a,0 28px 38px #0008,inset 0 1px 1px #ffffff50;padding:clamp(12px,2vw,24px);margin-bottom:34px}
 .desk-brand{display:flex;align-items:center;gap:10px;font-size:.8rem;letter-spacing:.18em;margin-bottom:14px}
 .desk-lamp{width:8px;height:8px;background:#55e2ad;border-radius:100%;box-shadow:0 0 13px #55e2ad}
@@ -115,8 +115,10 @@ main{width:100%;max-width:none;padding:clamp(12px,2vw,32px)}
 <details class="gap gif-library"><summary id="gif-library-title"></summary>
 <form id="gif-form" class="controls gap"><input id="gif-name" maxlength="80" required><input id="gif-upload" type="file" accept="image/gif"><button id="gif-upload-button" type="button"></button><input id="gif-url" type="url" placeholder="https://giphy.com/gifs/…"><button id="gif-import-button" type="button"></button><select id="gif-pattern"></select><button id="gif-create-button" type="button"></button></form>
 <div id="gif-library-list" class="gap"></div></details></div></div></div></section>
-<section id="group-section" hidden><h2 id="group-title"></h2><div id="group-cards"></div></section>
-<section class="devices-section"><h2 id="device-title"></h2><div id="devices"></div></section></div>
+<section class="devices-section"><h2 id="device-title"></h2>
+<div id="group-cards"></div><div id="devices"></div>
+<details id="group-member-devices" hidden><summary id="group-member-summary"></summary><div id="grouped-devices"></div></details>
+</section></div>
 <section id="network-page" aria-labelledby="network-title" hidden>
 <div class="music-heading"><h2 id="network-title"></h2><button id="network-refresh" type="button"></button></div>
 <p id="network-help"></p><p id="network-status" role="status"></p>
@@ -128,6 +130,9 @@ main{width:100%;max-width:none;padding:clamp(12px,2vw,32px)}
 <div id="network-map" class="network-map" aria-labelledby="network-title" tabindex="0" hidden>
 <canvas id="network-lines" aria-hidden="true"></canvas><div id="network-world" class="network-world"></div>
 </div>
+
+<div class="network-key"><span id="network-wifi-key"></span><span id="network-peer-key"></span><span id="network-member-key"></span></div>
+</section>
 <dialog id="network-name-dialog" aria-labelledby="network-name-label">
 <form id="network-name-form">
 <label id="network-name-label" for="network-name"></label>
@@ -136,8 +141,6 @@ main{width:100%;max-width:none;padding:clamp(12px,2vw,32px)}
 <div class="controls"><button id="network-name-save" type="submit"></button><button id="network-name-cancel" type="button"></button></div>
 </form>
 </dialog>
-<div class="network-key"><span id="network-wifi-key"></span><span id="network-peer-key"></span><span id="network-member-key"></span></div>
-</section>
 <div id="settings-page" hidden><div class="settings-grid">
 <section><h2 id="settings-general"></h2><select id="language" aria-label="Language"><option value="nl">Nederlands</option><option value="en">English</option><option value="es">Español</option><option value="de">Deutsch</option></select></section>
 <section><h2 id="settings-music"></h2><div class="controls gap" id="music-setup"></div><p id="ledfx-status" role="status"></p><details><summary>LedFX installeren en starten</summary><ol><li>Open in Home Assistant Instellingen → Apps → Appwinkel → ⋮ → Repositories.</li><li>Voeg <a href="https://github.com/Switch123456789/Home-Assistant-Apps" target="_blank" rel="noopener noreferrer">de LedFX-repository met Sendspin</a> toe en installeer LedFX.</li><li>Klik op Starten en zet Starten bij opstarten aan. Controleer bij een fout het tabblad Logboek.</li><li>Ga terug naar Twinkly, controleer LedFX en klik daarna op Music Assistant koppelen. Voeg LedFx Twinkly toe aan de afspeelgroep in Music Assistant.</li></ol></details><div class="controls gap tv-source"><label id="tv-source-label" for="tv-source"></label><select id="tv-source"></select><button id="tv-refresh"></button></div>
@@ -572,9 +575,19 @@ function editGroup(id, group) {
     input.checked = group?.members.includes(input.value) || false;
   }
 }
+const groupCards = new Map();
+const groupViewLabels = {
+  nl:['Bestaat uit','Individuele lampen in groepen','Twinkly-groep'],
+  en:['Contains','Individual lights in groups','Twinkly group'],
+  es:['Incluye','Luces individuales de los grupos','Grupo Twinkly'],
+  de:['Besteht aus','Einzelne Leuchten in Gruppen','Twinkly-Gruppe'],
+};
+function visibleGroups() {
+  return status?.display_groups || status?.groups || {};
+}
 function renderGroups() {
   const devices = status?.devices || [];
-  const groups = status?.groups || {};
+  const groups = visibleGroups();
   const members = JSON.stringify(devices.map(({id,name}) => [id,name]));
   const signature = JSON.stringify([lang.value,members,groups]);
   if (members !== memberSignature) {
@@ -593,17 +606,23 @@ function renderGroups() {
   groupSignature = signature;
   const parent = byId('group-cards'), manage = byId('group-management');
   parent.replaceChildren(); manage.replaceChildren();
-  byId('group-section').hidden = !Object.keys(groups).length;
+  groupCards.clear();
   for (const [id,group] of Object.entries(groups)) {
     const card = document.createElement('article'), title = document.createElement('h3');
     const info = document.createElement('p'), actions = document.createElement('div');
     title.textContent = group.name;
-    info.textContent = devices.filter(d => group.members.includes(d.id)).map(d => d.name).join(' · ');
+    card.tabIndex = -1;
+    groupCards.set(id,card);
+    const members = group.members.map(key => devices.find(device => device.id === key)?.name).filter(Boolean);
+    const composition = groupViewLabels[lang.value][0] + ' · ' + members.join(' · ');
+    info.textContent = members.length ? composition : '';
     actions.className = 'controls';
     controls(actions,undefined,id);
     const edit = document.createElement('button'), remove = document.createElement('button');
-    edit.textContent = extra(4); remove.textContent = extra(5);
-    edit.onclick = () => editGroup(id,group);
+    const native = id.startsWith('native:');
+    edit.textContent = native ? networkNameLabels[lang.value][0] : extra(4);
+    remove.textContent = extra(5);
+    edit.onclick = () => native ? editNetworkGroupName(id,group.name) : editGroup(id,status.groups[id]);
     remove.onclick = () => perform(remove, async () => {
       await request('groups',{id,delete:true});
       if (editingGroup === id) editGroup(null);
@@ -611,7 +630,11 @@ function renderGroups() {
     });
     const entry = document.createElement('div'), name = document.createElement('strong');
     entry.className = 'settings-item'; name.textContent = group.name;
-    entry.append(name,edit,remove); manage.append(entry);
+    const description = document.createElement('small');
+    description.textContent = (native || group.native ? groupViewLabels[lang.value][2] + ' · ' : '') + info.textContent;
+    entry.append(name,description,edit);
+    if (!native) entry.append(remove);
+    manage.append(entry);
     card.append(title,info,actions);
     parent.append(card);
   }
@@ -663,6 +686,8 @@ function render() {
       }
     }
   }
+  const groupedIds = new Set(Object.values(visibleGroups()).flatMap(group => group.members));
+  byId('group-member-devices').hidden = groupedIds.size === 0;
   for (const d of status?.devices || []) {
     if (!cards.has(d.id)) {
       const article = document.createElement('article');
@@ -749,6 +774,8 @@ function render() {
       cards.set(d.id, card);
     }
     const card = cards.get(d.id);
+    const parent = byId(groupedIds.has(d.id) ? 'grouped-devices' : 'devices');
+    if (card.article.parentNode !== parent) parent.append(card.article);
     drawProduct(card,d);
     const {title, info, error, power} = card;
     power.on.classList.toggle("power-active", Boolean(d.mode && d.mode !== "off"));
@@ -860,7 +887,16 @@ let liveFrame = [];
 let previewRunning = false;
 let monitorSignature = '';
 function renderMonitor() {
-  const labels = monitorLabels[lang.value], devices = status?.devices || [];
+  const labels = monitorLabels[lang.value], physical = status?.devices || [];
+  const grouped = new Set(Object.values(visibleGroups()).flatMap(group => group.members));
+  const physicalById = new Map(physical.map(device => [device.id,device]));
+  const devices = physical.filter(device => !grouped.has(device.id));
+  for (const [id,group] of Object.entries(visibleGroups())) {
+    const members = group.members.map(key => physicalById.get(key)).filter(Boolean);
+    if (!members.length) continue;
+    devices.push({id,name:group.name,music:members.some(device => device.music),
+      mode:members.find(device => device.mode && device.mode !== 'off')?.mode});
+  }
   byId('monitor-count').textContent = devices.filter(d => d.music).length + ' / ' + devices.length + ' ' + labels[3];
   const signature = JSON.stringify([lang.value,devices.map(d => [d.id,d.name,d.mode,d.music])]);
   if (signature === monitorSignature) return;
@@ -873,7 +909,7 @@ function renderMonitor() {
     lamp.setAttribute('aria-hidden','true');
     tile.append(lamp,device.name);
     tile.onclick = () => {
-      const card = cards.get(device.id)?.article;
+      const card = groupCards.get(device.id) || cards.get(device.id)?.article;
       if (!card) return;
       card.scrollIntoView({block:'center'});
       card.focus({preventScroll:true});
@@ -1153,8 +1189,11 @@ byId('network-name-form').onsubmit = async event => {
     const result = await request('network/groups/name',{id,name});
     if (networkGroups[id]) networkGroups[id].name = result.name;
     if (networkNamingId === id) byId('network-name-dialog').close();
-    renderNetwork(networkRows,networkText[lang.value]);
-    refreshNetwork();
+    if (location.hash === '#netwerk') {
+      renderNetwork(networkRows,networkText[lang.value]);
+      refreshNetwork();
+    }
+    await refresh();
   } catch {
     byId('network-name-error').textContent = networkNameLabels[lang.value][4];
   } finally {
@@ -1963,7 +2002,7 @@ function translate() {
   silence.replaceChildren(...['restore','warm','fade'].map((value,index) => new Option(showLabel(6+index),value)));
   silence.value = previousSilence;
   byId('desk-music-title').textContent = detailsText[lang.value][0];
-  byId('group-title').textContent = extra(0);
+  byId('group-member-summary').textContent = groupViewLabels[lang.value][1];
   byId('group-name').placeholder = extra(1);
   byId('group-name').setAttribute('aria-label',extra(1));
   byId('group-save').textContent = extra(2);

@@ -1,6 +1,6 @@
 name: Twinkly Control Center Beta
 slug: twinkly_kerst_beta
-version: 0.1.44-beta.11
+version: 0.1.44-beta.12
 description: Probeer als eerste nieuwe Twinkly-lichtshows en muziekeffecten.
 url: https://github.com/ferrynl/ha-twinkly
 arch:

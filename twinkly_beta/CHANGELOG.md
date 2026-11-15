@@ -1,3 +1,8 @@
+# 0.1.44-beta.12
+
+- Toon herkende Twinkly-groepen in Instellingen en als één bedienbaar apparaat op de homepage.
+- Vermeld per groep de afzonderlijke lampen. Individuele bediening blijft beschikbaar via de uitklapbare lijst.
+
 # 0.1.44-beta.11
 
 - Geef groepen rechtstreeks op de netwerkkaart een naam. Namen voor herkende Twinkly-groepen blijven aan hun groeps-ID gekoppeld.
