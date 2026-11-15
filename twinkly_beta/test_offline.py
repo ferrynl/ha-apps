@@ -135,6 +135,36 @@ class OfflineDeviceTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual((await response.json())["devices"][0]["kind"], "offline")
         self.assertIsNone(self.device.wifi_observation)
 
+    async def test_native_group_is_one_control_target_and_respects_local_alias(self):
+        peer_row = dict(ROW, id="peer", name="Rand", ip="192.168.1.212")
+        peer = app.Device(peer_row, self.controller.limit, self.controller.realtime_socket)
+        self.addCleanup(peer.client.session.close)
+        self.controller.devices["peer"] = peer
+        with patch.object(self.device,"api",return_value={
+            "group": {"mode": "master", "master_id": "wall-sync", "name": "Muur"}
+        }), patch.object(peer,"api",side_effect=[
+            {"group": {"mode": "slave"}},
+            {"sync": {"mode": "slave", "master_id": "wall-sync"}},
+        ]):
+            self.device.load_native_group()
+            peer.load_native_group()
+        self.device.details_until = peer.details_until = app.time.monotonic() + 60
+
+        response = await self.client.get("/network")
+        native = (await response.json())["groups"]["native:wall-sync"]
+        self.assertEqual(native, {"name": "Muur", "members": ["wall", "peer"]})
+        with patch.object(self.device,"command") as first, patch.object(peer,"command") as second:
+            response = await self.client.post("/control", json={"group": "native:wall-sync", "action": "off"})
+            self.assertEqual(response.status, 200)
+            first.assert_called_once_with("off", None)
+            second.assert_called_once_with("off", None)
+
+        self.controller.groups["custom-wall"] = {"name": "Eigen Muur", "members": ["peer","wall"]}
+        response = await self.client.get("/network")
+        groups = (await response.json())["groups"]
+        self.assertNotIn("native:wall-sync", groups)
+        self.assertEqual(groups["custom-wall"]["name"], "Eigen Muur")
+
     async def test_removal_is_saved_and_group_still_works(self):
         online = await self.client.post("/remove-device", json={"id": "wall"})
         self.assertEqual(await online.json(), {"ok": False})

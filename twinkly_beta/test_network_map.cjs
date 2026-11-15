@@ -25,7 +25,7 @@ function createMap() {
     addEventListener() {}
     setAttribute() {}
     setPointerCapture() {}
-    closest() { return this.dataset.networkNode ? this : null; }
+    closest(selector) { return selector === '[data-network-node]' && this.dataset.networkNode ? this : null; }
   }
   const elements = new Map(), storage = new Map();
   const byId = id => {
@@ -35,12 +35,13 @@ function createMap() {
   const body = source + `
     return {renderNetwork, networkText, networkMap, networkCamera, fitNetwork,
             startNetworkGesture, moveNetworkGesture, endNetworkGesture, zoomNetwork,
+            setGroups: groups => { networkGroups = groups; },
             nodes: () => networkNodes, links: () => networkLinks};
   `;
-  const map = new Function('byId','document','localStorage','ResizeObserver','requestAnimationFrame','lang',body)(
+  const map = new Function('byId','document','localStorage','ResizeObserver','requestAnimationFrame','lang','button',body)(
     byId,{activeElement:null,createElement:()=>new Element(),addEventListener(){}},
     {getItem:key=>storage.get(key),setItem:(key,value)=>storage.set(key,value)},
-    class { observe() {} },()=>1,{value:'en'},
+    class { observe() {} },()=>1,{value:'en'},(parent,key,action)=>parent.append({key,action}),
   );
   return {map, storage, byId};
 }
@@ -93,4 +94,22 @@ test('dragged light keeps its position and link after refresh; the backdrop pans
   const worldX = (200-map.networkCamera.x)/map.networkCamera.scale;
   map.zoomNetwork(map.networkCamera.scale*1.3,200,100);
   assert.ok(Math.abs((200-map.networkCamera.x)/map.networkCamera.scale-worldX)<1e-9);
+});
+
+test('shows four grouped lights as one target with a single shared Wi-Fi link',()=>{
+  const {map,byId} = createMap();
+  const rows = lamps(5);
+  rows[3].kind = 'offline';
+  map.setGroups({wall:{name:'Muur',members:['0','1','2','3']}});
+  map.renderNetwork(rows,map.networkText.en);
+  assert.equal(map.nodes().size,3);
+  const group = map.nodes().get('group:wall');
+  assert.equal(group.el.children[0].textContent,'Muur');
+  assert.equal(group.el.children[1].textContent,'4 lights · 1 offline');
+  assert.equal(group.el.children[2].children.length,4);
+  assert.deepEqual(group.el.children[3].children.map(button=>button.key),['on','off']);
+  assert.equal(map.links().filter(([source])=>source===group).length,1);
+  byId('network-members').onclick();
+  assert.equal(map.nodes().size,6);
+  assert.equal(map.nodes().has('group:wall'),false);
 });
