@@ -1,6 +1,11 @@
-# 0.1.42-beta.1
+# 0.1.43-beta.1
 
 Bètaversie van Twinkly Control Center.
+
+# 0.1.43
+
+- Toon onbereikbare lampen als Offline en voeg een verwijderknop toe.
+- Schrijf verbindingsfouten, herstel en verwijdering naar de Home Assistant-app-logboeken.
 
 # 0.1.42
 
