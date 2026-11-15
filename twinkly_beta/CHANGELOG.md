@@ -1,3 +1,9 @@
+# 0.1.44-beta.1
+
+- Herken de Twinkly Curtain TWW210SPP met 210 RGB+W-leds en toon de officiële productfoto.
+- Breid modelherkenning en foto’s uit naar 28 productreeksen. Opgehaalde foto’s worden lokaal bewaard.
+- Toon het Twinkly-icoon bij onbekende modellen en bij ontbrekende foto’s. Ook offline lampen met een opgeslagen modelcode tonen hun productinformatie.
+
 # 0.1.43-beta.1
 
 Bètaversie van Twinkly Control Center.
