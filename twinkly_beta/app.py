@@ -1,4 +1,5 @@
 import asyncio
+from collections import Counter
 import base64
 import bisect
 import hashlib
@@ -458,6 +459,12 @@ class Device:
             else:
                 catalog.extend({"kind": kind, "id": index, "name": ""}
                                for index in range(min(256, int(data.get("effects_number", 0)))))
+        identities = Counter(entry["unique_id"] for entry in catalog if isinstance(entry.get("unique_id"), str))
+        for entry in catalog:
+            unique_id = entry.get("unique_id")
+            if (not isinstance(unique_id, str) or identities[unique_id] != 1
+                    or unique_id in ("00000000-0000-0000-0000-000000000000", "00000000-0000-0000-8000-000000000000")):
+                entry.pop("unique_id", None)
         self.effects = catalog
         self.effects_until = time.monotonic() + 120
 
