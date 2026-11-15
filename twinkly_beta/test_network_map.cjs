@@ -25,6 +25,8 @@ function createMap() {
     addEventListener() {}
     setAttribute() {}
     setPointerCapture() {}
+    showModal() { this.open = true; }
+    select() {}
     closest(selector) { return selector === '[data-network-node]' && this.dataset.networkNode ? this : null; }
   }
   const elements = new Map(), storage = new Map();
@@ -107,7 +109,10 @@ test('shows the join parent and four separate cards with membership links',()=>{
   assert.equal(group.el.children[0].textContent,'Muur');
   assert.equal(group.el.children[1].textContent,'Join (inferred) · 840 LEDs');
   assert.equal(group.el.children[2].textContent,'4 lights · 1 offline');
-  assert.deepEqual(group.el.children[3].children.map(button=>button.key),['on','off']);
+  assert.deepEqual(group.el.children[3].children.map(button=>button.key || button.textContent),['on','off','Rename']);
+  group.el.children[3].children[2].onclick();
+  assert.equal(byId('network-name-dialog').open,true);
+  assert.equal(byId('network-name').value,'Muur');
   assert.equal(group.y,map.nodes().get('device:4').y);
   const memberLinks = map.links().filter(([source,,kind])=>source===group && kind==='member');
   assert.deepEqual(memberLinks.map(([,target])=>target.id),['device:2','device:0','device:1','device:3']);

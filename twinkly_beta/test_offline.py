@@ -159,6 +159,20 @@ class OfflineDeviceTest(unittest.IsolatedAsyncioTestCase):
             first.assert_called_once_with("off", None)
             second.assert_called_once_with("off", None)
 
+        response = await self.client.post("/network/groups/name", json={
+            "id": "native:wall-sync", "name": "  Kerstmuur  ",
+        })
+        self.assertEqual(await response.json(), {"name": "Kerstmuur"})
+        response = await self.client.get("/network")
+        self.assertEqual((await response.json())["groups"]["native:wall-sync"]["name"], "Kerstmuur")
+        fresh = app.Controller(self.options)
+        self.addCleanup(fresh.realtime_socket.close)
+        self.assertEqual(fresh.native_group_names["native:wall-sync"], "Kerstmuur")
+        response = await self.client.post("/network/groups/name", json={
+            "id": "native:missing", "name": "Onbekend",
+        })
+        self.assertEqual(response.status, 404)
+
         self.controller.groups["custom-wall"] = {"name": "Eigen Muur", "members": ["peer","wall"]}
         response = await self.client.get("/network")
         groups = (await response.json())["groups"]

@@ -55,6 +55,9 @@ main{width:100%;max-width:none;padding:clamp(12px,2vw,32px)}
 .network-hub,.network-device{position:absolute;pointer-events:auto;cursor:grab;user-select:none;box-sizing:border-box;width:190px;padding:9px 12px;overflow-wrap:anywhere;color:#edf9ff;font-size:14px;line-height:1.25}
 .network-hub{border-radius:24px;border:1px solid #548799;background:#1c3543;text-align:center}
 .network-group{border-color:#7bc8a7}
+#network-name-dialog{color:#edf9ff;background:#122430;border:1px solid #526d7d;border-radius:14px;width:min(420px,calc(100% - 32px))}
+#network-name-dialog::backdrop{background:#091216b3}
+#network-name-dialog label,#network-name-dialog input{display:block;width:100%;margin-bottom:8px}
 .network-group .controls{margin-top:7px;gap:5px}
 .network-group .controls button{padding:3px 8px;cursor:pointer}
 .network-device{border:1px solid #526d7d;border-radius:14px;background:#122430}
@@ -125,6 +128,14 @@ main{width:100%;max-width:none;padding:clamp(12px,2vw,32px)}
 <div id="network-map" class="network-map" aria-labelledby="network-title" tabindex="0" hidden>
 <canvas id="network-lines" aria-hidden="true"></canvas><div id="network-world" class="network-world"></div>
 </div>
+<dialog id="network-name-dialog" aria-labelledby="network-name-label">
+<form id="network-name-form">
+<label id="network-name-label" for="network-name"></label>
+<input id="network-name" required maxlength="60" autocomplete="off">
+<p id="network-name-error" role="status"></p>
+<div class="controls"><button id="network-name-save" type="submit"></button><button id="network-name-cancel" type="button"></button></div>
+</form>
+</dialog>
 <div class="network-key"><span id="network-wifi-key"></span><span id="network-peer-key"></span><span id="network-member-key"></span></div>
 </section>
 <div id="settings-page" hidden><div class="settings-grid">
@@ -1112,6 +1123,44 @@ const networkGroupText = {
   es:['Mostrar luces individuales','luces','sin conexión'],
   de:['Einzelne Leuchten anzeigen','Leuchten','offline'],
 };
+const networkNameLabels = {
+  nl:['Naam wijzigen','Groepsnaam','Opslaan','Annuleren','De naam kon niet worden opgeslagen.'],
+  en:['Rename','Group name','Save','Cancel','Could not save the name.'],
+  es:['Cambiar nombre','Nombre del grupo','Guardar','Cancelar','No se pudo guardar el nombre.'],
+  de:['Umbenennen','Gruppenname','Speichern','Abbrechen','Der Name konnte nicht gespeichert werden.'],
+};
+let networkNamingId;
+function editNetworkGroupName(id,name) {
+  networkNamingId = id;
+  const labels = networkNameLabels[lang.value];
+  byId('network-name-label').textContent = labels[1];
+  byId('network-name-save').textContent = labels[2];
+  byId('network-name-cancel').textContent = labels[3];
+  byId('network-name-error').textContent = '';
+  const input = byId('network-name');
+  input.value = name;
+  byId('network-name-dialog').showModal();
+  input.select();
+}
+byId('network-name-cancel').onclick = () => byId('network-name-dialog').close();
+byId('network-name-form').onsubmit = async event => {
+  event.preventDefault();
+  const input = byId('network-name'), save = byId('network-name-save');
+  const id = networkNamingId, name = input.value.trim();
+  if (!name || save.disabled) return;
+  save.disabled = true;
+  try {
+    const result = await request('network/groups/name',{id,name});
+    if (networkGroups[id]) networkGroups[id].name = result.name;
+    if (networkNamingId === id) byId('network-name-dialog').close();
+    renderNetwork(networkRows,networkText[lang.value]);
+    refreshNetwork();
+  } catch {
+    byId('network-name-error').textContent = networkNameLabels[lang.value][4];
+  } finally {
+    save.disabled = false;
+  }
+};
 const networkMembership = {
   nl:['Lid van groep','Koppelen (afgeleid)'], en:['Group membership','Join (inferred)'],
   es:['Pertenencia al grupo','Unión (inferida)'], de:['Gruppenmitgliedschaft','Verbinden (abgeleitet)'],
@@ -1405,6 +1454,11 @@ function renderNetwork(rows, labels) {
       const actions = document.createElement('div');
       actions.className = 'controls';
       for (const action of ['on','off']) button(actions,action,() => run(undefined,action,undefined,id));
+      const rename = document.createElement('button');
+      rename.type = 'button';
+      rename.textContent = networkNameLabels[lang.value][0];
+      rename.onclick = () => editNetworkGroupName(id,group.name);
+      actions.append(rename);
       card.append(actions);
     }
   }
