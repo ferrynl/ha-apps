@@ -50,8 +50,8 @@ DESTINATION = Path("twinkly_beta/product_photos")
 def make_cutout(key, url, session):
     request = Request(url, headers={"User-Agent": "Mozilla/5.0"})
     with urlopen(request, timeout=25) as response:
-        raw = response.read(2_000_001)
-    if len(raw) > 2_000_000:
+        raw = response.read(12_000_001)
+    if len(raw) > 12_000_000:
         raise ValueError(f"{key}: source image is too large")
 
     with Image.open(BytesIO(raw)) as original:
