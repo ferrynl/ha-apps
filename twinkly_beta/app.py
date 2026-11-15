@@ -594,7 +594,7 @@ class Device:
 
     async def run(self, method, *args, automatic=False):
         async with self.lock, self.limit:
-            if self.removed:
+            if self.removed or (automatic and self.offline and time.monotonic() < self.retry):
                 return False
             replies = self.replies
             try:
@@ -632,7 +632,9 @@ class Device:
                     self.client.session.close()
                     self.client = self.connect()
                 warning = (operation, type(exc), status)
-                if not automatic or newly_offline or warning != self.last_warning or now - self.last_warning_at >= 60:
+                background_warning = (newly_offline or (not offline and (
+                    warning != self.last_warning or now - self.last_warning_at >= 60)))
+                if not automatic or background_warning:
                     LOG.warning("lamp=%r ip=%s actie=%s status=%s: %s",
                                 self.row["name"], self.row["ip"], operation, self.error, message)
                     self.last_warning, self.last_warning_at = warning, now
