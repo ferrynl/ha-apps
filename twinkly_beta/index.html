@@ -1112,6 +1112,12 @@ const networkGroupText = {
   es:['Mostrar luces individuales','luces','sin conexión'],
   de:['Einzelne Leuchten anzeigen','Leuchten','offline'],
 };
+const networkGroupStatus = {
+  nl:['Groep · Type niet gemeld','Lokale groep','Groepsleider','Groepslid'],
+  en:['Group · Type not reported','Local group','Group leader','Group member'],
+  es:['Grupo · Tipo no indicado','Grupo local','Controlador principal','Miembro del grupo'],
+  de:['Gruppe · Typ nicht gemeldet','Lokale Gruppe','Gruppenleiter','Gruppenmitglied'],
+};
 let networkGroups = {}, showNetworkMembers = false;
 const networkNudges = {ArrowLeft:[-1,0],ArrowRight:[1,0],ArrowUp:[0,-1],ArrowDown:[0,1]};
 const networkStorageKey = 'twinkly-network-positions-v1';
@@ -1365,6 +1371,7 @@ function renderNetwork(rows, labels) {
     return element;
   };
   const groupLabels = networkGroupText[lang.value];
+  const groupStatus = networkGroupStatus[lang.value];
   const groupNodes = [];
   byId('network-members').hidden = !Object.values(networkGroups).some(group => group.members.length >= 2);
   if (!showNetworkMembers) {
@@ -1376,6 +1383,7 @@ function renderNetwork(rows, labels) {
       const node = makeNode(card,'group:'+id,group.name);
       groupNodes.push(node);
       addText(card,'strong',group.name);
+      addText(card,'small',groupStatus[group.native || id.startsWith('native:') ? 0 : 1]);
       const offline = members.filter(row => row.kind === 'offline').length;
       addText(card,'small',members.length + ' ' + groupLabels[1] + (offline ? ' · ' + offline + ' ' + groupLabels[2] : ''));
       const list = document.createElement('ul');
@@ -1402,6 +1410,7 @@ function renderNetwork(rows, labels) {
     individualNodes.push(device);
     addText(card,'strong',row.name);
     addText(card,'small',row.ip);
+    if (row.group_role) addText(card,'small',groupStatus[row.group_role === 'master' ? 2 : 3]);
     if (row.kind === 'offline' || row.kind === 'unknown') {
       addText(card,'span',labels[row.kind === 'offline' ? 8 : 9]);
       continue;

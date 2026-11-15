@@ -444,6 +444,7 @@ class Device:
         self.details_until = time.monotonic() + 60
 
     def load_native_group(self):
+        reported = None
         for path, field in (("summary", "group"), ("led/movie/config", "sync")):
             try:
                 group = self.api(path).get(field)
@@ -453,13 +454,17 @@ class Device:
                 continue
             role, master = group.get("mode"), group.get("master_id")
             if role == "none":
-                self.native_group = None
-                return
-            if role in ("master", "slave") and isinstance(master, str) and master.strip():
+                break
+            if role in ("master", "slave"):
                 name = group.get("name")
-                self.native_group = (master.strip(), role, name.strip() if isinstance(name, str) else "")
-                return
-        self.native_group = None
+                label = name.strip() if isinstance(name, str) else ""
+                master = master.strip() if isinstance(master, str) else ""
+                if master:
+                    self.native_group = (master, role, label)
+                    return
+                if reported is None:
+                    reported = ("", role, label)
+        self.native_group = reported
 
     def load_layout(self):
         if time.monotonic() < self.layout_until:
@@ -845,8 +850,12 @@ class Controller:
             for key, group in self.groups.items()
         }
         for key, group in self.native_groups().items():
-            if not any(set(group["members"]) == set(local["members"]) for local in groups.values()):
+            local = next((local for local in groups.values()
+                          if set(group["members"]) == set(local["members"])), None)
+            if local is None:
                 groups[key] = group
+            else:
+                local["native"] = True
         return web.json_response({"devices": rows, "groups": groups}, headers={"Cache-Control": "no-store"})
 
     def native_groups(self):
@@ -854,7 +863,8 @@ class Controller:
         for key, device in self.devices.items():
             if device.native_group:
                 master, role, name = device.native_group
-                by_master.setdefault(master, []).append((key, role, name))
+                if master:
+                    by_master.setdefault(master, []).append((key, role, name))
         groups = {}
         for master, entries in by_master.items():
             leaders = [key for key, role, _ in entries if role == "master"]
@@ -890,6 +900,8 @@ class Controller:
     def network_row(device):
         row = {key: device.row[key] for key in ("id", "name", "ip")}
         details = device.network_details
+        if device.native_group and not device.offline:
+            row["group_role"] = device.native_group[1]
         row["kind"] = "unknown"
         if device.offline:
             row["kind"] = "offline"

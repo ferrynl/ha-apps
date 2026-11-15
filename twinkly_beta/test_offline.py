@@ -165,6 +165,18 @@ class OfflineDeviceTest(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("native:wall-sync", groups)
         self.assertEqual(groups["custom-wall"]["name"], "Eigen Muur")
 
+    async def test_group_role_without_master_id_is_visible_without_guessing_members(self):
+        with patch.object(self.device,"api",side_effect=[
+            {"group": {"mode": "slave"}},
+            {"sync": {"mode": "slave", "slave_id": "one"}},
+        ]):
+            self.device.load_native_group()
+        self.device.details_until = app.time.monotonic() + 60
+        response = await self.client.get("/network")
+        payload = await response.json()
+        self.assertEqual(payload["devices"][0]["group_role"], "slave")
+        self.assertFalse(any(key.startswith("native:") for key in payload["groups"]))
+
     async def test_removal_is_saved_and_group_still_works(self):
         online = await self.client.post("/remove-device", json={"id": "wall"})
         self.assertEqual(await online.json(), {"ok": False})

@@ -1,3 +1,8 @@
+# 0.1.44-beta.9
+
+- Toon op de netwerkkaart of een lamp groepsleider of groepslid meldt, ook als de groeps-ID ontbreekt.
+- Maak een door Twinkly gemelde groep en een lokale groep herkenbaar. Een groepsnaam of modus wordt niet uit de rol afgeleid.
+
 # 0.1.44-beta.8
 
 - Toon groepen op de netwerkkaart als één bedienbare kaart met aan/uit, groepsleden en offline-aantal.
