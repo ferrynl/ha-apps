@@ -1,4 +1,5 @@
 import asyncio
+from collections import Counter
 import base64
 import bisect
 import hashlib
@@ -452,11 +453,18 @@ class Device:
             except ApplicationError:
                 continue
             if kind == "movie":
-                catalog.extend({"kind": kind, "id": item["id"], "name": item.get("name", "")}
+                catalog.extend({"kind": kind, "id": item["id"], "name": item.get("name", ""),
+                                "unique_id": item.get("unique_id")}
                                for item in data.get("movies", []) if type(item.get("id")) is int)
             else:
                 catalog.extend({"kind": kind, "id": index, "name": ""}
                                for index in range(min(256, int(data.get("effects_number", 0)))))
+        identities = Counter(entry["unique_id"] for entry in catalog if isinstance(entry.get("unique_id"), str))
+        for entry in catalog:
+            unique_id = entry.get("unique_id")
+            if (not isinstance(unique_id, str) or identities[unique_id] != 1
+                    or unique_id in ("00000000-0000-0000-0000-000000000000", "00000000-0000-0000-8000-000000000000")):
+                entry.pop("unique_id", None)
         self.effects = catalog
         self.effects_until = time.monotonic() + 120
 
@@ -883,6 +891,12 @@ class Controller:
         fingerprint = hashlib.sha256(f"{key}/{kind}/{index}".encode()).hexdigest()
         return IMAGES / (fingerprint + ".jpg")
 
+    @staticmethod
+    def effect_gif_path(key, entry):
+        identity = entry.get("unique_id") or (entry["id"], entry["name"])
+        fingerprint = hashlib.sha256(json.dumps([key, entry["kind"], identity]).encode()).hexdigest()
+        return IMAGES / (fingerprint + ".gif")
+
     async def twinkly_wordmark(self, request):
         if not WORDMARK.is_file():
             async with self.photo_lock:
@@ -925,28 +939,46 @@ class Controller:
         key = request.query.get("id")
         kind = request.query.get("kind")
         index = request.query.get("index", "")
-        if key not in self.devices or kind not in ("movie", "effect") or not re.fullmatch(r"[0-9]{1,3}", index):
+        device = self.devices.get(key)
+        if device is None or kind not in ("movie", "effect") or not re.fullmatch(r"[0-9]{1,3}", index):
             raise web.HTTPNotFound()
-        path = self.image_path(key, kind, int(index))
+        index = int(index)
+        entry = next((item for item in device.effects if item["kind"] == kind and item["id"] == index), None)
+        if entry is None:
+            raise web.HTTPNotFound()
+        gif = self.effect_gif_path(key, entry)
+        still = self.image_path(key, kind, index)
+        if request.query.get("ref", gif.stem) != gif.stem:
+            raise web.HTTPNotFound()
         if request.method == "GET":
+            path = gif if gif.is_file() else still
             if not path.is_file():
                 raise web.HTTPNotFound()
             return web.FileResponse(path, headers={"Cache-Control": "no-cache", "X-Content-Type-Options": "nosniff"})
         data = await request.json()
-        image = data.get("image")
+        if not isinstance(data, dict) or "image" not in data:
+            raise web.HTTPBadRequest()
+        image = data["image"]
         if image is None:
-            path.unlink(missing_ok=True)
-        else:
-            try:
-                raw = base64.b64decode(image, validate=True)
-            except (ValueError, TypeError):
-                raise web.HTTPBadRequest()
-            if not 4 <= len(raw) <= 160_000 or not raw.startswith(b"\xff\xd8\xff") or not raw.endswith(b"\xff\xd9"):
-                raise web.HTTPBadRequest()
-            IMAGES.mkdir(exist_ok=True)
-            temp = path.with_suffix(".tmp")
-            temp.write_bytes(raw)
-            temp.replace(path)
+            gif.unlink(missing_ok=True)
+            still.unlink(missing_ok=True)
+            return web.json_response({"ok": True})
+        try:
+            raw = base64.b64decode(image, validate=True)
+            if raw.startswith((b"GIF87a", b"GIF89a")):
+                await asyncio.to_thread(self.decode_gif, raw)
+                path, previous = gif, still
+            elif (4 <= len(raw) <= 160_000 and raw.startswith(b"\xff\xd8\xff") and raw.endswith(b"\xff\xd9")):
+                path, previous = still, gif
+            else:
+                raise ValueError("Unsupported preview format")
+        except (ValueError, TypeError, OSError, SyntaxError, Image.DecompressionBombError) as exc:
+            raise web.HTTPBadRequest() from exc
+        IMAGES.mkdir(exist_ok=True)
+        temp = path.with_suffix(".tmp")
+        temp.write_bytes(raw)
+        temp.replace(path)
+        previous.unlink(missing_ok=True)
         return web.json_response({"ok": True})
 
     @staticmethod
@@ -1143,8 +1175,13 @@ class Controller:
         if device is None:
             raise web.HTTPNotFound()
         ok = await device.run(device.load_effects)
-        catalog = [dict(entry, has_image=self.image_path(device.row["id"], entry["kind"], entry["id"]).is_file())
-                   for entry in device.effects] if ok else []
+        catalog = []
+        if ok:
+            key = device.row["id"]
+            for entry in device.effects:
+                gif = self.effect_gif_path(key, entry)
+                still = self.image_path(key, entry["kind"], entry["id"])
+                catalog.append(dict(entry, preview_ref=gif.stem, has_image=gif.is_file() or still.is_file()))
         return web.json_response({"effects": catalog, "error": None if ok else device.error})
 
     @staticmethod

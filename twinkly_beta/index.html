@@ -153,10 +153,10 @@ const layoutLabels = {
  de:['LED-Karte laden','Keine LED-Positionen empfangen','LED-Positionen','Berechnetes Layout','LED-Karte drehen']
 };
 const extraLabels = {
- nl:['Groepen','Groepsnaam','Groep opslaan','Annuleren','Bewerken','Verwijderen','Selecteer minstens één lamp.','Afbeelding uploaden','Afbeelding verwijderen','Kies een JPG, PNG of WebP van maximaal 10 MB.'],
- en:['Groups','Group name','Save group','Cancel','Edit','Delete','Select at least one light.','Upload image','Remove image','Choose a JPG, PNG or WebP up to 10 MB.'],
- es:['Grupos','Nombre del grupo','Guardar grupo','Cancelar','Editar','Eliminar','Selecciona al menos una luz.','Subir imagen','Quitar imagen','Elige un JPG, PNG o WebP de hasta 10 MB.'],
- de:['Gruppen','Gruppenname','Gruppe speichern','Abbrechen','Bearbeiten','Löschen','Wähle mindestens ein Licht aus.','Bild hochladen','Bild entfernen','Wähle ein JPG, PNG oder WebP bis 10 MB.']
+ nl:['Groepen','Groepsnaam','Groep opslaan','Annuleren','Bewerken','Verwijderen','Selecteer minstens één lamp.','Afbeelding of GIF uploaden','Afbeelding verwijderen','Kies een JPG, PNG of WebP van maximaal 10 MB.'],
+ en:['Groups','Group name','Save group','Cancel','Edit','Delete','Select at least one light.','Upload image or GIF','Remove image','Choose a JPG, PNG or WebP up to 10 MB.'],
+ es:['Grupos','Nombre del grupo','Guardar grupo','Cancelar','Editar','Eliminar','Selecciona al menos una luz.','Subir imagen o GIF','Quitar imagen','Elige un JPG, PNG o WebP de hasta 10 MB.'],
+ de:['Gruppen','Gruppenname','Gruppe speichern','Abbrechen','Bearbeiten','Löschen','Wähle mindestens ein Licht aus.','Bild oder GIF hochladen','Bild entfernen','Wähle ein JPG, PNG oder WebP bis 10 MB.']
 };
 const extra = index => extraLabels[lang.value][index];
 const detailsText = {
@@ -399,6 +399,12 @@ async function encodeImage(file) {
     return canvas.toDataURL('image/jpeg',.82).split(',')[1];
   } finally { bitmap.close(); }
 }
+const effectGifLimit = {
+ nl:'Kies een GIF van maximaal 512 KiB.',
+ en:'Choose a GIF up to 512 KiB.',
+ es:'Elige un GIF de hasta 512 KiB.',
+ de:'Wähle ein GIF mit maximal 512 KiB.'
+};
 function renderEffects(card) {
   card.grid.replaceChildren();
   card.manageGrid.replaceChildren();
@@ -429,7 +435,7 @@ function renderEffects(card) {
       manageTitle.textContent = title.textContent;
       byId('message').textContent = t('done');
     };
-    const imagePath = 'effect-image?' + new URLSearchParams({id:card.id,kind:entry.kind,index:entry.id});
+    const imagePath = 'effect-image?' + new URLSearchParams({id:card.id,kind:entry.kind,index:entry.id,ref:entry.preview_ref});
     const image = document.createElement('img');
     image.className = 'effect-image'; image.alt = title.textContent; image.hidden = true;
     const remove = document.createElement('button');
@@ -437,14 +443,19 @@ function renderEffects(card) {
     image.onload = () => { image.hidden = false; remove.hidden = false; };
     image.onerror = () => { image.hidden = true; remove.hidden = true; };
     const upload = document.createElement('input');
-    upload.type = 'file'; upload.accept = 'image/jpeg,image/png,image/webp';
+    upload.type = 'file'; upload.accept = 'image/gif,.gif,image/jpeg,image/png,image/webp';
     upload.setAttribute('aria-label',extra(7));
     const uploadLabel = document.createElement('label');
     uploadLabel.textContent = extra(7); uploadLabel.append(upload);
     upload.onchange = () => {
       if (!upload.files.length) return;
       perform(upload, async () => {
-        const encoded = await encodeImage(upload.files[0]);
+        const file = upload.files[0];
+        const isGif = file.type === 'image/gif' || /\.gif$/i.test(file.name);
+        if (isGif && file.size > 512 * 1024) throw Error(effectGifLimit[lang.value]);
+        const encoded = isGif
+          ? encodeGifBytes(new Uint8Array(await file.arrayBuffer()))
+          : await encodeImage(file);
         await request(imagePath,{image:encoded});
         upload.value = '';
         entry.has_image = true;
