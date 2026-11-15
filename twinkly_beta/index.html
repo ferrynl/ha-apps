@@ -47,17 +47,21 @@ main{width:100%;max-width:none;padding:clamp(12px,2vw,32px)}
 #music-demo-link[hidden]{display:none}
 #music-style-grid .matrix-tile img{width:100%;aspect-ratio:1;object-fit:contain;background:#101927;border-radius:5px}
 #music-style-grid .matrix-tile[aria-pressed="true"]{border-color:#a6e6d0;color:#b7ffe8}
-.network-map{position:relative;isolation:isolate;display:grid;gap:24px;padding:36px clamp(12px,3vw,28px) 24px;border:1px solid #3d5766;border-radius:36px;background:radial-gradient(ellipse at 50% 0%,#264452,#111e29 70%);margin-top:14px}
-.network-map[hidden],.network-hubs[hidden]{display:none}
-.network-map canvas{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:-1}
-.network-hubs,.network-devices{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(min(100%,175px),1fr))}
-.network-hubs{justify-items:center}
-.network-hub,.network-device{padding:10px 12px;min-width:0;overflow-wrap:anywhere;color:#edf9ff}
+.network-map{position:relative;isolation:isolate;height:clamp(420px,78vh,1600px);height:clamp(420px,78dvh,1600px);overflow:hidden;border:1px solid #3d5766;border-radius:22px;background:radial-gradient(ellipse at 50% 0%,#264452,#111e29 70%);margin-top:12px;touch-action:none;cursor:grab}
+.network-map[hidden],.network-tools[hidden]{display:none}
+.network-map.is-dragging,.network-map.is-dragging *{cursor:grabbing}
+.network-map canvas,.network-world{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+.network-world{transform-origin:top left}
+.network-hub,.network-device{position:absolute;pointer-events:auto;cursor:grab;user-select:none;box-sizing:border-box;width:190px;padding:9px 12px;overflow-wrap:anywhere;color:#edf9ff;font-size:14px;line-height:1.25}
 .network-hub{border-radius:24px;border:1px solid #548799;background:#1c3543;text-align:center}
 .network-device{border:1px solid #526d7d;border-radius:14px;background:#122430}
-.network-device strong,.network-device small,.network-device span{display:block}
+.network-device strong,.network-device small,.network-device span,.network-hub strong,.network-hub small{display:block}
 .network-device small,.network-hub small{color:#c2d8e4}
 .network-device .network-signal{color:var(--signal,#c2d8e4);font-weight:bold}
+.network-tools{display:flex;align-items:center;flex-wrap:wrap;gap:6px}
+.network-tools output{min-width:4ch;text-align:center;font-variant-numeric:tabular-nums}
+#network-page.is-expanded{position:fixed;inset:0;z-index:10;overflow:auto;border-radius:0;margin:0;padding:12px;background:#101e24}
+#network-page.is-expanded .network-map{height:calc(100dvh - 155px);min-height:220px;max-height:none}
 .network-key{display:flex;flex-wrap:wrap;gap:8px 20px;margin:.75rem 0;color:#c2d8e4}
 .network-key span::before{content:'';display:inline-block;width:22px;margin-right:6px;vertical-align:middle;border-top:2px solid #6ccde7}
 .network-key span+span::before{border-color:#d0a4ff;border-top-style:dashed}
@@ -109,9 +113,12 @@ main{width:100%;max-width:none;padding:clamp(12px,2vw,32px)}
 <section id="network-page" aria-labelledby="network-title" hidden>
 <div class="music-heading"><h2 id="network-title"></h2><button id="network-refresh" type="button"></button></div>
 <p id="network-help"></p><p id="network-status" role="status"></p>
-<div id="network-map" class="network-map" hidden>
-<canvas id="network-lines" aria-hidden="true"></canvas><div id="network-hubs" class="network-hubs"></div>
-<div id="network-devices" class="network-devices"></div>
+<div id="network-tools" class="network-tools" hidden>
+<button id="network-zoom-out" type="button">−</button><output id="network-scale"></output><button id="network-zoom-in" type="button">+</button>
+<button id="network-fit" type="button"></button><button id="network-reset" type="button"></button><button id="network-expand" type="button" aria-pressed="false"></button>
+</div>
+<div id="network-map" class="network-map" aria-labelledby="network-title" tabindex="0" hidden>
+<canvas id="network-lines" aria-hidden="true"></canvas><div id="network-world" class="network-world"></div>
 </div>
 <div class="network-key"><span id="network-wifi-key"></span><span id="network-peer-key"></span></div>
 </section>
@@ -1087,41 +1094,249 @@ const networkText = {
   es: ['Red','Actualizar','La duración Wi-Fi se cuenta desde la primera observación de esta conexión. El mapa se actualiza mientras esta página esté abierta.','Midiendo…','No se pudieron cargar los datos de red.','No hay dispositivos Twinkly registrados.','Red Wi-Fi','Conexión directa a través de una luz','Sin conexión','Conexión desconocida','Punto de acceso','Señal desconocida','Fuerte','Buena','Débil','Wi-Fi observado','A través de','Puerta de enlace','Canal'],
   de: ['Netzwerk','Aktualisieren','Die WLAN-Dauer beginnt mit der ersten Beobachtung dieser Verbindung. Die Karte aktualisiert sich automatisch, solange diese Seite geöffnet ist.','Messung läuft…','Netzwerkdaten konnten nicht geladen werden.','Keine Twinkly-Geräte registriert.','WLAN','Direkte Verbindung über eine Leuchte','Offline','Verbindung unbekannt','Zugangspunkt','Signal unbekannt','Stark','Gut','Schwach','WLAN beobachtet','Über','Gateway','Kanal'],
 };
-const networkMap = byId('network-map');
-let networkTimer, networkPending = false, networkLinks = [];
+const networkMap = byId('network-map'), networkWorld = byId('network-world');
+const networkControls = {
+  nl: ['Uitzoomen','Inzoomen','Alles in beeld','Indeling herstellen','Schermvullend','Verkleinen','Sleep lampen of verschuif de kaart. Zoom met het muiswiel, twee vingers of de knoppen.'],
+  en: ['Zoom out','Zoom in','Fit all','Reset layout','Full screen','Exit full screen','Drag lights or pan the map. Zoom with the wheel, two fingers or the buttons.'],
+  es: ['Alejar','Acercar','Ver todo','Restablecer disposición','Pantalla completa','Salir de pantalla completa','Arrastra las luces o desplaza el mapa. Usa la rueda, dos dedos o los botones para ampliar.'],
+  de: ['Verkleinern','Vergrößern','Alles anzeigen','Anordnung zurücksetzen','Vollbild','Vollbild verlassen','Ziehe Leuchten oder verschiebe die Karte. Zoome mit dem Mausrad, zwei Fingern oder den Schaltflächen.'],
+};
+const networkNudges = {ArrowLeft:[-1,0],ArrowRight:[1,0],ArrowUp:[0,-1],ArrowDown:[0,1]};
+const networkStorageKey = 'twinkly-network-positions-v1';
+let networkTimer, networkPending = false, networkLinks = [], networkNodes = new Map();
+let networkRows = [], networkQueued, networkFrame, networkAutoFit = true;
+const networkCamera = {x:0,y:0,scale:1};
+const networkPointers = new Map();
+let networkGesture;
+let networkPositions;
+try { networkPositions = new Map(JSON.parse(localStorage.getItem(networkStorageKey) || '[]')); }
+catch { networkPositions = new Map(); }
+
+function placeNetworkNode(node,x,y) {
+  node.x = x;
+  node.y = y;
+  node.el.style.left = x + 'px';
+  node.el.style.top = y + 'px';
+}
+function saveNetworkPositions() {
+  try { localStorage.setItem(networkStorageKey,JSON.stringify([...networkPositions])); }
+  catch { /* Keep the current layout when storage is unavailable. */ }
+}
+function queueNetworkDraw() {
+  if (networkFrame == null) networkFrame = requestAnimationFrame(() => {
+    networkFrame = null;
+    drawNetwork();
+  });
+}
 function drawNetwork() {
   if (networkMap.hidden || byId('network-page').hidden) return;
-  const canvas = byId('network-lines'), bounds = canvas.getBoundingClientRect();
+  const canvas = byId('network-lines');
+  const width = networkMap.clientWidth, height = networkMap.clientHeight;
   const ratio = window.devicePixelRatio || 1;
-  canvas.width = Math.round(bounds.width * ratio);
-  canvas.height = Math.round(bounds.height * ratio);
+  const pixelsWide = Math.round(width * ratio), pixelsHigh = Math.round(height * ratio);
+  if (canvas.width !== pixelsWide) canvas.width = pixelsWide;
+  if (canvas.height !== pixelsHigh) canvas.height = pixelsHigh;
   const ctx = canvas.getContext('2d');
   if (!ctx) return;
-  ctx.scale(ratio, ratio);
-  for (const [source, target, peer] of networkLinks) {
-    const a = source.getBoundingClientRect(), b = target.getBoundingClientRect();
-    const x1 = a.left + a.width / 2 - bounds.left;
-    const x2 = b.left + b.width / 2 - bounds.left;
-    const sameRow = Math.abs(a.top - b.top) < 4;
-    const y1 = (sameRow ? a.top + 8 : a.top + a.height / 2) - bounds.top;
-    const y2 = (sameRow ? b.top + 8 : b.top + b.height / 2) - bounds.top;
-    const curve = sameRow ? Math.min(y1,y2) - 36 : (y1 + y2) / 2;
+  const {x,y,scale} = networkCamera;
+  networkWorld.style.transform = 'translate(' + x + 'px,' + y + 'px) scale(' + scale + ')';
+  byId('network-scale').textContent = Math.round(scale * 100) + '%';
+  ctx.setTransform(ratio,0,0,ratio,0,0);
+  ctx.clearRect(0,0,width,height);
+  for (const [a,b,peer] of networkLinks) {
+    const x1 = (a.x + a.width / 2) * scale + x, x2 = (b.x + b.width / 2) * scale + x;
+    const y1 = (a.y + a.height / 2) * scale + y, y2 = (b.y + b.height / 2) * scale + y;
+    const curve = Math.abs(y1-y2) < 12 ? y1 - (Math.max(a.height,b.height) / 2 + 35) * scale : (y1+y2)/2;
     ctx.beginPath();
-    ctx.strokeStyle = peer ? '#d0a4ff' : '#6ccde7';
-    ctx.lineWidth = peer ? 2.5 : 1.5;
+    ctx.strokeStyle = peer ? '#d0a4ff' : '#6ccde7a6';
+    ctx.lineWidth = peer ? 2 : 1.25;
     ctx.setLineDash(peer ? [6,4] : []);
     ctx.moveTo(x1,y1);
     ctx.bezierCurveTo(x1,curve,x2,curve,x2,y2);
     ctx.stroke();
   }
 }
-new ResizeObserver(drawNetwork).observe(networkMap);
+function fitNetwork() {
+  const width = networkMap.clientWidth, height = networkMap.clientHeight;
+  if (!networkNodes.size || width < 1 || height < 1) return;
+  const nodes = [...networkNodes.values()];
+  const left = Math.min(...nodes.map(node => node.x));
+  const top = Math.min(...nodes.map(node => node.y));
+  const contentWidth = Math.max(...nodes.map(node => node.x + node.width)) - left;
+  const contentHeight = Math.max(...nodes.map(node => node.y + node.height)) - top;
+  const scale = Math.min(1.45,Math.max(1,width-48)/contentWidth,Math.max(1,height-58)/contentHeight);
+  Object.assign(networkCamera,{scale,x:(width-contentWidth*scale)/2-left*scale,y:(height-contentHeight*scale)/2-top*scale});
+  queueNetworkDraw();
+}
+function zoomNetwork(scale,x,y) {
+  scale = Math.max(.05,Math.min(3,scale));
+  const factor = scale / networkCamera.scale;
+  networkCamera.x = x - (x-networkCamera.x)*factor;
+  networkCamera.y = y - (y-networkCamera.y)*factor;
+  networkCamera.scale = scale;
+  networkAutoFit = false;
+  queueNetworkDraw();
+}
+function zoomNetworkCenter(factor) {
+  zoomNetwork(networkCamera.scale*factor,networkMap.clientWidth/2,networkMap.clientHeight/2);
+}
+function positionNetworkRows(hubs, devices) {
+  const columns = Math.ceil(Math.sqrt(devices.length * 1.25));
+  const stepX = 232;
+  const stepY = Math.max(130,...devices.map(node => node.height)) + 52;
+  const layout = (nodes,columns,y,stepY) => nodes.forEach((node,i) => {
+    const row = Math.floor(i/columns);
+    const rowSize = Math.min(columns,nodes.length-row*columns);
+    const saved = networkPositions.get(node.id);
+    if (Array.isArray(saved) && saved.length === 2 && saved.every(Number.isFinite)) {
+      placeNetworkNode(node,...saved);
+    } else {
+      placeNetworkNode(node,(i%columns-(rowSize-1)/2)*stepX,y+row*stepY);
+    }
+  });
+  const hubColumns = Math.max(1,columns);
+  const hubStep = Math.max(40,...hubs.map(node => node.height)) + 35;
+  layout(hubs,hubColumns,0,hubStep);
+  layout(devices,columns,hubs.length ? Math.ceil(hubs.length/hubColumns)*hubStep+38 : 0,stepY);
+}
+new ResizeObserver(() => {
+  if (networkAutoFit) fitNetwork();
+  queueNetworkDraw();
+}).observe(networkMap);
+function networkPointer(event) {
+  const rect = networkMap.getBoundingClientRect();
+  return {x:event.clientX-rect.left,y:event.clientY-rect.top};
+}
+function networkPinch() {
+  const [a,b] = networkPointers.values();
+  return {x:(a.x+b.x)/2,y:(a.y+b.y)/2,distance:Math.hypot(a.x-b.x,a.y-b.y)};
+}
+function startNetworkGesture(event) {
+  if (event.button !== 0 || networkPointers.size >= 2) return;
+  const point = networkPointer(event);
+  networkPointers.set(event.pointerId,point);
+  networkMap.setPointerCapture(event.pointerId);
+  if (networkPointers.size === 2) {
+    if (networkGesture.node && networkGesture.moved) saveNetworkPositions();
+    networkGesture = networkPinch();
+  } else {
+    const id = event.target.closest('[data-network-node]')?.dataset.networkNode;
+    networkGesture = {...point,node:networkNodes.get(id),moved:false};
+  }
+  networkMap.classList.add('is-dragging');
+}
+function moveNetworkGesture(event) {
+  if (!networkPointers.has(event.pointerId)) return;
+  const point = networkPointer(event);
+  networkPointers.set(event.pointerId,point);
+  if (networkPointers.size === 2) {
+    const next = networkPinch();
+    const factor = networkGesture.distance > 0 ? next.distance/networkGesture.distance : 1;
+    zoomNetwork(networkCamera.scale*factor,networkGesture.x,networkGesture.y);
+    networkCamera.x += next.x-networkGesture.x;
+    networkCamera.y += next.y-networkGesture.y;
+    networkGesture = next;
+  } else {
+    const dx = point.x-networkGesture.x, dy = point.y-networkGesture.y;
+    if (!networkGesture.moved && Math.hypot(dx,dy) < 3) return;
+    const node = networkGesture.node;
+    if (node) {
+      placeNetworkNode(node,node.x + dx/networkCamera.scale,node.y + dy/networkCamera.scale);
+      networkPositions.set(node.id,[node.x,node.y]);
+    } else {
+      networkCamera.x += dx;
+      networkCamera.y += dy;
+    }
+    networkGesture = {...point,node,moved:true};
+  }
+  networkAutoFit = false;
+  queueNetworkDraw();
+}
+function endNetworkGesture(event) {
+  if (!networkPointers.delete(event.pointerId)) return;
+  if (networkGesture.node && networkGesture.moved) saveNetworkPositions();
+  if (networkPointers.size) {
+    networkGesture = {...networkPointers.values().next().value,moved:true};
+    return;
+  }
+  networkGesture = null;
+  networkMap.classList.remove('is-dragging');
+  if (networkQueued) {
+    const rows = networkQueued;
+    networkQueued = null;
+    renderNetwork(rows,networkText[lang.value]);
+  }
+}
+networkMap.addEventListener('pointerdown',startNetworkGesture);
+networkMap.addEventListener('pointermove',moveNetworkGesture);
+for (const event of ['pointerup','pointercancel','lostpointercapture']) {
+  networkMap.addEventListener(event,endNetworkGesture);
+}
+networkMap.addEventListener('wheel',event => {
+  event.preventDefault();
+  const {x,y} = networkPointer(event);
+  zoomNetwork(networkCamera.scale*Math.exp(-Math.max(-200,Math.min(200,event.deltaY))*.0025),x,y);
+},{passive:false});
+networkMap.addEventListener('keydown',event => {
+  const direction = networkNudges[event.key];
+  if (!direction) return;
+  event.preventDefault();
+  const id = event.target.closest('[data-network-node]')?.dataset.networkNode;
+  const node = networkNodes.get(id);
+  const [dx,dy] = direction;
+  if (node) {
+    placeNetworkNode(node,node.x+dx*16,node.y+dy*16);
+    networkPositions.set(id,[node.x,node.y]);
+    saveNetworkPositions();
+  } else {
+    networkCamera.x -= dx*50;
+    networkCamera.y -= dy*50;
+  }
+  networkAutoFit = false;
+  queueNetworkDraw();
+});
+function setNetworkExpanded(expanded) {
+  const page = byId('network-page'), button = byId('network-expand');
+  page.classList.toggle('is-expanded',expanded);
+  button.setAttribute('aria-pressed',String(expanded));
+  button.textContent = networkControls[lang.value][expanded ? 5 : 4];
+}
+byId('network-zoom-out').onclick = () => zoomNetworkCenter(.8);
+byId('network-zoom-in').onclick = () => zoomNetworkCenter(1.25);
+byId('network-fit').onclick = () => { networkAutoFit = true; fitNetwork(); };
+byId('network-reset').onclick = () => {
+  networkPositions.clear();
+  saveNetworkPositions();
+  networkAutoFit = true;
+  renderNetwork(networkRows,networkText[lang.value]);
+};
+byId('network-expand').onclick = () => setNetworkExpanded(!byId('network-page').classList.contains('is-expanded'));
+document.addEventListener('keydown',event => {
+  if (event.key === 'Escape' && byId('network-page').classList.contains('is-expanded')) {
+    setNetworkExpanded(false);
+    byId('network-expand').focus();
+  }
+});
 function renderNetwork(rows, labels) {
-  const hubs = byId('network-hubs'), devices = byId('network-devices');
-  hubs.replaceChildren();
-  devices.replaceChildren();
+  if (networkGesture) {
+    networkQueued = rows;
+    return;
+  }
+  networkRows = rows;
+  const networkFocus = document.activeElement?.dataset.networkNode;
+  networkWorld.replaceChildren();
   networkLinks = [];
-  networkMap.hidden = !rows.length;
+  networkNodes = new Map();
+  networkMap.hidden = byId('network-tools').hidden = !rows.length;
+  const makeNode = (el,id,label) => {
+    el.dataset.networkNode = id;
+    el.tabIndex = 0;
+    el.setAttribute('aria-label',label);
+    const node = {el,id};
+    networkNodes.set(id,node);
+    networkWorld.append(el);
+    return node;
+  };
   const hubNodes = new Map(), deviceNodes = new Map();
   const byDevice = new Map(rows.map(row => [row.id,row]));
   const addText = (parent, tag, content) => {
@@ -1133,8 +1348,8 @@ function renderNetwork(rows, labels) {
   for (const row of rows) {
     const card = document.createElement('article');
     card.className = 'network-device';
-    deviceNodes.set(row.id, card);
-    devices.append(card);
+    const device = makeNode(card,'device:'+row.id,row.name);
+    deviceNodes.set(row.id,device);
     addText(card,'strong',row.name);
     addText(card,'small',row.ip);
     if (row.kind === 'offline' || row.kind === 'unknown') {
@@ -1164,16 +1379,21 @@ function renderNetwork(rows, labels) {
       if (row.bssid || row.gateway) {
         addText(hub,'small',row.bssid || labels[17] + ' ' + row.gateway);
       }
-      hubs.append(hub);
-      hubNodes.set(key,hub);
+      hubNodes.set(key,makeNode(hub,'wifi:'+key,row.ssid || labels[6]));
     }
-    networkLinks.push([card,hubNodes.get(key),false]);
+    networkLinks.push([device,hubNodes.get(key),false]);
   }
   for (const row of rows) {
     if (row.peer) networkLinks.push([deviceNodes.get(row.id),deviceNodes.get(row.peer),true]);
   }
-  hubs.hidden = !hubs.childElementCount;
-  requestAnimationFrame(drawNetwork);
+  for (const node of networkNodes.values()) {
+    node.width = node.el.offsetWidth || 190;
+    node.height = node.el.offsetHeight || 130;
+  }
+  positionNetworkRows([...hubNodes.values()],[...deviceNodes.values()]);
+  if (networkFocus) networkNodes.get(networkFocus)?.el.focus({preventScroll:true});
+  if (networkAutoFit) fitNetwork();
+  queueNetworkDraw();
 }
 async function refreshNetwork() {
   clearTimeout(networkTimer);
@@ -1188,7 +1408,6 @@ async function refreshNetwork() {
     renderNetwork(data.devices,labels);
     message.textContent = data.devices.length ? '' : labels[5];
   } catch {
-    renderNetwork([],networkText[lang.value]);
     message.textContent = networkText[lang.value][4];
   } finally {
     networkPending = false;
@@ -1211,8 +1430,18 @@ function showPage() {
   byId('network-help').textContent = labels[2];
   byId('network-wifi-key').textContent = labels[6];
   byId('network-peer-key').textContent = labels[7];
+  const controls = networkControls[lang.value];
+  byId('network-zoom-out').setAttribute('aria-label',controls[0]);
+  byId('network-zoom-in').setAttribute('aria-label',controls[1]);
+  byId('network-fit').textContent = controls[2];
+  byId('network-reset').textContent = controls[3];
+  byId('network-help').textContent += ' ' + controls[6];
+  setNetworkExpanded(page === 'network' && byId('network-page').classList.contains('is-expanded'));
   clearTimeout(networkTimer);
-  if (page === 'network') refreshNetwork();
+  if (page === 'network') {
+    queueNetworkDraw();
+    refreshNetwork();
+  }
   if (page === 'control') schedulePreview();
 }
 window.addEventListener('hashchange',showPage);

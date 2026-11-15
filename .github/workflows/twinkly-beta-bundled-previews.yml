@@ -1,4 +1,4 @@
-name: Twinkly Beta meegeleverde effectpreviews
+name: Twinkly Beta tests
 on:
   pull_request:
     branches: [main]
@@ -13,4 +13,8 @@ jobs:
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --test twinkly_beta/test_network_map.cjs
       - run: docker build -t twinkly-beta twinkly_beta

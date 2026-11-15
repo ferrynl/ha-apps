@@ -110,7 +110,8 @@ class OfflineDeviceTest(unittest.IsolatedAsyncioTestCase):
     async def test_wifi_duration_resets_after_a_change_and_timeout(self):
         self.device.details = {"network_mode": 1, "ssid": "Home", "ip": ROW["ip"],
                                "gw": "192.168.1.1", "bssid": "00:11:22:33:44:55", "rssi": 0}
-        now = app.time.monotonic()
+        # Use an exact second so floating-point truncation cannot affect the assertion.
+        now = int(app.time.monotonic())
         self.device.wifi_observation = (
             ("Home", ROW["ip"], "192.168.1.1", "00:11:22:33:44:55"), now - 120, now - 60)
         self.device.details_until = now + 60
