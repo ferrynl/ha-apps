@@ -176,7 +176,7 @@ class OfflineDeviceTest(unittest.IsolatedAsyncioTestCase):
 
         response = await self.client.get("/network")
         native = (await response.json())["groups"]["native:wall-sync"]
-        self.assertEqual(native, {"name": "Muur", "members": ["wall", "peer"]})
+        self.assertEqual(native, {"name": "Muur", "members": ["wall", "peer"], "mode": "sync"})
         with patch.object(self.device,"command") as first, patch.object(peer,"command") as second:
             response = await self.client.post("/control", json={"group": "native:wall-sync", "action": "off"})
             self.assertEqual(response.status, 200)
