@@ -148,7 +148,7 @@ main{width:100%;max-width:none;padding:clamp(12px,2vw,32px)}
 <section><h2 id="settings-discover"></h2><div class="controls gap" id="scan"><input id="ip" placeholder="192.168.1.50" inputmode="decimal"></div>
 </section>
 <section><h2 id="settings-groups"></h2><form id="group-form">
-<div class="controls"><input id="group-name" maxlength="60" required><label id="silence-label" for="group-silence"></label><select id="group-silence"></select><button id="group-save" type="submit"></button><button id="group-cancel" type="button" hidden></button></div>
+<div class="controls"><input id="group-name" maxlength="60" required><label id="silence-label" for="group-silence"></label><select id="group-silence"></select><label for="group-mode">Join / Sync / Area</label><select id="group-mode" aria-label="Join / Sync / Area"><option value="join">Join</option><option value="sync">Sync</option><option value="area">Area</option></select><button id="group-save" type="submit"></button><button id="group-cancel" type="button" hidden></button></div>
 <div class="controls gap" id="group-members"></div></form><div class="settings-list" id="group-management"></div></section>
 <section><h2 id="settings-scenes"></h2>
 <form class="controls gap" id="scene-form"><input id="scene-name" maxlength="60" required><select id="scene-group"></select><select id="scene-mode"></select><select id="scene-style"></select><input id="scene-level" type="number" min="0" max="100" value="100" required><button id="scene-save" type="submit"></button></form>
@@ -571,6 +571,7 @@ function editGroup(id, group) {
   editingGroup = id;
   byId('group-name').value = group?.name || '';
   byId('group-silence').value = group?.silence || 'restore';
+  byId('group-mode').value = group?.mode || 'sync';
   byId('group-cancel').hidden = !id;
   for (const input of byId('group-members').querySelectorAll('input')) {
     input.checked = group?.members.includes(input.value) || false;
@@ -611,7 +612,7 @@ function renderGroups() {
   for (const [id,group] of Object.entries(groups)) {
     const card = document.createElement('article'), title = document.createElement('h3');
     const info = document.createElement('p'), actions = document.createElement('div');
-    title.textContent = group.name;
+    title.textContent = group.name + ' · ' + (group.mode || 'sync').replace(/^./, c => c.toUpperCase());
     card.tabIndex = -1;
     groupCards.set(id,card);
     const members = group.members.map(key => devices.find(device => device.id === key)?.name).filter(Boolean);
@@ -646,7 +647,7 @@ byId('group-form').onsubmit = event => {
   perform(byId('group-save'), async () => {
     const members = [...byId('group-members').querySelectorAll('input:checked')].map(el => el.value);
     if (!members.length) return extra(6);
-    await request('groups',{id:editingGroup,name:byId('group-name').value,members,silence:byId('group-silence').value});
+    await request('groups',{id:editingGroup,name:byId('group-name').value,members,silence:byId('group-silence').value,mode:byId('group-mode').value});
     editGroup(null);
     return t('done');
   });
