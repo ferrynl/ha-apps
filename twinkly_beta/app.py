@@ -573,7 +573,7 @@ class Device:
             self.replies += 1
             response.raise_for_status()
 
-    def send(self, frame):
+    def send(self, frame, mapping=None):
         now = time.monotonic()
         if now >= self.rt_check:
             mode = self.read_mode()
@@ -584,7 +584,7 @@ class Device:
             self.rt_check = now + 2
         # RGBW controllers use white first on the realtime wire.
         white = b"\0" if self.row["profile"] == "RGBW" else b""
-        payload = b"".join(white + frame[i:i + 3] for i in self.mapping)
+        payload = b"".join(white + frame[i:i + 3] for i in (self.mapping if mapping is None else mapping))
         token = base64.b64decode(self.client.session.access_token)
         packets = realtime_packets(payload, token, self.row["protocol"], self.row["leds"])
         for packet in packets:
@@ -668,6 +668,8 @@ class Controller:
                                    if self.native_group_names_path.exists() else {})
         self.music = set()
         self.patterns = {}
+        self.group_routes = {}
+        self.group_frames = {}
         self.sequence_data = (json.loads(SEQUENCES.read_text(encoding="utf-8"))
                               if SEQUENCES.exists() else {"shows": {}, "favorites": []})
         self.sequence_task = None
@@ -749,6 +751,35 @@ class Controller:
         return next((group["silence"] for group in self.groups.values()
                      if key in group["members"] and group.get("silence", "restore") != "restore"), "restore")
 
+    def group_mapping(self, key, members, mode):
+        count = self.devices[key].row["leds"]
+        if mode == "sync":
+            return None
+        if mode == "join":
+            total = sum(self.devices[k].row["leds"] for k in members)
+            offset = sum(self.devices[k].row["leds"] for k in members[:members.index(key)])
+            return tuple(3 * ((offset + i) * PIXELS // total) for i in range(count))
+        if mode == "area":
+            # Local layouts are normalized independently; place each set in its ordered tile.
+            points = {p[0]: p[1:] for p in self.devices[key].layout["points"]}
+            tile = members.index(key)
+            return tuple(3 * (min(9, max(0, int(points[i][1] * 10))) * 12
+                              + min(11, max(0, int((tile + points[i][0]) * 12 / len(members)))))
+                         for i in range(count))
+        raise ValueError("Unknown group mode")
+
+    def shared_pattern(self, pattern, tick):
+        cached = self.group_frames.get(pattern)
+        if cached is not None and cached[0] == tick:
+            return cached[1]
+        if pattern.startswith(("gif:", "matrix:")):
+            timing, frames = self.gif_patterns[pattern]
+            frame = frames[bisect.bisect_right(timing, (tick * 1000 // self.fps) % timing[-1])]
+        else:
+            frame = live_pattern(pattern, tick, self.fps)
+        self.group_frames[pattern] = (tick, frame)
+        return frame
+
     async def output(self, device):
         key = device.row["id"]
         last_output = None
@@ -762,20 +793,15 @@ class Controller:
             fading = False
             if now >= device.retry:
                 if pattern:
-                    if pattern.startswith(("gif:", "matrix:")):
-                        timing, frames = self.gif_patterns[pattern]
-                        index = bisect.bisect_right(timing, int(now * 1000) % timing[-1])
-                        frame = frames[index]
-                    else:
-                        frame = live_pattern(pattern, int(now * self.fps), self.fps)
+                    frame = self.shared_pattern(pattern, int(now * self.fps))
                     level = self.sequence_devices.get(key, 100)
-                    await device.run(device.send, self.dim_frame(frame, level), automatic=True)
+                    await device.run(device.send, self.dim_frame(frame, level), self.group_routes.get(key), automatic=True)
                 elif active:
                     fade_started = None
                     frame = self.dim_frame(self.ddp.frame, self.show["master"] * self.sequence_devices.get(key, 100) // 100)
                     if any(frame):
                         last_output = frame
-                    await device.run(device.send, frame, automatic=True)
+                    await device.run(device.send, frame, self.group_routes.get(key), automatic=True)
                 elif device.restore is not None:
                     rule = self.silence_mode(key) if armed else "restore"
                     if rule == "fade" and last_output is not None:
@@ -783,7 +809,7 @@ class Controller:
                         remaining = max(0, 100 - int((now - fade_started) * 100))
                         if remaining:
                             fading = True
-                            await device.run(device.send, self.dim_frame(last_output, remaining), automatic=True)
+                            await device.run(device.send, self.dim_frame(last_output, remaining), self.group_routes.get(key), automatic=True)
                         elif await device.run(device.set_mode, "off", automatic=True):
                             device.restore = None
                     elif rule == "fade":
@@ -838,6 +864,8 @@ class Controller:
         # Let outstanding device operations finish before restoring modes.
         self.music.clear()
         self.patterns.clear()
+        self.group_routes.clear()
+        self.group_frames.clear()
         await asyncio.gather(*(d.run(d.command, "stop", None) for d in self.devices.values()))
         for _, task in workers.values():
             task.cancel()
@@ -894,6 +922,7 @@ class Controller:
                 if "layout_size" in group:
                     local["layout_size"] = group["layout_size"]
                     local["members"] = group["members"]
+                    local.setdefault("mode", group["mode"])
         return groups
 
     def native_groups(self):
@@ -921,11 +950,12 @@ class Controller:
                 name = next(iter(names))
             elif all(numbered) and len(prefixes) == 1:
                 name = next(iter(prefixes))
-            group = {"name": name, "members": members}
+            group = {"name": name, "members": members, "mode": "sync"}
             sizes = {info["size"] for _, info in entries if info["size"] is not None}
             offsets = {info["offset"] for _, info in entries if info["offset"] is not None}
             if len(sizes) == 1 and len(offsets) >= 2 and max(offsets) < min(sizes):
                 group["layout_size"] = next(iter(sizes))
+                group["mode"] = "join"
             key = "native:" + group_id
             group["name"] = self.native_group_names.get(key, group["name"])
             groups[key] = group
@@ -1094,8 +1124,11 @@ class Controller:
                 silence = data.get("silence", "restore")
                 if silence not in SILENCE_MODES:
                     raise web.HTTPBadRequest()
+                mode = data.get("mode", "sync")
+                if mode not in ("join", "sync", "area"):
+                    raise web.HTTPBadRequest()
                 groups[group_id or uuid.uuid4().hex] = {
-                    "name": name.strip(), "members": list(dict.fromkeys(members)), "silence": silence
+                    "name": name.strip(), "members": list(dict.fromkeys(members)), "silence": silence, "mode": mode
                 }
             temp = GROUPS.with_suffix(".tmp")
             temp.write_text(json.dumps(groups), encoding="utf-8")
@@ -1242,10 +1275,11 @@ class Controller:
                 raise web.HTTPBadRequest()
         async with self.edit:
             group_id = data.get("group")
+            group = None
             if group_id is not None:
                 if not isinstance(group_id, str) or action == "effect":
                     raise web.HTTPBadRequest()
-                group = self.groups.get(group_id) or self.native_groups().get(group_id)
+                group = self.display_groups().get(group_id)
                 if not group:
                     raise web.HTTPBadRequest()
                 keys = [key for key in group["members"] if key in self.devices]
@@ -1253,6 +1287,18 @@ class Controller:
                 keys = list(self.devices) if data.get("id") == "*" else [data.get("id")]
             if any(key not in self.devices for key in keys):
                 raise web.HTTPNotFound()
+            routes = {}
+            if group and action in ("pattern", "music"):
+                mode = group.get("mode", "sync")
+                if mode == "area":
+                    results = await asyncio.gather(*(self.devices[k].run(self.devices[k].load_layout) for k in keys))
+                    if not all(results):
+                        raise web.HTTPBadRequest(text="Area requires a layout for every controller")
+                    for k in keys:
+                        layout = self.devices[k].layout
+                        if not layout or layout.get("synthesized") or {p[0] for p in layout["points"]} != set(range(self.devices[k].row["leds"])):
+                            raise web.HTTPBadRequest(text="Area requires complete mapped LED coordinates")
+                routes = {k: self.group_mapping(k, keys, mode) for k in keys}
             if action == "pattern":
                 if value.startswith(("gif:", "matrix:")) and value not in self.gif_patterns:
                     kind, gif_id = value.split(":", 1)
@@ -1264,6 +1310,8 @@ class Controller:
                         raise web.HTTPBadRequest(text="GIF unavailable") from exc
                 self.music.difference_update(keys)
                 self.patterns.update(dict.fromkeys(keys, value))
+                for k in keys:
+                    self.group_routes[k] = routes.get(k)
                 self.mark_sequence_devices(keys, sequence_level)
                 return {"failed": []}
             if action == "stop-pattern":
@@ -1273,9 +1321,13 @@ class Controller:
                 self.patterns.pop(key, None)
             self.mark_sequence_devices(keys, sequence_level if action == "music" else None)
             if action == "music":
+                for k in keys:
+                    self.group_routes[k] = routes.get(k)
                 self.music.update(keys)
                 return {"failed": []}
             self.music.difference_update(keys)
+            for k in keys:
+                self.group_routes.pop(k, None)
             results = await asyncio.gather(*(self.devices[k].run(self.devices[k].command, action, value)
                                              for k in keys))
             failures = [self.devices[key] for key, ok in zip(keys, results) if not ok]
