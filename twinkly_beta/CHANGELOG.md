@@ -1,3 +1,9 @@
+## 0.1.44-beta.16
+
+- Join, Sync and Area group modes with distinct realtime pixel routing for patterns and music.
+- Area uses ordered horizontal tiles of mapped controllers; native spatial mapping is not yet imported.
+- Shared pattern cache and group-mode selector.
+
 # 0.1.44-beta.15
 
 - Geef Kerstrood, Groen en Paars verzadigde snelkleuren.
