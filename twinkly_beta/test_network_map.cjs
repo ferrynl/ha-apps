@@ -155,10 +155,10 @@ test('the same discovered group appears in settings and as one controllable home
   const [card] = byId('group-cards').children;
   assert.equal(byId('group-cards').children.length,1);
   assert.equal(card.children[0].textContent,'Kerstmuur');
-  assert.equal(card.children[1].textContent,'Contains · Muur 2 · Muur 1');
+  assert.equal(card.children[1].textContent,'Sync · Contains · Muur 2 · Muur 1');
   assert.equal(card.children[2].group,'native:wall');
   const [settings] = byId('group-management').children;
   assert.equal(settings.children[0].textContent,'Kerstmuur');
-  assert.equal(settings.children[1].textContent,'Twinkly group · Contains · Muur 2 · Muur 1');
+  assert.equal(settings.children[1].textContent,'Twinkly group · Sync · Contains · Muur 2 · Muur 1');
   assert.equal(settings.children[2].textContent,'Rename');
 });

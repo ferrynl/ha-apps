@@ -176,7 +176,7 @@ class OfflineDeviceTest(unittest.IsolatedAsyncioTestCase):
 
         response = await self.client.get("/network")
         native = (await response.json())["groups"]["native:wall-sync"]
-        self.assertEqual(native, {"name": "Muur", "members": ["wall", "peer"]})
+        self.assertEqual(native, {"name": "Muur", "members": ["wall", "peer"], "mode": "sync"})
         with patch.object(self.device,"command") as first, patch.object(peer,"command") as second:
             response = await self.client.post("/control", json={"group": "native:wall-sync", "action": "off"})
             self.assertEqual(response.status, 200)
@@ -244,7 +244,7 @@ class OfflineDeviceTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.status, 200)
         groups = (await response.json())["groups"]
         self.assertEqual(groups["native:" + uid], {
-            "name": "Muur", "members": ["master", "wall", "fourth"], "layout_size": 840,
+            "name": "Muur", "members": ["master", "wall", "fourth"], "layout_size": 840, "mode": "join",
         })
 
     async def test_removal_is_saved_and_group_still_works(self):
