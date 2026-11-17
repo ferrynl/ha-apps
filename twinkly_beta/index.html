@@ -612,12 +612,12 @@ function renderGroups() {
   for (const [id,group] of Object.entries(groups)) {
     const card = document.createElement('article'), title = document.createElement('h3');
     const info = document.createElement('p'), actions = document.createElement('div');
-    title.textContent = group.name + ' · ' + (group.mode || 'sync').replace(/^./, c => c.toUpperCase());
+    title.textContent = group.name;
     card.tabIndex = -1;
     groupCards.set(id,card);
     const members = group.members.map(key => devices.find(device => device.id === key)?.name).filter(Boolean);
     const composition = groupViewLabels[lang.value][0] + ' · ' + members.join(' · ');
-    info.textContent = members.length ? composition : '';
+    info.textContent = (group.mode || 'sync').replace(/^./, c => c.toUpperCase()) + (members.length ? ' · ' + composition : '');
     actions.className = 'controls';
     controls(actions,undefined,id);
     const edit = document.createElement('button'), remove = document.createElement('button');
