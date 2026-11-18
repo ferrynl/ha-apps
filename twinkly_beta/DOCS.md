@@ -1,4 +1,4 @@
-# Twinkly Control Center voor Home Assistant
+# Christmas Control Center Beta voor Home Assistant
 
 Bedien je Twinkly RGB- en RGBW-verlichting lokaal in Home Assistant. Groepeer lampen, bouw lichtshows met scènes en geanimeerde GIF's en laat de verlichting meebewegen met muziek via LedFX en Music Assistant. Het dashboard toont ook apparaatinfo, wifi-signaal en de ledkaart wanneer je controller die gegevens levert.
 
@@ -7,7 +7,7 @@ Bedien je Twinkly RGB- en RGBW-verlichting lokaal in Home Assistant. Groepeer la
 | App in de Appwinkel | Geschikt voor |
 | --- | --- |
 | **Twinkly Control Center** | Dagelijks gebruik met de stabiele versie. |
-| **Twinkly Control Center Beta** | Nieuwe functies eerder proberen. Verschijnt zodra er een bètarelease beschikbaar is. |
+| **Christmas Control Center Beta** | Nieuwe functies eerder proberen. Verschijnt zodra er een bètarelease beschikbaar is. |
 
 Beide staan in [Ferry’s Home Assistant-apps](https://github.com/ferrynl/ha-apps). De bèta heeft eigen appgegevens. Stop de stabiele app als je dezelfde lampen met de bèta test. Terug naar stabiel? Stop de bèta en start de stabiele app opnieuw. Voor de bèta gebruikt Home Assistant ingresspoort **18491** en gebruikt LedFX DDP-poort **18492**. De automatische LedFX-koppeling kiest zelf de DDP-poort.
 
@@ -22,7 +22,7 @@ Beide staan in [Ferry’s Home Assistant-apps](https://github.com/ferrynl/ha-app
 
 Een onbereikbare lamp krijgt **Offline** op de apparaatkaart. Twinkly Control Center blijft de verbinding controleren. Met **Lamp verwijderen** haal je de offline lamp uit het dashboard. Voeg je dezelfde lamp later opnieuw toe via **Zoeken op netwerk** of **IP toevoegen**, dan komen de bestaande groepskoppelingen terug.
 
-Open in Home Assistant **Instellingen → Apps → Twinkly Control Center → Logboeken**. Daar staan verbindingsfouten met tijdstip, lampnaam, IP-adres, actie en technische oorzaak. Het logboek meldt ook wanneer een lamp weer online is of is verwijderd. Voor de bèta open je het logboek van **Twinkly Control Center Beta**.
+Open in Home Assistant **Instellingen → Apps → Twinkly Control Center → Logboeken**. Daar staan verbindingsfouten met tijdstip, lampnaam, IP-adres, actie en technische oorzaak. Het logboek meldt ook wanneer een lamp weer online is of is verwijderd. Voor de bèta open je het logboek van **Christmas Control Center Beta**.
 
 ## Music Assistant en LedFx
 
@@ -97,3 +97,6 @@ Bij **Importeer URL** kun je ook een gewone GIPHY-deellink plakken. De add-on ha
 Onder **Matrix-GIF’s** staan 100 originele geanimeerde vierkanten in tien thema’s, rechts in de mengtafel. De GIF-bestanden worden tijdens het bouwen lokaal in de afzonderlijke map `matrix_gifs` gemaakt. Voor een ledstreng zet de app de 12 bij 10 pixels rij voor rij om naar de ledvolgorde.
 
 Met **Showbouwer** maak je een reeks van maximaal 30 stappen met een patroon, lampgroep, duur en helderheid per stap. Muziekstappen gebruiken de huidige LedFX-stijl. De add-on speelt de show af en herstelt de vorige lampmodus bij het einde van elke stap. **Favorieten** biedt maximaal acht snelkeuzes voor de huidige doelkeuze van de effectengalerij.
+
+## Roadmap 2.0
+Philips Hue toevoegen als tweede lichtplatform. De huidige beta ondersteunt uitsluitend Twinkly.
