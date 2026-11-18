@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="nl"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Twinkly Control Center</title>
+<title>Christmas Control Center</title>
 <link rel="icon" href="./twinkly.svg" type="image/svg+xml">
 <style>
 *{box-sizing:border-box}body{margin:0;color:#fff7e9;background:radial-gradient(ellipse at 85% 0,#304e43 0,transparent 42%),#0b1616;font:16px system-ui}main{max-width:1140px;margin:auto;padding:clamp(16px,4vw,44px)}header{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap}h1{font:700 clamp(2.6rem,7vw,5rem) Georgia;margin:0;color:#ffe2a5}h2,h3,p{margin:0 0 12px}p{color:#c5d8d2}section,article{padding:20px;border:1px solid #3b5951;border-radius:22px;background:linear-gradient(145deg,#1c3430,#122422);box-shadow:0 12px 26px #0005}section{margin-top:18px}.eyebrow{letter-spacing:.16em;font-size:.78rem;color:#facb7e;text-transform:uppercase}.status{display:inline-block;border-radius:100px;background:#213e34;padding:8px 14px;margin:12px 0 0}#devices{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr));gap:16px;margin-top:18px}.controls{display:flex;flex-wrap:wrap;gap:8px;align-items:center}button,select,input{font:inherit;border:1px solid #66877b;background:#213c34;color:#fff7e9;border-radius:10px;padding:8px 11px;max-width:100%}button{cursor:pointer}button:hover{background:#38584a}.primary{background:#f6ce88;color:#132721;border-color:#f6ce88;font-weight:700}.primary:hover{background:#ffdfa6}button:disabled{opacity:.55}input[type=color]{width:48px;height:40px;padding:4px}input[type=number]{width:76px}.gap{margin-top:14px}#message{margin:12px 0 0;overflow-wrap:anywhere}.effects{margin-top:12px;width:100%}.error{color:#ffb5a0;overflow-wrap:anywhere}
@@ -104,13 +104,13 @@ button:hover,.mixdesk button:hover{background:#2a313c;filter:none}.mixdesk butto
 .network-device,.network-hub{background:var(--studio-panel);border-radius:6px}.test-grid{gap:10px}.test-sample{border-radius:4px}
 @media(max-width:760px){.workspace-header{position:static;gap:6px}.workspace-nav{width:100%;flex-wrap:wrap}.workspace-nav a{flex:1 1 auto;text-align:center;padding:8px 4px}.desk-channel{padding:12px}.desk-grid{grid-template-columns:minmax(0,1fr)}button,select,input,.mixdesk button{min-height:44px}.device-actions button{min-height:44px}}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important;animation-duration:.01ms!important;transition-duration:.01ms!important}}
-</style>
+.christmas-mark{display:grid;place-items:center;color:var(--studio-gold);width:40px;height:40px;flex:none}.workspace-brand .control-wordmark{font-size:15px;line-height:1.15;letter-spacing:.02em}</style>
 <main>
-<header class="workspace-header"><h1 class="workspace-brand" aria-label="Twinkly Control Center"><span class="twinkly-logo" aria-hidden="true"></span><span class="control-wordmark" aria-hidden="true">Control Center</span></h1>
+<header class="workspace-header"><h1 class="workspace-brand" aria-label="Christmas Control Center"><span class="christmas-mark" aria-hidden="true"><svg viewBox="0 0 36 36" width="36" height="36"><path d="M18 3 7 17h6L4 28h28l-9-11h6Z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><circle cx="18" cy="3" r="2" fill="currentColor"/><path d="M18 28v5" stroke="currentColor" stroke-width="2"/></svg></span><span class="control-wordmark" aria-hidden="true">Christmas<br>Control Center</span></h1>
 <nav class="workspace-nav"><a id="nav-control" href="#bediening"></a><a id="nav-network" href="#netwerk"></a><a id="nav-tests" href="#testcontrole"></a><a id="nav-settings" href="#instellingen"></a></nav></header>
 <p id="message" role="status"></p>
 <div id="control-page">
-<section class="mixdesk"><div class="desk-brand"><span class="desk-lamp"></span><strong>TWINKLY / MIX</strong><span class="desk-model">LX · 01</span></div>
+<section class="mixdesk"><div class="desk-brand"><span class="desk-lamp"></span><strong>CHRISTMAS / STUDIO</strong><span class="desk-model">LX · 01</span></div>
 <div class="desk-grid">
 <div class="desk-stack"><div class="desk-channel"><h2 data-text="all"></h2><div class="controls desk-controls" id="all"></div><div class="quick-colors"><span id="quick-color-label"></span><div class="controls" id="quick-colors"></div></div></div>
 <div class="desk-channel"><h2 id="show-title"></h2>
@@ -196,10 +196,10 @@ const strings = {
  de:['Lichtsteuerung','Alle Lichter','Ein','Aus','Farbe','Helligkeit %','Musik','Musik stoppen','Music Assistant verbinden','IP hinzufügen','Netzwerk durchsuchen','Wird ausgeführt…','Befehl verarbeitet.','LedFx-Frames werden empfangen','Warte auf einen LedFx-Musikeffekt','Verbindung zur App fehlt','Effekte laden','Effekt auswählen','Effekt','Film','Keine lokalen Effekte gefunden','Geräte gefunden','Musik aktiviert','Twinkly-IPv4-Adresse','LedFX eingerichtet. Füge LedFx Twinkly zur Wiedergabegruppe in Music Assistant hinzu.','Einrichtung fehlgeschlagen']
 };
 const deviceLabels = {
- nl:['Offline','Lamp verwijderen','Wil je deze lamp uit Twinkly Control Center verwijderen?','Lamp verwijderd.','De lamp is weer online.','Opdracht mislukt. Bekijk de app-logboeken in Home Assistant.'],
- en:['Offline','Remove light','Remove this light from Twinkly Control Center?','Light removed.','The light is back online.','Command failed. Check the app logs in Home Assistant.'],
- es:['Sin conexión','Quitar luz','¿Quitar esta luz de Twinkly Control Center?','Luz eliminada.','La luz vuelve a estar en línea.','La orden falló. Consulta los registros de la app en Home Assistant.'],
- de:['Offline','Lampe entfernen','Diese Lampe aus Twinkly Control Center entfernen?','Lampe entfernt.','Die Lampe ist wieder online.','Befehl fehlgeschlagen. Prüfe das App-Protokoll in Home Assistant.']
+ nl:['Offline','Lamp verwijderen','Wil je deze lamp uit Christmas Control Center verwijderen?','Lamp verwijderd.','De lamp is weer online.','Opdracht mislukt. Bekijk de app-logboeken in Home Assistant.'],
+ en:['Offline','Remove light','Remove this light from Christmas Control Center?','Light removed.','The light is back online.','Command failed. Check the app logs in Home Assistant.'],
+ es:['Sin conexión','Quitar luz','¿Quitar esta luz de Christmas Control Center?','Luz eliminada.','La luz vuelve a estar en línea.','La orden falló. Consulta los registros de la app en Home Assistant.'],
+ de:['Offline','Lampe entfernen','Diese Lampe aus Christmas Control Center entfernen?','Lampe entfernt.','Die Lampe ist wieder online.','Befehl fehlgeschlagen. Prüfe das App-Protokoll in Home Assistant.']
 };
 const deviceLabel = index => deviceLabels[lang.value][index];
 const deviceError = error => deviceLabel(error === 'offline' ? 0 : 5);

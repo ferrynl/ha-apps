@@ -3,6 +3,8 @@ for(const viewport of [{width:1440,height:900},{width:390,height:844}]){
  test('studio navigation and layout '+viewport.width,async({page})=>{
   await page.setViewportSize(viewport);
   await page.goto('http://127.0.0.1:8765/index.html');
+  await expect(page).toHaveTitle('Christmas Control Center');
+  await expect(page.locator('h1')).toHaveAttribute('aria-label','Christmas Control Center');
   await expect(page.locator('#control-page')).toBeVisible();
   await expect(page.locator('#tests-page')).toBeHidden();
   for(const id of ['settings','network','tests','control']){

@@ -1,5 +1,7 @@
 ## 0.1.44-beta.21
 
+- Rename beta to Christmas Control Center; preserve addon slug, ports and settings. Philips Hue planned for 2.0, not included yet.
+
 - Studio: compact graphite interface, gold selection, clearer navigation, responsive controls and consistent focus states.
 - Preserve existing hardware control and diagnostic routes.
 - Add desktop/mobile browser smoke tests and screenshot artifacts.
