@@ -774,7 +774,7 @@ class Controller:
             x, y = 1-y, x
         return x, y
 
-    def group_mapping(self, key, members, mode, matrix=False):
+    def group_coordinates(self, key, members, mode):
         device = self.devices[key]
         count = device.row["leds"]
         if mode == "join":
@@ -785,13 +785,16 @@ class Controller:
             offset = info.get("offset")
             if leader is None or offset is None or offset + count > total:
                 raise ValueError("Join requires native group offsets and master mapping")
-            ranges = sorted((d.native_group or {}).get("offset", -1) for d in entries)
             expected = 0
             for d in sorted(entries, key=lambda d: (d.native_group or {}).get("offset") or 0):
                 if (d.native_group or {}).get("offset") != expected:
                     raise ValueError("Join offsets are incomplete or overlapping")
                 expected += d.row["leds"]
-            points = self.mapped_points(leader, total)
+            try:
+                points = self.mapped_points(leader, total)
+            except ValueError:
+                # Local layouts cannot establish a common coordinate system.
+                raise ValueError("Native master does not expose the complete group mapping")
             selected = [points[offset+i] for i in range(count)]
         else:
             points = self.mapped_points(device, count)
@@ -810,9 +813,32 @@ class Controller:
             x, y = self.transform_xy(x, y, settings)
             if mode == "area":
                 x = (members.index(key) + x) / len(members)
+            result.append((x, y, _[0] if _ else 0))
+        return tuple(result)
+
+    def group_mapping(self, key, members, mode, matrix=False):
+        result = []
+        for x, y, z in self.group_coordinates(key, members, mode):
             pixel = min(11, int(x*12)) + 12*min(9, int(y*10)) if matrix else min(PIXELS-1, int(x*PIXELS))
             result.append(3*pixel)
         return tuple(result)
+
+    async def group_layout(self, request):
+        group = self.display_groups().get(request.query.get("id"))
+        if not group:
+            raise web.HTTPNotFound()
+        keys = [k for k in group["members"] if k in self.devices]
+        mode = group.get("mode", "sync")
+        targets = keys if mode != "join" else [k for k in keys if (self.devices[k].native_group or {}).get("role") == "master"]
+        results = await asyncio.gather(*(self.devices[k].run(self.devices[k].load_layout) for k in targets))
+        if not targets or not all(results):
+            return web.json_response({"error":"Physical mapping unavailable"}, status=409)
+        try:
+            members = [{"id":k, "name":self.devices[k].row["name"],
+                        "points":self.group_coordinates(k,keys,mode)} for k in keys]
+        except ValueError as exc:
+            return web.json_response({"error":str(exc)},status=409)
+        return web.json_response({"mode":mode,"members":members,"leds":sum(len(m["points"]) for m in members)})
 
     def shared_pattern(self, pattern, tick):
         cached = self.group_frames.get(pattern)
@@ -1336,8 +1362,9 @@ class Controller:
             routes = {}
             if group and action in ("pattern", "music"):
                 mode = group.get("mode", "sync")
-                results = await asyncio.gather(*(self.devices[k].run(self.devices[k].load_layout) for k in keys))
-                if not all(results):
+                targets = keys if mode != "join" else [k for k in keys if (self.devices[k].native_group or {}).get("role") == "master"]
+                results = await asyncio.gather(*(self.devices[k].run(self.devices[k].load_layout) for k in targets))
+                if not targets or not all(results):
                     raise web.HTTPBadRequest(text="Physical group mapping unavailable")
                 try:
                     routes = {k: self.group_mapping(k, keys, mode, matrix=action == "pattern" and value.startswith("matrix:")) for k in keys}
@@ -2018,6 +2045,7 @@ class Controller:
         app.router.add_post("/network/groups/name", self.rename_network_group)
         app.router.add_get("/effects", self.effects)
         app.router.add_get("/layout", self.layout)
+        app.router.add_get("/group-layout", self.group_layout)
         app.router.add_get("/mapping-settings", self.mapping_settings)
         app.router.add_post("/mapping-settings", self.mapping_settings)
         app.router.add_get("/details", self.details)
