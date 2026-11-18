@@ -1,3 +1,8 @@
+## 0.1.44-beta.19
+
+- Dedicated Test Control page with group selection, combined mapping and visual expected-result cards in four languages.
+- Keep group homepage cards focused on normal controls.
+
 ## 0.1.44-beta.18
 
 - Combined group mapping preview, local mapping overrides and diagnostic metadata export.
