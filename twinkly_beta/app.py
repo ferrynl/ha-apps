@@ -481,11 +481,18 @@ class Device:
                 "offset": offset if type(offset) is int and offset >= 0 else None,
                 "size": size if type(size) is int and size > 0 else None,
             }
-            if entry["id"]:
-                self.native_group = entry
-                return
             if reported is None:
                 reported = entry
+            elif reported["role"] == entry["role"]:
+                for field in ("offset", "size"):
+                    if entry[field] is not None:
+                        reported[field] = entry[field]
+                for field in ("id", "name"):
+                    if not reported[field] and entry[field]:
+                        reported[field] = entry[field]
+                if entry["uid"]:
+                    reported["id"] = entry["id"]
+                    reported["uid"] = True
         if received:
             self.native_group = reported
 
