@@ -1,25 +1,29 @@
 import unittest
 from types import SimpleNamespace
-from app import Controller, PIXELS
+from app import Controller
 
 class GroupModes(unittest.TestCase):
     def setUp(self):
         self.controller = Controller.__new__(Controller)
         self.controller.devices = {
-            k: SimpleNamespace(row={"leds": 2}, layout={"points": [[0, 0, 0, 0], [1, .9, .9, 0]]})
-            for k in ("a", "b")
+            "a": SimpleNamespace(row={"leds":2}, layout={"points":[[0,0,0,0],[1,1,1,0]]}, native_group=None),
+            "b": SimpleNamespace(row={"leds":2}, layout={"points":[[0,1,1,0],[1,0,0,0]]}, native_group=None),
         }
 
     def test_sync(self):
-        self.assertIsNone(self.controller.group_mapping("a", ["a", "b"], "sync"))
+        self.assertEqual(self.controller.group_mapping("a", ["a","b"], "sync"), (0,357))
+        self.assertEqual(self.controller.group_mapping("b", ["a","b"], "sync"), (357,0))
 
     def test_join(self):
-        a = self.controller.group_mapping("a", ["a", "b"], "join")
-        b = self.controller.group_mapping("b", ["a", "b"], "join")
-        self.assertEqual(a+b, tuple(3*i*PIXELS//4 for i in range(4)))
+        a,b = self.controller.devices.values()
+        a.native_group = {"role":"master","offset":0}
+        b.native_group = {"role":"slave","offset":2}
+        a.layout = {"points":[[0,0,0,0],[1,1,1,0],[2,.75,0,0],[3,.25,1,0]]}
+        self.assertEqual(self.controller.group_mapping("b",["a","b"],"join"),(270,90))
+
+    def test_join_missing(self):
+        with self.assertRaises(ValueError):
+            self.controller.group_mapping("a",["a","b"],"join")
 
     def test_area(self):
-        a = self.controller.group_mapping("a", ["a", "b"], "area")
-        b = self.controller.group_mapping("b", ["a", "b"], "area")
-        self.assertEqual(a, (0, 339))
-        self.assertEqual(b, (18, 357))
+        self.assertEqual(self.controller.group_mapping("b",["a","b"],"area",matrix=True),(357,18))
