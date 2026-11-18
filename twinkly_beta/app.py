@@ -1329,6 +1329,13 @@ class Controller:
                     raise web.HTTPBadRequest(text="Physical group mapping unavailable")
                 try:
                     routes = {k: self.group_mapping(k, keys, mode, matrix=action == "pattern" and value.startswith("matrix:")) for k in keys}
+                    for k in keys:
+                        d = self.devices[k]
+                        meta = d.native_group or {}
+                        route = routes[k]
+                        LOG.info("mapping lamp=%r mode=%s role=%s offset=%s size=%s leds=%s points=%s route_first=%s route_last=%s",
+                                 d.row["name"], mode, meta.get("role"), meta.get("offset"), meta.get("size"), d.row["leds"],
+                                 len((d.layout or {}).get("points", [])), route[:8] if route else None, route[-8:] if route else None)
                 except ValueError as exc:
                     raise web.HTTPBadRequest(text=str(exc)) from exc
             if action == "pattern":
