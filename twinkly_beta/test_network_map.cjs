@@ -135,7 +135,7 @@ test('shows a reported group role even without a matched group',()=>{
 test('the same discovered group appears in settings and as one controllable home card',()=>{
   const elements = new Map();
   const make = () => ({
-    children: [], append(...values) { this.children.push(...values); },
+    children: [], setAttribute(key,value) { this[key]=value; }, append(...values) { this.children.push(...values); },
     replaceChildren() { this.children = []; }, querySelectorAll() { return []; },
   });
   const byId = id => {
@@ -157,6 +157,8 @@ test('the same discovered group appears in settings and as one controllable home
   assert.equal(card.children[0].textContent,'Kerstmuur');
   assert.equal(card.children[1].textContent,'Sync · Contains · Muur 2 · Muur 1');
   assert.equal(card.children[2].group,'native:wall');
+  assert.equal(card.children[3].children[0].textContent,'Group mapping');
+  assert.equal(card.children[3].children[5].children.length,8);
   const [settings] = byId('group-management').children;
   assert.equal(settings.children[0].textContent,'Kerstmuur');
   assert.equal(settings.children[1].textContent,'Twinkly group · Sync · Contains · Muur 2 · Muur 1');
