@@ -676,6 +676,7 @@ class Controller:
         self.music = set()
         self.patterns = {}
         self.group_routes = {}
+        self.physical_tests = {}
         self.group_frames = {}
         self.sequence_data = (json.loads(SEQUENCES.read_text(encoding="utf-8"))
                               if SEQUENCES.exists() else {"shows": {}, "favorites": []})
@@ -823,6 +824,54 @@ class Controller:
             result.append(3*pixel)
         return tuple(result)
 
+    @staticmethod
+    def physical_frame(kind, index, coords, elapsed):
+        palette = ((90,0,0),(0,90,0),(0,0,90),(90,90,0))
+        def color(i, x, y):
+            if kind == "identify": return palette[index % len(palette)]
+            if kind == "rgb": return palette[int(elapsed / 2) % 3]
+            if kind == "led": return (90,90,90) if i == int(elapsed * 8) % len(coords) else (0,0,0)
+            if kind == "rainbow": return tuple(round(v*90) for v in colorsys.hsv_to_rgb((x-elapsed/6)%1,1,1))
+            position = x if kind == "horizontal" else y
+            return (90,90,90) if abs(position-(elapsed/4)%1)<.08 else (0,0,0)
+        return bytes(v for i,(x,y,z) in enumerate(coords) for v in color(i,x,y))
+
+    async def physical_test(self, request):
+        data = await request.json()
+        if not isinstance(data, dict) or not isinstance(data.get("group"), str):
+            raise web.HTTPBadRequest()
+        kind = data.get("test")
+        if kind not in ("identify","rgb","led","rainbow","horizontal","vertical","stop"):
+            raise web.HTTPBadRequest()
+        async with self.edit:
+            group = self.display_groups().get(data["group"])
+            if not group:
+                raise web.HTTPNotFound()
+            keys = [k for k in group["members"] if k in self.devices]
+            if kind == "stop":
+                for k in keys:
+                    self.physical_tests.pop(k,None)
+                return web.json_response({"ok":True})
+            if any(k in self.patterns or k in self.music or k in self.sequence_devices or self.devices[k].restore is not None for k in keys):
+                raise web.HTTPConflict(text="Stop active music, effects and sequences first")
+            mode = group.get("mode","sync")
+            if kind in ("identify","rgb","led"):
+                coordinates = {k: [(0,0,0)]*self.devices[k].row["leds"] for k in keys}
+            else:
+                targets = keys if mode != "join" else [k for k in keys if (self.devices[k].native_group or {}).get("role") == "master"]
+                results = await asyncio.gather(*(self.devices[k].run(self.devices[k].load_layout) for k in targets))
+                if not targets or not all(results):
+                    raise web.HTTPConflict(text="Physical mapping unavailable")
+                try:
+                    coordinates = {k:self.group_coordinates(k,keys,mode) for k in keys}
+                except ValueError as exc:
+                    raise web.HTTPConflict(text=str(exc)) from exc
+            start = time.monotonic()
+            for index,k in enumerate(keys):
+                self.physical_tests[k] = (kind,index,coordinates[k],start)
+            LOG.info("physical test group=%s type=%s members=%s duration=15s",data["group"],kind,keys)
+            return web.json_response({"ok":True,"duration":15})
+
     async def group_layout(self, request):
         group = self.display_groups().get(request.query.get("id"))
         if not group:
@@ -863,8 +912,16 @@ class Controller:
             active = (armed and self.ddp.frame is not None and now - self.ddp.received < 1.5
                       and now - self.ddp.lit_at < 3)
             fading = False
+            test = self.physical_tests.get(key)
+            if test and now-test[3] >= 15:
+                self.physical_tests.pop(key,None)
+                test = None
             if now >= device.retry:
-                if pattern:
+                if test:
+                    kind,index,coords,start = test
+                    frame = self.physical_frame(kind,index,coords,now-start)
+                    await device.run(device.send,frame,range(0,len(frame),3),automatic=True)
+                elif pattern:
                     frame = self.shared_pattern(pattern, int(now * self.fps))
                     level = self.sequence_devices.get(key, 100)
                     await device.run(device.send, self.dim_frame(frame, level), self.group_routes.get(key), automatic=True)
@@ -1359,6 +1416,8 @@ class Controller:
                 keys = list(self.devices) if data.get("id") == "*" else [data.get("id")]
             if any(key not in self.devices for key in keys):
                 raise web.HTTPNotFound()
+            for k in keys:
+                self.physical_tests.pop(k,None)
             routes = {}
             if group and action in ("pattern", "music"):
                 mode = group.get("mode", "sync")
@@ -2045,6 +2104,7 @@ class Controller:
         app.router.add_post("/network/groups/name", self.rename_network_group)
         app.router.add_get("/effects", self.effects)
         app.router.add_get("/layout", self.layout)
+        app.router.add_post("/physical-test", self.physical_test)
         app.router.add_get("/group-layout", self.group_layout)
         app.router.add_get("/mapping-settings", self.mapping_settings)
         app.router.add_post("/mapping-settings", self.mapping_settings)
