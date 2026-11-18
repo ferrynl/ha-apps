@@ -72,10 +72,10 @@ main{width:100%;max-width:none;padding:clamp(12px,2vw,32px)}
 .network-key span::before{content:'';display:inline-block;width:22px;margin-right:6px;vertical-align:middle;border-top:2px solid #6ccde7}
 .network-key #network-member-key::before{border-color:#91e8b5;border-top-style:solid}
 .network-key span+span::before{border-color:#d0a4ff;border-top-style:dashed}
-</style>
+.test-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr));gap:14px}.test-grid article{display:flex;flex-direction:column;gap:10px}.test-grid article button{margin-top:auto;min-height:44px}.test-sample{height:72px;border-radius:10px;background:#101a19;border:1px solid #48665d}.sample-identify{background:linear-gradient(90deg,#c33 25%,#193 25% 50%,#36c 50% 75%,#db3 75%)}.sample-rgb{background:linear-gradient(90deg,#c33,#193,#36c)}.sample-led{background:radial-gradient(circle at 25% 50%,#fff 0 4px,transparent 6px),#101a19}.sample-rainbow{background:linear-gradient(90deg,red,yellow,lime,cyan,blue,magenta)}.sample-horizontal{background:linear-gradient(90deg,transparent 35%,white 45% 55%,transparent 65%),#101a19}.sample-vertical{background:linear-gradient(transparent 35%,white 45% 55%,transparent 65%),#101a19}.sample-stop{height:12px}#tests-content canvas{max-width:900px;margin:auto}#tests-content .led-map input{max-width:440px;display:block}#tests-content .led-map input[hidden]{display:none}</style>
 <main>
 <header class="workspace-header"><h1 class="workspace-brand" aria-label="Twinkly Control Center"><span class="twinkly-logo" aria-hidden="true"></span><span class="control-wordmark" aria-hidden="true">Control Center</span></h1>
-<nav class="workspace-nav"><a id="nav-control" href="#bediening"></a><a id="nav-network" href="#netwerk"></a><a id="nav-settings" href="#instellingen"></a></nav></header>
+<nav class="workspace-nav"><a id="nav-control" href="#bediening"></a><a id="nav-network" href="#netwerk"></a><a id="nav-tests" href="#testcontrole"></a><a id="nav-settings" href="#instellingen"></a></nav></header>
 <p id="message" role="status"></p>
 <div id="control-page">
 <section class="mixdesk"><div class="desk-brand"><span class="desk-lamp"></span><strong>TWINKLY / MIX</strong><span class="desk-model">LX · 01</span></div>
@@ -141,6 +141,7 @@ main{width:100%;max-width:none;padding:clamp(12px,2vw,32px)}
 <div class="controls"><button id="network-name-save" type="submit"></button><button id="network-name-cancel" type="button"></button></div>
 </form>
 </dialog>
+<section id="tests-page" hidden><h2 id="tests-title"></h2><p id="tests-help"></p><label id="tests-target-label" for="tests-target"></label> <select id="tests-target"></select><div id="tests-content"></div></section>
 <div id="settings-page" hidden><div class="settings-grid">
 <section><h2 id="settings-general"></h2><select id="language" aria-label="Language"><option value="nl">Nederlands</option><option value="en">English</option><option value="es">Español</option><option value="de">Deutsch</option></select></section>
 <section><h2 id="settings-music"></h2><div class="controls gap" id="music-setup"></div><p id="ledfx-status" role="status"></p><details><summary>LedFX installeren en starten</summary><ol><li>Open in Home Assistant Instellingen → Apps → Appwinkel → ⋮ → Repositories.</li><li>Voeg <a href="https://github.com/Switch123456789/Home-Assistant-Apps" target="_blank" rel="noopener noreferrer">de LedFX-repository met Sendspin</a> toe en installeer LedFX.</li><li>Klik op Starten en zet Starten bij opstarten aan. Controleer bij een fout het tabblad Logboek.</li><li>Ga terug naar Twinkly, controleer LedFX en klik daarna op Music Assistant koppelen. Voeg LedFx Twinkly toe aan de afspeelgroep in Music Assistant.</li></ol></details><div class="controls gap tv-source"><label id="tv-source-label" for="tv-source"></label><select id="tv-source"></select><button id="tv-refresh"></button></div>
@@ -626,35 +627,6 @@ function renderGroups() {
     info.textContent = (group.mode || 'sync').replace(/^./, c => c.toUpperCase()) + (members.length ? ' · ' + composition : '');
     actions.className = 'controls';
     controls(actions,undefined,id);
-    const map = document.createElement('div'); map.className='led-map';
-    const openMap = document.createElement('button');
-    openMap.textContent=({nl:'Groepsmapping',en:'Group mapping',de:'Gruppenmapping',es:'Mapa del grupo'})[lang.value];
-    const canvas=document.createElement('canvas'); canvas.width=640; canvas.height=400; canvas.hidden=true;
-    const legend=document.createElement('p'), zoom=document.createElement('input'), angle=document.createElement('input');
-    zoom.type='range'; zoom.min=1; zoom.max=4; zoom.step=.1; zoom.value=1; zoom.hidden=true; zoom.setAttribute('aria-label','Zoom');
-    angle.type='range'; angle.min=-180; angle.max=180; angle.value=0; angle.hidden=true; angle.setAttribute('aria-label','3D rotation');
-    let layout;
-    const paint=()=>{if(!layout)return;const ctx=canvas.getContext('2d');ctx.clearRect(0,0,640,400);
-      const a=Number(angle.value)*Math.PI/180, scale=Number(zoom.value)*340;
-      layout.members.forEach((m,i)=>{ctx.fillStyle='hsl('+(i*137.508%360)+' 85% 65%)';
-        for(const [x,y,z] of m.points){const px=(x-.5)*Math.cos(a)+(z||0)*Math.sin(a);ctx.beginPath();ctx.arc(320+px*scale,200+(y-.5)*scale,2.4,0,2*Math.PI);ctx.fill();}
-      });
-    };
-    zoom.oninput=angle.oninput=paint;
-    openMap.onclick=()=>perform(openMap,async()=>{layout=await request('group-layout?id='+encodeURIComponent(id));if(layout.error)throw Error(layout.error);
-      canvas.hidden=zoom.hidden=angle.hidden=false;legend.replaceChildren(document.createTextNode(layout.leds+' LED · '));
-      layout.members.forEach((m,i)=>{const label=document.createElement('span');label.style.color='hsl('+(i*137.508%360)+' 85% 65%)';label.textContent=m.name+' ('+m.points.length+')  ';legend.append(label);});paint();return t('done');});
-    const testControls=document.createElement('div');testControls.className='controls gap';
-    const testLabels=({nl:['Testcentrum (15 sec)','Eigen kleur','RGB-test','LED-volgorde','Regenboog','Links → rechts','Boven → beneden','Stop'],
-      en:['Test center (15 sec)','Identify','RGB test','LED order','Rainbow','Left → right','Top → bottom','Stop'],
-      de:['Testzentrum (15 Sek.)','Erkennen','RGB-Test','LED-Reihenfolge','Regenbogen','Links → rechts','Oben → unten','Stopp'],
-      es:['Centro de pruebas (15 s)','Identificar','Prueba RGB','Orden LED','Arcoíris','Izquierda → derecha','Arriba → abajo','Parar']})[lang.value];
-    const testTitle=document.createElement('strong');testTitle.textContent=testLabels[0];testControls.append(testTitle);
-    ['identify','rgb','led','rainbow','horizontal','vertical','stop'].forEach((test,i)=>{
-      const b=document.createElement('button');b.textContent=testLabels[i+1];
-      b.onclick=()=>perform(b,async()=>{await request('physical-test',{group:id,test});return t('done');});testControls.append(b);
-    });
-    map.append(openMap,legend,canvas,zoom,angle,testControls);
     const edit = document.createElement('button'), remove = document.createElement('button');
     const native = id.startsWith('native:');
     edit.textContent = native ? networkNameLabels[lang.value][0] : extra(4);
@@ -672,10 +644,62 @@ function renderGroups() {
     entry.append(name,description,edit);
     if (!native) entry.append(remove);
     manage.append(entry);
-    card.append(title,info,actions,map);
+    card.append(title,info,actions);
     parent.append(card);
   }
 }
+
+const testPageText = {
+ nl:['Testcontrole','Kies een groep. Stop actieve muziek en effecten. Start een test, vergelijk de lampen met het verwachte resultaat. Na 15 seconden stopt de test automatisch.','Groep','Verwacht resultaat','Start test','Rood, groen, blauw en geel per controller.','Alle lampen wisselen elke twee seconden tussen rood, groen en blauw.','Eén led per controller loopt door de fysieke LED-volgorde.','Een doorlopende regenboog beweegt over de mapping.','Een witte band beweegt van links naar rechts.','Een witte band beweegt van boven naar beneden.','Stop de test en herstel de eerdere modus.','Geen groepen beschikbaar.'],
+ en:['Test control','Select a group. Stop active music and effects. Start a test and compare the lights with the expected result. Tests stop after 15 seconds.','Group','Expected result','Start test','Red, green, blue and yellow per controller.','All lights cycle red, green and blue every two seconds.','One LED per controller moves through physical LED order.','A continuous rainbow moves across the mapping.','A white band moves left to right.','A white band moves top to bottom.','Stop the test and restore the previous mode.','No groups available.'],
+ de:['Testkontrolle','Gruppe wählen. Musik und Effekte stoppen. Test starten und mit dem erwarteten Ergebnis vergleichen. Tests enden nach 15 Sekunden.','Gruppe','Erwartetes Ergebnis','Test starten','Rot, Grün, Blau und Gelb je Controller.','Alle Lampen wechseln alle zwei Sekunden Rot, Grün und Blau.','Eine LED je Controller folgt der LED-Reihenfolge.','Ein Regenbogen bewegt sich über die Karte.','Ein weißer Streifen läuft von links nach rechts.','Ein weißer Streifen läuft von oben nach unten.','Test stoppen und vorherigen Modus wiederherstellen.','Keine Gruppen verfügbar.'],
+ es:['Control de pruebas','Elige un grupo. Detén la música y los efectos. Inicia una prueba y compara las luces con el resultado esperado. Dura 15 segundos.','Grupo','Resultado esperado','Iniciar prueba','Rojo, verde, azul y amarillo por controlador.','Todas las luces alternan rojo, verde y azul cada dos segundos.','Un LED por controlador sigue el orden físico.','Un arcoíris continuo recorre el mapa.','Una banda blanca va de izquierda a derecha.','Una banda blanca va de arriba abajo.','Detén la prueba y restaura el modo anterior.','No hay grupos disponibles.']
+};
+let testPageSignature='';
+function renderTestPage(){
+ const labels=testPageText[lang.value], target=byId('tests-target'), content=byId('tests-content'), groups=visibleGroups();
+ byId('nav-tests').textContent=byId('tests-title').textContent=labels[0];
+ byId('tests-help').textContent=labels[1];byId('tests-target-label').textContent=labels[2];
+ const options=Object.entries(groups), before=target.value;
+ const signature=JSON.stringify([lang.value,options]);
+ if(target.dataset.signature!==signature){target.replaceChildren(...options.map(([id,g])=>new Option(g.name,id)));if(groups[before])target.value=before;target.dataset.signature=signature;}
+ const id=target.value, group=groups[id], key=JSON.stringify([signature,id]);
+ if(key===testPageSignature)return;testPageSignature=key;content.replaceChildren();
+ if(!group){content.textContent=labels[12];return;}
+     const map = document.createElement('div'); map.className='led-map';
+    const openMap = document.createElement('button');
+    openMap.textContent=({nl:'Groepsmapping',en:'Group mapping',de:'Gruppenmapping',es:'Mapa del grupo'})[lang.value];
+    const canvas=document.createElement('canvas'); canvas.width=640; canvas.height=400; canvas.hidden=true;
+    const legend=document.createElement('p'), zoom=document.createElement('input'), angle=document.createElement('input');
+    zoom.type='range'; zoom.min=1; zoom.max=4; zoom.step=.1; zoom.value=1; zoom.hidden=true; zoom.setAttribute('aria-label','Zoom');
+    angle.type='range'; angle.min=-180; angle.max=180; angle.value=0; angle.hidden=true; angle.setAttribute('aria-label','3D rotation');
+    let layout;
+    const paint=()=>{if(!layout)return;const ctx=canvas.getContext('2d');ctx.clearRect(0,0,640,400);
+      const a=Number(angle.value)*Math.PI/180, scale=Number(zoom.value)*340;
+      layout.members.forEach((m,i)=>{ctx.fillStyle='hsl('+(i*137.508%360)+' 85% 65%)';
+        for(const [x,y,z] of m.points){const px=(x-.5)*Math.cos(a)+(z||0)*Math.sin(a);ctx.beginPath();ctx.arc(320+px*scale,200+(y-.5)*scale,2.4,0,2*Math.PI);ctx.fill();}
+      });
+    };
+    zoom.oninput=angle.oninput=paint;
+    openMap.onclick=()=>perform(openMap,async()=>{layout=await request('group-layout?id='+encodeURIComponent(id));if(layout.error)throw Error(layout.error);
+      canvas.hidden=zoom.hidden=angle.hidden=false;legend.replaceChildren(document.createTextNode(layout.leds+' LED · '));
+      layout.members.forEach((m,i)=>{const label=document.createElement('span');label.style.color='hsl('+(i*137.508%360)+' 85% 65%)';label.textContent=m.name+' ('+m.points.length+')  ';legend.append(label);});paint();return t('done');});
+    const testControls=document.createElement('div');testControls.className='test-grid gap';
+    const testLabels=({nl:['Testcentrum (15 sec)','Eigen kleur','RGB-test','LED-volgorde','Regenboog','Links → rechts','Boven → beneden','Stop'],
+      en:['Test center (15 sec)','Identify','RGB test','LED order','Rainbow','Left → right','Top → bottom','Stop'],
+      de:['Testzentrum (15 Sek.)','Erkennen','RGB-Test','LED-Reihenfolge','Regenbogen','Links → rechts','Oben → unten','Stopp'],
+      es:['Centro de pruebas (15 s)','Identificar','Prueba RGB','Orden LED','Arcoíris','Izquierda → derecha','Arriba → abajo','Parar']})[lang.value];
+    const testTitle=document.createElement('h3');testTitle.textContent=testLabels[0];
+    ['identify','rgb','led','rainbow','horizontal','vertical','stop'].forEach((test,i)=>{
+      const tile=document.createElement('article'), heading=document.createElement('h3'), sample=document.createElement('div'), expected=document.createElement('p');heading.textContent=testLabels[i+1];sample.className='test-sample sample-'+test;expected.textContent=labels[3]+': '+labels[i+5];const b=document.createElement('button');b.textContent=test==='stop'?testLabels[i+1]:labels[4];
+      b.onclick=()=>perform(b,async()=>{await request('physical-test',{group:id,test});return t('done');});tile.append(heading,sample,expected,b);testControls.append(tile);
+    });
+    map.append(openMap,legend,canvas,zoom,angle,testTitle,testControls);
+
+ content.append(map);
+}
+byId('tests-target').onchange=renderTestPage;
+
 byId('group-cancel').onclick = () => editGroup(null);
 byId('group-form').onsubmit = event => {
   event.preventDefault();
@@ -711,6 +735,7 @@ function render() {
   schedulePreview();
   renderActiveStyle();
   renderGroups();
+  renderTestPage();
   renderShow();
   byId('audio').textContent = t(status ? (status.audio ? 'receiving' : 'waiting') : 'disconnected');
   if (status) {
@@ -1650,11 +1675,12 @@ byId('network-refresh').onclick = refreshNetwork;
 document.addEventListener('visibilitychange',() => { if (!document.hidden) refreshNetwork(); });
 
 function showPage() {
-  const page = {'#instellingen':'settings','#netwerk':'network'}[location.hash] || 'control';
-  for (const name of ['control','settings','network']) {
+  const page = {'#instellingen':'settings','#netwerk':'network','#testcontrole':'tests'}[location.hash] || 'control';
+  for (const name of ['control','settings','network','tests']) {
     byId(name + '-page').hidden = page !== name;
     byId('nav-' + name).setAttribute('aria-current',page === name ? 'page' : 'false');
   }
+  byId('nav-tests').textContent = testPageText[lang.value][0];
   const labels = networkText[lang.value];
   byId('nav-network').textContent = byId('network-title').textContent = labels[0];
   byId('network-refresh').textContent = labels[1];
@@ -1675,6 +1701,7 @@ function showPage() {
     queueNetworkDraw();
     refreshNetwork();
   }
+  if (page === 'tests') renderTestPage();
   if (page === 'control') schedulePreview();
 }
 window.addEventListener('hashchange',showPage);
