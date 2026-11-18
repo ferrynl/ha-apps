@@ -1506,6 +1506,18 @@ class Controller:
         return web.json_response({"layout": device.layout if ok else None,
                                   "error": None if ok else device.error})
 
+    @staticmethod
+    def mapping_device_info(d, fresh):
+        details = d.details or {}
+        fields = ("product_name", "product_code", "product_version", "hardware_version",
+                  "firmware_version", "fw_family", "led_profile", "bytes_per_led", "led_type",
+                  "number_of_led", "rssi")
+        info = {key: details.get(key) for key in fields}
+        info["product_code"] = info["product_code"] or d.product_code
+        info.update(name=d.row["name"], leds=d.row["leds"],
+                    metadata_status="available" if fresh else ("cached" if details else "unavailable"))
+        return info
+
     async def mapping_settings(self, request):
         d = self.devices.get(request.query.get("id"))
         if d is None:
@@ -1524,7 +1536,9 @@ class Controller:
                     d.row["mapping_override"] = old
                     raise
                 LOG.info("mapping settings lamp=%r old=%s new=%s", d.row["name"], old, updated)
-        return web.json_response({"settings":d.row.get("mapping_override", {}), "group":d.native_group, "layout":d.layout})
+        fresh = await d.run(d.load_details) if request.method == "GET" else False
+        return web.json_response({"settings":d.row.get("mapping_override", {}), "group":d.native_group,
+                                  "layout":d.layout, "device":self.mapping_device_info(d, fresh)})
 
     async def effects(self, request):
         device = self.devices.get(request.query.get("id"))
