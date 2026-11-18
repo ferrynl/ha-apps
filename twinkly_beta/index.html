@@ -644,8 +644,7 @@ function renderGroups() {
     openMap.onclick=()=>perform(openMap,async()=>{layout=await request('group-layout?id='+encodeURIComponent(id));if(layout.error)throw Error(layout.error);
       canvas.hidden=zoom.hidden=angle.hidden=false;legend.replaceChildren(document.createTextNode(layout.leds+' LED · '));
       layout.members.forEach((m,i)=>{const label=document.createElement('span');label.style.color='hsl('+(i*137.508%360)+' 85% 65%)';label.textContent=m.name+' ('+m.points.length+')  ';legend.append(label);});paint();return t('done');});
-    map.append(openMap,legend,canvas,zoom,angle); actions.after(map);
-    card.append(map);
+    map.append(openMap,legend,canvas,zoom,angle);
     const edit = document.createElement('button'), remove = document.createElement('button');
     const native = id.startsWith('native:');
     edit.textContent = native ? networkNameLabels[lang.value][0] : extra(4);
@@ -663,7 +662,7 @@ function renderGroups() {
     entry.append(name,description,edit);
     if (!native) entry.append(remove);
     manage.append(entry);
-    card.append(title,info,actions);
+    card.append(title,info,actions,map);
     parent.append(card);
   }
 }
