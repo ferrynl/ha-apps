@@ -166,3 +166,11 @@ test('the same discovered group appears in settings and as one controllable home
   assert.equal(settings.children[1].textContent,'Twinkly group · Sync · Contains · Muur 2 · Muur 1');
   assert.equal(settings.children[2].textContent,'Rename');
 });
+
+test('device diagnostics are mounted outside homepage cards',()=>{
+ assert.ok(html.includes('deviceControls.append(actions,effectsFold)'));
+ assert.ok(html.includes("byId('individual-tests-list').append(testPanel)"));
+ assert.ok(html.includes("byId('device-settings-list').append(settingsPanel)"));
+ assert.ok(!html.includes('deviceControls.append(actions, details, effects, map)'));
+ assert.ok(html.includes('card.testPanel.remove(); card.settingsPanel.remove();'));
+});
