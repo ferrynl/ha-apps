@@ -549,7 +549,13 @@ function drawLayout(card, frame = liveFrame) {
   const {width, height} = card.canvas;
   ctx.clearRect(0,0,width,height);
   const angle = source === '3d' ? Number(card.rotation.value) * Math.PI / 180 : 0;
-  const projected = points.map(([id,x,y,z]) => [id,x*Math.cos(angle)+z*Math.sin(angle),y]);
+  const settings = card.mappingOverride || {};
+  const turn = (settings.rotation || 0)*Math.PI/180;
+  const projected = points.map(([id,x,y,z], i) => {
+    x=x*Math.cos(angle)+z*Math.sin(angle);
+    if(settings.mirror_x)x=-x; if(settings.mirror_y)y=-y;
+    return [settings.reverse?points[points.length-1-i][0]:id,x*Math.cos(turn)-y*Math.sin(turn),x*Math.sin(turn)+y*Math.cos(turn)];
+  });
   const xs = projected.map(p => p[1]), ys = projected.map(p => p[2]);
   const minX = Math.min(...xs), maxX = Math.max(...xs);
   const minY = Math.min(...ys), maxY = Math.max(...ys);
@@ -738,7 +744,28 @@ function render() {
         return t('done');
       });
       rotation.oninput = () => drawLayout(card);
-      map.append(mapButton,mapInfo,canvas,rotation);
+      const mappingForm = document.createElement('div');
+      mappingForm.className = 'controls';
+      const turn = document.createElement('select');
+      for (const a of [0,90,180,270]) turn.add(new Option(a+'°',a));
+      turn.setAttribute('aria-label','Rotation');
+      const flags = {};
+      for (const [key,label] of [['mirror_x','↔ Mirror X'],['mirror_y','↕ Mirror Y'],['reverse','Reverse LEDs']]) {
+        const wrap = document.createElement('label'), input = document.createElement('input');
+        input.type='checkbox'; flags[key]=input; wrap.append(input,label); mappingForm.append(wrap);
+      }
+      const saveMap = document.createElement('button'), resetMap = document.createElement('button'), exportMap = document.createElement('button');
+      saveMap.textContent='Save mapping'; resetMap.textContent='Reset mapping'; exportMap.textContent='Export diagnostics';
+      const settingsPath='mapping-settings?id='+encodeURIComponent(d.id);
+      const readSettings = () => ({rotation:Number(turn.value), ...Object.fromEntries(Object.entries(flags).map(([k,v])=>[k,v.checked]))});
+      const showSettings = settings => {turn.value=String(settings.rotation||0); for (const k in flags) flags[k].checked=!!settings[k]; card.mappingOverride=readSettings(); drawLayout(card);};
+      const originalLoad = mapButton.onclick;
+      mapButton.onclick = async () => {await originalLoad(); try {showSettings((await request(settingsPath)).settings);} catch(e){console.warn(e);}};
+      saveMap.onclick=()=>perform(saveMap,async()=>{showSettings((await request(settingsPath,readSettings())).settings);return 'Saved. Reapply effect to test.';});
+      resetMap.onclick=()=>perform(resetMap,async()=>{showSettings((await request(settingsPath,{rotation:0,mirror_x:false,mirror_y:false,reverse:false})).settings);return 'Reset. Reapply effect to test.';});
+      exportMap.onclick=()=>perform(exportMap,async()=>{const data=await request(settingsPath);const url=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}));const a=document.createElement('a');a.href=url;a.download='twinkly-mapping.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);return t('done');});
+      mappingForm.prepend(turn); mappingForm.append(saveMap,resetMap,exportMap);
+      map.append(mapButton,mapInfo,canvas,rotation,mappingForm);
       drawLayout(card);
       const details = document.createElement('div');
       details.className = 'device-info';
