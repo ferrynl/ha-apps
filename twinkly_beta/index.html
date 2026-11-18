@@ -626,6 +626,26 @@ function renderGroups() {
     info.textContent = (group.mode || 'sync').replace(/^./, c => c.toUpperCase()) + (members.length ? ' · ' + composition : '');
     actions.className = 'controls';
     controls(actions,undefined,id);
+    const map = document.createElement('div'); map.className='led-map';
+    const openMap = document.createElement('button');
+    openMap.textContent=({nl:'Groepsmapping',en:'Group mapping',de:'Gruppenmapping',es:'Mapa del grupo'})[lang.value];
+    const canvas=document.createElement('canvas'); canvas.width=640; canvas.height=400; canvas.hidden=true;
+    const legend=document.createElement('p'), zoom=document.createElement('input'), angle=document.createElement('input');
+    zoom.type='range'; zoom.min=1; zoom.max=4; zoom.step=.1; zoom.value=1; zoom.hidden=true; zoom.setAttribute('aria-label','Zoom');
+    angle.type='range'; angle.min=-180; angle.max=180; angle.value=0; angle.hidden=true; angle.setAttribute('aria-label','3D rotation');
+    let layout;
+    const paint=()=>{if(!layout)return;const ctx=canvas.getContext('2d');ctx.clearRect(0,0,640,400);
+      const a=Number(angle.value)*Math.PI/180, scale=Number(zoom.value)*340;
+      layout.members.forEach((m,i)=>{ctx.fillStyle='hsl('+(i*137.508%360)+' 85% 65%)';
+        for(const [x,y,z] of m.points){const px=(x-.5)*Math.cos(a)+(z||0)*Math.sin(a);ctx.beginPath();ctx.arc(320+px*scale,200+(y-.5)*scale,2.4,0,2*Math.PI);ctx.fill();}
+      });
+    };
+    zoom.oninput=angle.oninput=paint;
+    openMap.onclick=()=>perform(openMap,async()=>{layout=await request('group-layout?id='+encodeURIComponent(id));if(layout.error)throw Error(layout.error);
+      canvas.hidden=zoom.hidden=angle.hidden=false;legend.replaceChildren(document.createTextNode(layout.leds+' LED · '));
+      layout.members.forEach((m,i)=>{const label=document.createElement('span');label.style.color='hsl('+(i*137.508%360)+' 85% 65%)';label.textContent=m.name+' ('+m.points.length+')  ';legend.append(label);});paint();return t('done');});
+    map.append(openMap,legend,canvas,zoom,angle); actions.after(map);
+    card.append(map);
     const edit = document.createElement('button'), remove = document.createElement('button');
     const native = id.startsWith('native:');
     edit.textContent = native ? networkNameLabels[lang.value][0] : extra(4);
