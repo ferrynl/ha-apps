@@ -481,11 +481,18 @@ class Device:
                 "offset": offset if type(offset) is int and offset >= 0 else None,
                 "size": size if type(size) is int and size > 0 else None,
             }
-            if entry["id"]:
-                self.native_group = entry
-                return
             if reported is None:
                 reported = entry
+            elif reported["role"] == entry["role"]:
+                for field in ("offset", "size"):
+                    if entry[field] is not None:
+                        reported[field] = entry[field]
+                for field in ("id", "name"):
+                    if not reported[field] and entry[field]:
+                        reported[field] = entry[field]
+                if entry["uid"]:
+                    reported["id"] = entry["id"]
+                    reported["uid"] = True
         if received:
             self.native_group = reported
 
@@ -669,6 +676,7 @@ class Controller:
         self.music = set()
         self.patterns = {}
         self.group_routes = {}
+        self.physical_tests = {}
         self.group_frames = {}
         self.sequence_data = (json.loads(SEQUENCES.read_text(encoding="utf-8"))
                               if SEQUENCES.exists() else {"shows": {}, "favorites": []})
@@ -759,7 +767,15 @@ class Controller:
             raise ValueError("Complete physical LED mapping required")
         return points
 
-    def group_mapping(self, key, members, mode, matrix=False):
+    @staticmethod
+    def transform_xy(x, y, settings):
+        if settings.get("mirror_x"): x = 1-x
+        if settings.get("mirror_y"): y = 1-y
+        for _ in range(settings.get("rotation", 0)//90):
+            x, y = 1-y, x
+        return x, y
+
+    def group_coordinates(self, key, members, mode):
         device = self.devices[key]
         count = device.row["leds"]
         if mode == "join":
@@ -770,13 +786,16 @@ class Controller:
             offset = info.get("offset")
             if leader is None or offset is None or offset + count > total:
                 raise ValueError("Join requires native group offsets and master mapping")
-            ranges = sorted((d.native_group or {}).get("offset", -1) for d in entries)
             expected = 0
             for d in sorted(entries, key=lambda d: (d.native_group or {}).get("offset") or 0):
                 if (d.native_group or {}).get("offset") != expected:
                     raise ValueError("Join offsets are incomplete or overlapping")
                 expected += d.row["leds"]
-            points = self.mapped_points(leader, total)
+            try:
+                points = self.mapped_points(leader, total)
+            except ValueError:
+                # Local layouts cannot establish a common coordinate system.
+                raise ValueError("Native master does not expose the complete group mapping")
             selected = [points[offset+i] for i in range(count)]
         else:
             points = self.mapped_points(device, count)
@@ -786,14 +805,89 @@ class Controller:
         xmin, xmax, ymin, ymax = min(xs), max(xs), min(ys), max(ys)
         def normal(v, lo, hi):
             return (v-lo)/(hi-lo) if hi > lo else .5
+        settings = device.row.get("mapping_override", {})
+        if settings.get("reverse"):
+            selected.reverse()
         result = []
         for x, y, *_ in selected:
             x, y = normal(x, xmin, xmax), normal(y, ymin, ymax)
+            x, y = self.transform_xy(x, y, settings)
             if mode == "area":
                 x = (members.index(key) + x) / len(members)
+            result.append((x, y, _[0] if _ else 0))
+        return tuple(result)
+
+    def group_mapping(self, key, members, mode, matrix=False):
+        result = []
+        for x, y, z in self.group_coordinates(key, members, mode):
             pixel = min(11, int(x*12)) + 12*min(9, int(y*10)) if matrix else min(PIXELS-1, int(x*PIXELS))
             result.append(3*pixel)
         return tuple(result)
+
+    @staticmethod
+    def physical_frame(kind, index, coords, elapsed):
+        palette = ((90,0,0),(0,90,0),(0,0,90),(90,90,0))
+        def color(i, x, y):
+            if kind == "identify": return palette[index % len(palette)]
+            if kind == "rgb": return palette[int(elapsed / 2) % 3]
+            if kind == "led": return (90,90,90) if i == int(elapsed * 8) % len(coords) else (0,0,0)
+            if kind == "rainbow": return tuple(round(v*90) for v in colorsys.hsv_to_rgb((x-elapsed/6)%1,1,1))
+            position = x if kind == "horizontal" else y
+            return (90,90,90) if abs(position-(elapsed/4)%1)<.08 else (0,0,0)
+        return bytes(v for i,(x,y,z) in enumerate(coords) for v in color(i,x,y))
+
+    async def physical_test(self, request):
+        data = await request.json()
+        if not isinstance(data, dict) or not isinstance(data.get("group"), str):
+            raise web.HTTPBadRequest()
+        kind = data.get("test")
+        if kind not in ("identify","rgb","led","rainbow","horizontal","vertical","stop"):
+            raise web.HTTPBadRequest()
+        async with self.edit:
+            group = self.display_groups().get(data["group"])
+            if not group:
+                raise web.HTTPNotFound()
+            keys = [k for k in group["members"] if k in self.devices]
+            if kind == "stop":
+                for k in keys:
+                    self.physical_tests.pop(k,None)
+                return web.json_response({"ok":True})
+            if any(k in self.patterns or k in self.music or k in self.sequence_devices or self.devices[k].restore is not None for k in keys):
+                raise web.HTTPConflict(text="Stop active music, effects and sequences first")
+            mode = group.get("mode","sync")
+            if kind in ("identify","rgb","led"):
+                coordinates = {k: [(0,0,0)]*self.devices[k].row["leds"] for k in keys}
+            else:
+                targets = keys if mode != "join" else [k for k in keys if (self.devices[k].native_group or {}).get("role") == "master"]
+                results = await asyncio.gather(*(self.devices[k].run(self.devices[k].load_layout) for k in targets))
+                if not targets or not all(results):
+                    raise web.HTTPConflict(text="Physical mapping unavailable")
+                try:
+                    coordinates = {k:self.group_coordinates(k,keys,mode) for k in keys}
+                except ValueError as exc:
+                    raise web.HTTPConflict(text=str(exc)) from exc
+            start = time.monotonic()
+            for index,k in enumerate(keys):
+                self.physical_tests[k] = (kind,index,coordinates[k],start)
+            LOG.info("physical test group=%s type=%s members=%s duration=15s",data["group"],kind,keys)
+            return web.json_response({"ok":True,"duration":15})
+
+    async def group_layout(self, request):
+        group = self.display_groups().get(request.query.get("id"))
+        if not group:
+            raise web.HTTPNotFound()
+        keys = [k for k in group["members"] if k in self.devices]
+        mode = group.get("mode", "sync")
+        targets = keys if mode != "join" else [k for k in keys if (self.devices[k].native_group or {}).get("role") == "master"]
+        results = await asyncio.gather(*(self.devices[k].run(self.devices[k].load_layout) for k in targets))
+        if not targets or not all(results):
+            return web.json_response({"error":"Physical mapping unavailable"}, status=409)
+        try:
+            members = [{"id":k, "name":self.devices[k].row["name"],
+                        "points":self.group_coordinates(k,keys,mode)} for k in keys]
+        except ValueError as exc:
+            return web.json_response({"error":str(exc)},status=409)
+        return web.json_response({"mode":mode,"members":members,"leds":sum(len(m["points"]) for m in members)})
 
     def shared_pattern(self, pattern, tick):
         cached = self.group_frames.get(pattern)
@@ -818,8 +912,16 @@ class Controller:
             active = (armed and self.ddp.frame is not None and now - self.ddp.received < 1.5
                       and now - self.ddp.lit_at < 3)
             fading = False
+            test = self.physical_tests.get(key)
+            if test and now-test[3] >= 15:
+                self.physical_tests.pop(key,None)
+                test = None
             if now >= device.retry:
-                if pattern:
+                if test:
+                    kind,index,coords,start = test
+                    frame = self.physical_frame(kind,index,coords,now-start)
+                    await device.run(device.send,frame,range(0,len(frame),3),automatic=True)
+                elif pattern:
                     frame = self.shared_pattern(pattern, int(now * self.fps))
                     level = self.sequence_devices.get(key, 100)
                     await device.run(device.send, self.dim_frame(frame, level), self.group_routes.get(key), automatic=True)
@@ -1314,14 +1416,24 @@ class Controller:
                 keys = list(self.devices) if data.get("id") == "*" else [data.get("id")]
             if any(key not in self.devices for key in keys):
                 raise web.HTTPNotFound()
+            for k in keys:
+                self.physical_tests.pop(k,None)
             routes = {}
             if group and action in ("pattern", "music"):
                 mode = group.get("mode", "sync")
-                results = await asyncio.gather(*(self.devices[k].run(self.devices[k].load_layout) for k in keys))
-                if not all(results):
+                targets = keys if mode != "join" else [k for k in keys if (self.devices[k].native_group or {}).get("role") == "master"]
+                results = await asyncio.gather(*(self.devices[k].run(self.devices[k].load_layout) for k in targets))
+                if not targets or not all(results):
                     raise web.HTTPBadRequest(text="Physical group mapping unavailable")
                 try:
                     routes = {k: self.group_mapping(k, keys, mode, matrix=action == "pattern" and value.startswith("matrix:")) for k in keys}
+                    for k in keys:
+                        d = self.devices[k]
+                        meta = d.native_group or {}
+                        route = routes[k]
+                        LOG.info("mapping lamp=%r mode=%s role=%s offset=%s size=%s leds=%s points=%s route_first=%s route_last=%s",
+                                 d.row["name"], mode, meta.get("role"), meta.get("offset"), meta.get("size"), d.row["leds"],
+                                 len((d.layout or {}).get("points", [])), route[:8] if route else None, route[-8:] if route else None)
                 except ValueError as exc:
                     raise web.HTTPBadRequest(text=str(exc)) from exc
             if action == "pattern":
@@ -1479,6 +1591,40 @@ class Controller:
         ok = await device.run(device.load_layout)
         return web.json_response({"layout": device.layout if ok else None,
                                   "error": None if ok else device.error})
+
+    @staticmethod
+    def mapping_device_info(d, fresh):
+        details = d.details or {}
+        fields = ("product_name", "product_code", "product_version", "hardware_version",
+                  "firmware_version", "fw_family", "led_profile", "bytes_per_led", "led_type",
+                  "number_of_led", "rssi")
+        info = {key: details.get(key) for key in fields}
+        info["product_code"] = info["product_code"] or d.product_code
+        info.update(name=d.row["name"], leds=d.row["leds"],
+                    metadata_status="available" if fresh else ("cached" if details else "unavailable"))
+        return info
+
+    async def mapping_settings(self, request):
+        d = self.devices.get(request.query.get("id"))
+        if d is None:
+            raise web.HTTPNotFound()
+        if request.method == "POST":
+            data = await request.json()
+            if not isinstance(data, dict) or type(data.get("rotation")) is not int or data["rotation"] not in (0,90,180,270) or any(type(data.get(k)) is not bool for k in ("mirror_x","mirror_y","reverse")):
+                raise web.HTTPBadRequest(text="Invalid mapping settings")
+            updated = {k:data[k] for k in ("rotation","mirror_x","mirror_y","reverse")}
+            async with self.edit:
+                old = d.row.get("mapping_override", {})
+                d.row["mapping_override"] = updated
+                try:
+                    self.save()
+                except OSError:
+                    d.row["mapping_override"] = old
+                    raise
+                LOG.info("mapping settings lamp=%r old=%s new=%s", d.row["name"], old, updated)
+        fresh = await d.run(d.load_details) if request.method == "GET" else False
+        return web.json_response({"settings":d.row.get("mapping_override", {}), "group":d.native_group,
+                                  "layout":d.layout, "device":self.mapping_device_info(d, fresh)})
 
     async def effects(self, request):
         device = self.devices.get(request.query.get("id"))
@@ -1958,6 +2104,10 @@ class Controller:
         app.router.add_post("/network/groups/name", self.rename_network_group)
         app.router.add_get("/effects", self.effects)
         app.router.add_get("/layout", self.layout)
+        app.router.add_post("/physical-test", self.physical_test)
+        app.router.add_get("/group-layout", self.group_layout)
+        app.router.add_get("/mapping-settings", self.mapping_settings)
+        app.router.add_post("/mapping-settings", self.mapping_settings)
         app.router.add_get("/details", self.details)
         app.router.add_post("/register", self.register)
         app.router.add_post("/remove-device", self.remove_device)

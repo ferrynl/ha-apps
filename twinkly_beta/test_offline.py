@@ -3,7 +3,7 @@ import json
 from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
-from unittest.mock import patch
+from unittest.mock import call, patch
 
 from aiohttp.test_utils import TestClient, TestServer
 from requests.exceptions import ConnectionError, HTTPError, Timeout
@@ -237,7 +237,7 @@ class OfflineDeviceTest(unittest.IsolatedAsyncioTestCase):
                 "group": dict(fields, uid=uid, size=840, time_sync=False, sync_on_time=False)
             }) as api:
                 device.load_native_group()
-            api.assert_called_once_with("summary")
+            self.assertEqual(api.call_args_list, [call("summary"), call("led/movie/config")])
             device.details_until = app.time.monotonic() + 60
 
         response = await self.client.get("/network")

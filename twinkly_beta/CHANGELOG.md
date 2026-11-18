@@ -1,3 +1,10 @@
+## 0.1.44-beta.18
+
+- Combined group mapping preview, local mapping overrides and diagnostic metadata export.
+- Physical group tests: identification, RGB, LED order, rainbow and horizontal/vertical sweeps; 15-second timeout.
+- Join loads the master layout only and rejects incomplete offsets or coordinates.
+- Physical hardware verification remains pending.
+
 ## 0.1.44-beta.17
 
 - Use physical coordinates for Sync and Area and require complete master layout and native offsets for Join. Reject missing mappings rather than guessing.
