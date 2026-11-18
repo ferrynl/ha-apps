@@ -1,3 +1,8 @@
+## 0.1.44-beta.17
+
+- Use physical coordinates for Sync and Area and require complete master layout and native offsets for Join. Reject missing mappings rather than guessing.
+- Area still uses horizontal tiles; native global Area placement is not imported.
+
 ## 0.1.44-beta.16
 
 - Join, Sync and Area group modes with distinct realtime pixel routing for patterns and music.

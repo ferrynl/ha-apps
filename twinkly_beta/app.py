@@ -494,7 +494,7 @@ class Device:
             return
         data = self.api("led/layout/full")
         points = []
-        for index, point in enumerate((data.get("coordinates") or [])[:4096]):
+        for index, point in enumerate((data.get("coordinates") or [])[:65536]):
             if not isinstance(point, dict):
                 continue
             coords = [point.get(axis, 0 if axis == "z" else None) for axis in ("x", "y", "z")]
@@ -751,22 +751,49 @@ class Controller:
         return next((group["silence"] for group in self.groups.values()
                      if key in group["members"] and group.get("silence", "restore") != "restore"), "restore")
 
-    def group_mapping(self, key, members, mode):
-        count = self.devices[key].row["leds"]
-        if mode == "sync":
-            return None
+    @staticmethod
+    def mapped_points(device, count):
+        layout = device.layout or {}
+        points = {p[0]: p[1:] for p in layout.get("points", [])}
+        if layout.get("synthesized") or set(points) != set(range(count)):
+            raise ValueError("Complete physical LED mapping required")
+        return points
+
+    def group_mapping(self, key, members, mode, matrix=False):
+        device = self.devices[key]
+        count = device.row["leds"]
         if mode == "join":
-            total = sum(self.devices[k].row["leds"] for k in members)
-            offset = sum(self.devices[k].row["leds"] for k in members[:members.index(key)])
-            return tuple(3 * ((offset + i) * PIXELS // total) for i in range(count))
-        if mode == "area":
-            # Local layouts are normalized independently; place each set in its ordered tile.
-            points = {p[0]: p[1:] for p in self.devices[key].layout["points"]}
-            tile = members.index(key)
-            return tuple(3 * (min(9, max(0, int(points[i][1] * 10))) * 12
-                              + min(11, max(0, int((tile + points[i][0]) * 12 / len(members)))))
-                         for i in range(count))
-        raise ValueError("Unknown group mode")
+            entries = [self.devices[k] for k in members]
+            total = sum(d.row["leds"] for d in entries)
+            leader = next((d for d in entries if (d.native_group or {}).get("role") == "master"), None)
+            info = device.native_group or {}
+            offset = info.get("offset")
+            if leader is None or offset is None or offset + count > total:
+                raise ValueError("Join requires native group offsets and master mapping")
+            ranges = sorted((d.native_group or {}).get("offset", -1) for d in entries)
+            expected = 0
+            for d in sorted(entries, key=lambda d: (d.native_group or {}).get("offset") or 0):
+                if (d.native_group or {}).get("offset") != expected:
+                    raise ValueError("Join offsets are incomplete or overlapping")
+                expected += d.row["leds"]
+            points = self.mapped_points(leader, total)
+            selected = [points[offset+i] for i in range(count)]
+        else:
+            points = self.mapped_points(device, count)
+            selected = [points[i] for i in range(count)]
+        xs = [p[0] for p in points.values()]
+        ys = [p[1] for p in points.values()]
+        xmin, xmax, ymin, ymax = min(xs), max(xs), min(ys), max(ys)
+        def normal(v, lo, hi):
+            return (v-lo)/(hi-lo) if hi > lo else .5
+        result = []
+        for x, y, *_ in selected:
+            x, y = normal(x, xmin, xmax), normal(y, ymin, ymax)
+            if mode == "area":
+                x = (members.index(key) + x) / len(members)
+            pixel = min(11, int(x*12)) + 12*min(9, int(y*10)) if matrix else min(PIXELS-1, int(x*PIXELS))
+            result.append(3*pixel)
+        return tuple(result)
 
     def shared_pattern(self, pattern, tick):
         cached = self.group_frames.get(pattern)
@@ -1290,15 +1317,13 @@ class Controller:
             routes = {}
             if group and action in ("pattern", "music"):
                 mode = group.get("mode", "sync")
-                if mode == "area":
-                    results = await asyncio.gather(*(self.devices[k].run(self.devices[k].load_layout) for k in keys))
-                    if not all(results):
-                        raise web.HTTPBadRequest(text="Area requires a layout for every controller")
-                    for k in keys:
-                        layout = self.devices[k].layout
-                        if not layout or layout.get("synthesized") or {p[0] for p in layout["points"]} != set(range(self.devices[k].row["leds"])):
-                            raise web.HTTPBadRequest(text="Area requires complete mapped LED coordinates")
-                routes = {k: self.group_mapping(k, keys, mode) for k in keys}
+                results = await asyncio.gather(*(self.devices[k].run(self.devices[k].load_layout) for k in keys))
+                if not all(results):
+                    raise web.HTTPBadRequest(text="Physical group mapping unavailable")
+                try:
+                    routes = {k: self.group_mapping(k, keys, mode, matrix=action == "pattern" and value.startswith("matrix:")) for k in keys}
+                except ValueError as exc:
+                    raise web.HTTPBadRequest(text=str(exc)) from exc
             if action == "pattern":
                 if value.startswith(("gif:", "matrix:")) and value not in self.gif_patterns:
                     kind, gif_id = value.split(":", 1)
