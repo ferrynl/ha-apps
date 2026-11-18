@@ -766,6 +766,14 @@ class Controller:
             raise ValueError("Complete physical LED mapping required")
         return points
 
+    @staticmethod
+    def transform_xy(x, y, settings):
+        if settings.get("mirror_x"): x = 1-x
+        if settings.get("mirror_y"): y = 1-y
+        for _ in range(settings.get("rotation", 0)//90):
+            x, y = 1-y, x
+        return x, y
+
     def group_mapping(self, key, members, mode, matrix=False):
         device = self.devices[key]
         count = device.row["leds"]
@@ -793,9 +801,13 @@ class Controller:
         xmin, xmax, ymin, ymax = min(xs), max(xs), min(ys), max(ys)
         def normal(v, lo, hi):
             return (v-lo)/(hi-lo) if hi > lo else .5
+        settings = device.row.get("mapping_override", {})
+        if settings.get("reverse"):
+            selected.reverse()
         result = []
         for x, y, *_ in selected:
             x, y = normal(x, xmin, xmax), normal(y, ymin, ymax)
+            x, y = self.transform_xy(x, y, settings)
             if mode == "area":
                 x = (members.index(key) + x) / len(members)
             pixel = min(11, int(x*12)) + 12*min(9, int(y*10)) if matrix else min(PIXELS-1, int(x*PIXELS))
@@ -1494,6 +1506,26 @@ class Controller:
         return web.json_response({"layout": device.layout if ok else None,
                                   "error": None if ok else device.error})
 
+    async def mapping_settings(self, request):
+        d = self.devices.get(request.query.get("id"))
+        if d is None:
+            raise web.HTTPNotFound()
+        if request.method == "POST":
+            data = await request.json()
+            if not isinstance(data, dict) or type(data.get("rotation")) is not int or data["rotation"] not in (0,90,180,270) or any(type(data.get(k)) is not bool for k in ("mirror_x","mirror_y","reverse")):
+                raise web.HTTPBadRequest(text="Invalid mapping settings")
+            updated = {k:data[k] for k in ("rotation","mirror_x","mirror_y","reverse")}
+            async with self.edit:
+                old = d.row.get("mapping_override", {})
+                d.row["mapping_override"] = updated
+                try:
+                    self.save()
+                except OSError:
+                    d.row["mapping_override"] = old
+                    raise
+                LOG.info("mapping settings lamp=%r old=%s new=%s", d.row["name"], old, updated)
+        return web.json_response({"settings":d.row.get("mapping_override", {}), "group":d.native_group, "layout":d.layout})
+
     async def effects(self, request):
         device = self.devices.get(request.query.get("id"))
         if device is None:
@@ -1972,6 +2004,8 @@ class Controller:
         app.router.add_post("/network/groups/name", self.rename_network_group)
         app.router.add_get("/effects", self.effects)
         app.router.add_get("/layout", self.layout)
+        app.router.add_get("/mapping-settings", self.mapping_settings)
+        app.router.add_post("/mapping-settings", self.mapping_settings)
         app.router.add_get("/details", self.details)
         app.router.add_post("/register", self.register)
         app.router.add_post("/remove-device", self.remove_device)
