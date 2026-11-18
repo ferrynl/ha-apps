@@ -72,7 +72,7 @@ main{width:100%;max-width:none;padding:clamp(12px,2vw,32px)}
 .network-key span::before{content:'';display:inline-block;width:22px;margin-right:6px;vertical-align:middle;border-top:2px solid #6ccde7}
 .network-key #network-member-key::before{border-color:#91e8b5;border-top-style:solid}
 .network-key span+span::before{border-color:#d0a4ff;border-top-style:dashed}
-.test-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr));gap:14px}.test-grid article{display:flex;flex-direction:column;gap:10px}.test-grid article button{margin-top:auto;min-height:44px}.test-sample{height:72px;border-radius:10px;background:#101a19;border:1px solid #48665d}.sample-identify{background:linear-gradient(90deg,#c33 25%,#193 25% 50%,#36c 50% 75%,#db3 75%)}.sample-rgb{background:linear-gradient(90deg,#c33,#193,#36c)}.sample-led{background:radial-gradient(circle at 25% 50%,#fff 0 4px,transparent 6px),#101a19}.sample-rainbow{background:linear-gradient(90deg,red,yellow,lime,cyan,blue,magenta)}.sample-horizontal{background:linear-gradient(90deg,transparent 35%,white 45% 55%,transparent 65%),#101a19}.sample-vertical{background:linear-gradient(transparent 35%,white 45% 55%,transparent 65%),#101a19}.sample-stop{height:12px}#tests-content canvas{max-width:900px;margin:auto}#tests-content .led-map input{max-width:440px;display:block}#tests-content .led-map input[hidden]{display:none}</style>
+.test-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr));gap:14px}.test-grid article{display:flex;flex-direction:column;gap:10px}.test-grid article button{margin-top:auto;min-height:44px}.test-sample{height:72px;border-radius:10px;background:#101a19;border:1px solid #48665d}.sample-identify{background:linear-gradient(90deg,#c33 25%,#193 25% 50%,#36c 50% 75%,#db3 75%)}.sample-rgb{background:linear-gradient(90deg,#c33,#193,#36c)}.sample-led{background:radial-gradient(circle at 25% 50%,#fff 0 4px,transparent 6px),#101a19}.sample-rainbow{background:linear-gradient(90deg,red,yellow,lime,cyan,blue,magenta)}.sample-horizontal{background:linear-gradient(90deg,transparent 35%,white 45% 55%,transparent 65%),#101a19}.sample-vertical{background:linear-gradient(transparent 35%,white 45% 55%,transparent 65%),#101a19}.sample-stop{height:12px}#tests-content canvas{max-width:900px;margin:auto}#tests-content .led-map input{max-width:440px;display:block}#tests-content .led-map input[hidden]{display:none}.device-tile{padding:clamp(12px,2vw,20px);border-radius:16px;background:linear-gradient(150deg,#203a35,#122421)}.device-tile h3{font-size:1.15rem;margin-bottom:10px}.device-tile .product-card{display:grid;grid-template-columns:76px minmax(0,1fr);gap:12px;padding:10px;margin-bottom:10px;align-items:center}.device-tile .product-card img{width:76px;height:76px;object-fit:contain}.device-tile .product-card strong{font-size:.93rem}.device-tile .product-card small,.device-tile>p{font-size:.8rem}.device-actions{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:7px}.device-actions button{font-size:.83rem;padding:8px 5px;min-height:40px;overflow-wrap:anywhere}.device-actions input{width:100%;min-width:0}.device-actions input[type=color]{height:40px}.device-operating details{margin-top:12px;border-top:1px solid #48665d;padding-top:10px}.device-operating summary{font-size:.86rem;cursor:pointer}.individual-test-panel{margin-top:12px}.individual-test-panel .controls label{display:flex;align-items:center;gap:6px}.individual-test-panel .controls input[type=checkbox]{width:auto;margin:0}.individual-test-panel[hidden]{display:none}@media(max-width:420px){.device-actions{grid-template-columns:repeat(2,minmax(0,1fr))}}</style>
 <main>
 <header class="workspace-header"><h1 class="workspace-brand" aria-label="Twinkly Control Center"><span class="twinkly-logo" aria-hidden="true"></span><span class="control-wordmark" aria-hidden="true">Control Center</span></h1>
 <nav class="workspace-nav"><a id="nav-control" href="#bediening"></a><a id="nav-network" href="#netwerk"></a><a id="nav-tests" href="#testcontrole"></a><a id="nav-settings" href="#instellingen"></a></nav></header>
@@ -141,7 +141,7 @@ main{width:100%;max-width:none;padding:clamp(12px,2vw,32px)}
 <div class="controls"><button id="network-name-save" type="submit"></button><button id="network-name-cancel" type="button"></button></div>
 </form>
 </dialog>
-<section id="tests-page" hidden><h2 id="tests-title"></h2><p id="tests-help"></p><label id="tests-target-label" for="tests-target"></label> <select id="tests-target"></select><div id="tests-content"></div></section>
+<section id="tests-page" hidden><h2 id="tests-title"></h2><p id="tests-help"></p><label id="tests-target-label" for="tests-target"></label> <select id="tests-target"></select><div id="tests-content"></div><div class="gap"><h2 id="individual-tests-title"></h2><select id="individual-tests-target"></select><div id="individual-tests-list"></div></div></section>
 <div id="settings-page" hidden><div class="settings-grid">
 <section><h2 id="settings-general"></h2><select id="language" aria-label="Language"><option value="nl">Nederlands</option><option value="en">English</option><option value="es">Español</option><option value="de">Deutsch</option></select></section>
 <section><h2 id="settings-music"></h2><div class="controls gap" id="music-setup"></div><p id="ledfx-status" role="status"></p><details><summary>LedFX installeren en starten</summary><ol><li>Open in Home Assistant Instellingen → Apps → Appwinkel → ⋮ → Repositories.</li><li>Voeg <a href="https://github.com/Switch123456789/Home-Assistant-Apps" target="_blank" rel="noopener noreferrer">de LedFX-repository met Sendspin</a> toe en installeer LedFX.</li><li>Klik op Starten en zet Starten bij opstarten aan. Controleer bij een fout het tabblad Logboek.</li><li>Ga terug naar Twinkly, controleer LedFX en klik daarna op Music Assistant koppelen. Voeg LedFx Twinkly toe aan de afspeelgroep in Music Assistant.</li></ol></details><div class="controls gap tv-source"><label id="tv-source-label" for="tv-source"></label><select id="tv-source"></select><button id="tv-refresh"></button></div>
@@ -154,7 +154,7 @@ main{width:100%;max-width:none;padding:clamp(12px,2vw,32px)}
 <section><h2 id="settings-scenes"></h2>
 <form class="controls gap" id="scene-form"><input id="scene-name" maxlength="60" required><select id="scene-group"></select><select id="scene-mode"></select><select id="scene-style"></select><input id="scene-level" type="number" min="0" max="100" value="100" required><button id="scene-save" type="submit"></button></form>
 <div class="settings-list" id="scene-management"></div></section>
-<section><h2 id="settings-effects"></h2><div class="settings-list" id="effect-management"></div></section></div></div>
+<section><h2 id="device-settings-title"></h2><div id="device-settings-list" class="settings-list"></div></section><section><h2 id="settings-effects"></h2><div class="settings-list" id="effect-management"></div></section></div></div>
 </main>
 <script>
 const strings = {
@@ -727,6 +727,9 @@ function drawDetails(card) {
   }
   card.detailList.hidden = false;
 }
+const devicePanelText={nl:['Apparaatbeheer','Individuele ledmapping','Draaien','Horizontaal spiegelen','Verticaal spiegelen','Ledvolgorde omkeren','Mapping opslaan','Mapping resetten','Diagnostiek exporteren','Mapping aangepast. Pas het effect opnieuw toe.','Apparaat offline','Kies een apparaat'],en:['Device management','Individual LED mapping','Rotation','Mirror horizontally','Mirror vertically','Reverse LED order','Save mapping','Reset mapping','Export diagnostics','Mapping updated. Reapply the effect.','Device offline','Select a device'],de:['Geräteverwaltung','Einzelne LED-Karte','Drehung','Horizontal spiegeln','Vertikal spiegeln','LED-Reihenfolge umkehren','Mapping speichern','Mapping zurücksetzen','Diagnose exportieren','Mapping geändert. Effekt erneut anwenden.','Gerät offline','Gerät wählen'],es:['Gestión de dispositivos','Mapa LED individual','Rotación','Reflejar horizontalmente','Reflejar verticalmente','Invertir orden LED','Guardar mapa','Restablecer mapa','Exportar diagnóstico','Mapa actualizado. Vuelve a aplicar el efecto.','Dispositivo sin conexión','Elige un dispositivo']};
+function renderIndividualTests(){const target=byId('individual-tests-target');const devices=status?.devices||[];const signature=JSON.stringify(devices.map(d=>[d.id,d.name]));if(target.dataset.signature!==signature){const previous=target.value;target.replaceChildren(...devices.map(d=>new Option(d.name,d.id)));if(devices.some(d=>d.id===previous))target.value=previous;target.dataset.signature=signature;}for(const card of cards.values())card.testPanel.hidden=card.id!==target.value;}
+byId('individual-tests-target').onchange=renderIndividualTests;
 function render() {
   renderBuilder();
   renderPatterns();
@@ -744,6 +747,7 @@ function render() {
       if (!registered.has(id)) {
         card.article.remove();
         card.manage.remove();
+        card.testPanel.remove(); card.settingsPanel.remove();
         cards.delete(id);
       }
     }
@@ -765,7 +769,7 @@ function render() {
       manageGrid.className = 'effect-grid';
       manageTitle.textContent = d.name;
       const card = {id:d.id, article, title, info, error, grid, manageGrid, manageTitle, effects:[]};
-      article.tabIndex = -1;
+      article.tabIndex = -1; article.className='device-tile';
       const loadEffects = async () => {
         const result = await request('effects?id=' + encodeURIComponent(d.id));
         if (result.error) return deviceError(result.error);
@@ -803,10 +807,10 @@ function render() {
       const turn = document.createElement('select');
       for (const a of [0,90,180,270]) turn.add(new Option(a+'°',a));
       turn.setAttribute('aria-label','Rotation');
-      const flags = {};
+      const flags = {}, flagLabels = {};
       for (const [key,label] of [['mirror_x','↔ Mirror X'],['mirror_y','↕ Mirror Y'],['reverse','Reverse LEDs']]) {
         const wrap = document.createElement('label'), input = document.createElement('input');
-        input.type='checkbox'; flags[key]=input; wrap.append(input,label); mappingForm.append(wrap);
+        input.type='checkbox'; flags[key]=input; const caption=document.createElement('span');caption.textContent=label;flagLabels[key]=caption;wrap.append(input,caption); mappingForm.append(wrap);
       }
       const saveMap = document.createElement('button'), resetMap = document.createElement('button'), exportMap = document.createElement('button');
       saveMap.textContent='Save mapping'; resetMap.textContent='Reset mapping'; exportMap.textContent='Export diagnostics';
@@ -815,8 +819,8 @@ function render() {
       const showSettings = settings => {turn.value=String(settings.rotation||0); for (const k in flags) flags[k].checked=!!settings[k]; card.mappingOverride=readSettings(); drawLayout(card);};
       const originalLoad = mapButton.onclick;
       mapButton.onclick = async () => {await originalLoad(); try {showSettings((await request(settingsPath)).settings);} catch(e){console.warn(e);}};
-      saveMap.onclick=()=>perform(saveMap,async()=>{showSettings((await request(settingsPath,readSettings())).settings);return 'Saved. Reapply effect to test.';});
-      resetMap.onclick=()=>perform(resetMap,async()=>{showSettings((await request(settingsPath,{rotation:0,mirror_x:false,mirror_y:false,reverse:false})).settings);return 'Reset. Reapply effect to test.';});
+      saveMap.onclick=()=>perform(saveMap,async()=>{showSettings((await request(settingsPath,readSettings())).settings);return devicePanelText[lang.value][9];});
+      resetMap.onclick=()=>perform(resetMap,async()=>{showSettings((await request(settingsPath,{rotation:0,mirror_x:false,mirror_y:false,reverse:false})).settings);return devicePanelText[lang.value][9];});
       exportMap.onclick=()=>perform(exportMap,async()=>{const data=await request(settingsPath);const url=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}));const a=document.createElement('a');a.href=url;a.download='twinkly-mapping.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);return t('done');});
       mappingForm.prepend(turn); mappingForm.append(saveMap,resetMap,exportMap);
       map.append(mapButton,mapInfo,canvas,rotation,mappingForm);
@@ -849,9 +853,14 @@ function render() {
       };
       removeRow.append(remove);
       const deviceControls = document.createElement('div');
-      deviceControls.append(actions, details, effects, map);
+      deviceControls.className='device-operating'; actions.classList.add('device-actions');
+      const effectsFold=document.createElement('details'), effectsSummary=document.createElement('summary');effectsSummary.textContent=t('load');effectsFold.append(effectsSummary,effects);deviceControls.append(actions,effectsFold);
+      const testPanel=document.createElement('article'), testName=document.createElement('h3'), settingsPanel=document.createElement('article'), settingsName=document.createElement('h3');
+      testPanel.className='individual-test-panel';testPanel.append(testName,map);settingsPanel.append(settingsName,details,removeRow);
+      byId('individual-tests-list').append(testPanel);byId('device-settings-list').append(settingsPanel);
+      Object.assign(card,{testPanel,testName,settingsPanel,settingsName,turn,flagLabels,saveMap,resetMap,exportMap,effectsSummary});
       Object.assign(card, {deviceControls, manage, remove, removeRow});
-      article.append(title, card.product, info, error, deviceControls, removeRow);
+      article.append(title, card.product, info, error, deviceControls);
       byId('devices').append(article);
       card.power = controls(actions, d.id);
       cards.set(d.id, card);
@@ -865,6 +874,8 @@ function render() {
     power.off.classList.toggle("power-active", d.mode === "off");
     title.textContent = d.name;
     card.manageTitle.textContent = d.name;
+    card.testName.textContent=card.settingsName.textContent=d.name;
+    const labels=devicePanelText[lang.value];card.turn.setAttribute('aria-label',labels[2]);['mirror_x','mirror_y','reverse'].forEach((k,i)=>card.flagLabels[k].textContent=labels[i+3]);[card.saveMap,card.resetMap,card.exportMap].forEach((b,i)=>b.textContent=labels[i+6]);card.effectsSummary.textContent=t('load');
     info.textContent = [d.ip, d.leds + ' LEDs', d.profile, d.music ? t('enabled') : '', d.pattern ? (d.pattern.startsWith('gif:') ? d.pattern.split('-').slice(1).join('-').replaceAll('_',' ') : patternName(d.pattern)) : ''].filter(Boolean).join(' · ');
     error.textContent = d.offline ? deviceLabel(0) : d.error ? deviceError(d.error) : '';
     error.className = d.offline ? 'status' : 'error';
@@ -874,6 +885,7 @@ function render() {
     card.remove.textContent = deviceLabel(1);
     card.removeRow.hidden = d.offline !== true;
   }
+  byId('device-settings-title').textContent=devicePanelText[lang.value][0];byId('individual-tests-title').textContent=devicePanelText[lang.value][1];byId('individual-tests-target').setAttribute('aria-label',devicePanelText[lang.value][11]);renderIndividualTests();
 }
 async function refresh() {
   const sequence = ++statusRequest;
