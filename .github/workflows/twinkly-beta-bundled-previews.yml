@@ -19,3 +19,20 @@ jobs:
           node-version: '22'
       - run: node --test twinkly_beta/test_network_map.cjs
       - run: docker build -t twinkly-beta twinkly_beta
+  browser:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --no-save @playwright/test@1.56.1
+      - run: npx playwright install --with-deps chromium
+      - run: |
+          python -m http.server 8765 --directory twinkly_beta &
+          npx playwright test twinkly_beta/studio.spec.cjs --workers=1
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: studio-browser-results
+          path: test-results/

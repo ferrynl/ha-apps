@@ -1,3 +1,9 @@
+## 0.1.44-beta.21
+
+- Studio: compact graphite interface, gold selection, clearer navigation, responsive controls and consistent focus states.
+- Preserve existing hardware control and diagnostic routes.
+- Add desktop/mobile browser smoke tests and screenshot artifacts.
+
 ## 0.1.44-beta.20
 
 - Compact device cards with collapsible effects and responsive controls.
