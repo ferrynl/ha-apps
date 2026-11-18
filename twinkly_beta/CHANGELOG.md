@@ -1,3 +1,9 @@
+## 0.1.44-beta.20
+
+- Compact device cards with collapsible effects and responsive controls.
+- Individual mapping and diagnostic exports moved to Test Control; device details and removal moved to Settings.
+- Translate mapping controls into all four supported languages.
+
 ## 0.1.44-beta.19
 
 - Dedicated Test Control page with group selection, combined mapping and visual expected-result cards in four languages.
