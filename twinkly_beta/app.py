@@ -2311,6 +2311,9 @@ class Controller:
         self.network_until = 0
         self.network_devices = []
         app = web.Application(middlewares=[ingress_only], client_max_size=720_000)
+        from modules.provider_routes import install
+        install(app)
+        app.router.add_get('/provider-studio', lambda _: web.FileResponse('provider-studio.html', headers={'Cache-Control':'no-store'}))
         app.cleanup_ctx.append(self.stream)
         app.router.add_get("/", lambda _: web.FileResponse(
             "index.html", headers={"Cache-Control": "no-store"}))
