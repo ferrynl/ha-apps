@@ -102,3 +102,24 @@ class LightingTests(unittest.IsolatedAsyncioTestCase):
                         {"id": self.hue, "action": "power", "value": 1}):
             response = await self.client.post("/lighting/control", json=payload)
             self.assertEqual(response.status, 400)
+
+    async def test_hue_white_range_and_offline_lights_stay_on_home(self):
+        profile = self.profiles.return_value[0]
+        profile.update(status="online", temperature_mirek={"min": 153, "max": 500})
+        profile["capabilities"]["temperature"] = True
+        payload = {"id": self.hue, "action": "temperature", "value": 370}
+        for value, outcome in ((370, "accepted"), (501, "skipped")):
+            response = await self.client.post("/lighting/control", json={**payload, "value": value})
+            self.assertEqual((await response.json())["results"], {self.hue: outcome})
+        self.control.assert_awaited_once_with(self.hue_id, mirek=370)
+
+        profile["status"] = "unavailable"
+        response = await self.client.post("/lighting/control", json=payload)
+        self.assertEqual((await response.json())["results"], {self.hue: "skipped"})
+        self.profiles.side_effect = TimeoutError
+        response = await self.client.get("/lighting")
+        data = await response.json()
+        self.assertEqual(data["connections"]["hue"][0]["status"], "unavailable")
+        lights = {light["id"]: light for light in data["lights"]}
+        self.assertEqual(lights[self.hue]["status"], "unavailable")
+        self.control.assert_awaited_once()

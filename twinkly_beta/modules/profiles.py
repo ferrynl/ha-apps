@@ -7,7 +7,12 @@ def hue_profile(light, device=None):
     product=device.get("product_data") or {}
     metadata=light.get("metadata") or {}
     temperature=light.get("color_temperature")
-    schema=temperature.get("mirek_schema",{}) if isinstance(temperature,dict) else {}
+    schema=(temperature.get("mirek_schema") or {}) if isinstance(temperature,dict) else {}
+    if not isinstance(schema, dict):
+        schema = {}
+    low, high = schema.get("mirek_minimum"), schema.get("mirek_maximum")
+    adjustable = type(low) is int and type(high) is int and 0 < low < high <= 1000
+    mirek = temperature.get("mirek") if adjustable and temperature.get("mirek_valid") is True else None
     effect=light.get("effects")
     effects=effect.get("effect_values",[]) if isinstance(effect,dict) else []
     return {
@@ -16,17 +21,31 @@ def hue_profile(light, device=None):
         "capabilities":{"power":isinstance(light.get("on"),dict),
             "brightness":isinstance(light.get("dimming"),dict),
             "rgb":isinstance(light.get("color"),dict),
-            "temperature":isinstance(temperature,dict),
+            "temperature":adjustable,
             "segments":False,"effects":sorted(set(x for x in effects if isinstance(x,str))) if isinstance(effects,list) else []},
-        "temperature_mirek":{"min":schema.get("mirek_minimum"),"max":schema.get("mirek_maximum")} if isinstance(temperature,dict) else None,
+        "temperature_mirek":{"min":low,"max":high} if adjustable else None,
         "state":{"on":(light.get("on") or {}).get("on"),"brightness":(light.get("dimming") or {}).get("brightness"),
-                 "xy":(light.get("color") or {}).get("xy")},
+                 "xy":(light.get("color") or {}).get("xy"),
+                 "mirek":mirek if type(mirek) is int and low <= mirek <= high else None},
         "verified":True
     }
 
-def hue_profiles(lights,devices):
-    lookup={d["id"]:d for d in devices if isinstance(d,dict) and isinstance(d.get("id"),str)}
-    return [hue_profile(l,lookup.get((l.get("owner") or {}).get("rid"))) for l in lights if isinstance(l,dict) and isinstance(l.get("id"),str)]
+def hue_profiles(lights, devices, connectivity=()):
+    devices_by_id = {row["id"]: row for row in devices
+                     if isinstance(row, dict) and isinstance(row.get("id"), str)}
+    links_by_owner = {(row.get("owner") or {}).get("rid"): row.get("status")
+                      for row in connectivity if isinstance(row, dict)}
+    status_by_link = {"connected": "online", "disconnected": "unavailable",
+                      "connectivity_issue": "unavailable", "unidirectional_incoming": "unavailable"}
+    profiles = []
+    for light in lights:
+        if not isinstance(light, dict) or not isinstance(light.get("id"), str):
+            continue
+        owner = (light.get("owner") or {}).get("rid")
+        profile = hue_profile(light, devices_by_id.get(owner))
+        profile["status"] = status_by_link.get(links_by_owner.get(owner), "unknown")
+        profiles.append(profile)
+    return profiles
 
 def govee_profile(scan,status=None):
     # LAN scan advertises a model, not its supported commands.

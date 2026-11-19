@@ -5,6 +5,9 @@
     de: ["Start", "Alle Lampen", "Aktualisieren", "Verbunden", "Nicht erreichbar", "Status unbekannt", "Govee · unbestätigt", "Ein", "Aus", "Helligkeit", "Farbe", "Noch keine Lampen", "Verbindungen", "Geräte suchen", "Koppeln", "Erneut koppeln", "Geräte-ID", "LAN-Adresse", "Zertifikat abrufen", "SHA256-Fingerabdruck", "Vergleiche diesen Fingerabdruck mit einer unabhängigen, vertrauenswürdigen Quelle. Fahre nur fort, wenn du dem Zertifikat vertraust.", "Drücke kurz vor dem Koppeln die Taste an der Hue Bridge.", "Aktiviere die LAN-Steuerung in der Govee-App.", "Gemischte Gruppen", "Gruppenname", "Speichern", "Bearbeiten", "Löschen", "Abbrechen", "Angenommen", "Unbestätigt", "Übersprungen", "Fehlgeschlagen", "Verbindung verwalten", "Lampen auswählen", "Keine Geräte gefunden", "Wird geladen…", "Nicht erreichbare Lampe", "Gekoppelt"],
     es: ["Inicio", "Todas las luces", "Actualizar", "Conectado", "No disponible", "Estado desconocido", "Govee · sin confirmar", "Encender", "Apagar", "Brillo", "Color", "Aún no hay luces", "Conexiones", "Buscar dispositivos", "Vincular", "Volver a vincular", "ID del dispositivo", "Dirección LAN", "Consultar certificado", "Huella SHA256", "Compara esta huella con una fuente fiable e independiente. Continúa solo si confías en el certificado.", "Pulsa el botón físico del puente Hue justo antes de vincularlo.", "Activa el control LAN en la aplicación Govee.", "Grupos mixtos", "Nombre del grupo", "Guardar", "Editar", "Eliminar", "Cancelar", "Aceptado", "Sin confirmar", "Omitido", "Error", "Gestionar conexión", "Elegir luces", "No se encontraron dispositivos", "Cargando…", "Luz no disponible", "Vinculado"],
   };
+  const temperatureLabels = {
+    nl: "Wittemperatuur", en: "White temperature", de: "Weißtemperatur", es: "Temperatura del blanco",
+  };
   const brands = {twinkly: "Twinkly", hue: "Philips Hue", govee: "Govee"};
   const wordmarks = {twinkly: "twinkly-nav-logo.svg", hue: "hue-app-icon.webp", govee: "govee-logo.png"};
   const el = id => document.getElementById(id);
@@ -104,6 +107,29 @@
       input.addEventListener("change", () => task(input, () => send("color",
         input.value.slice(1).match(/../g).map(channel => parseInt(channel, 16)))));
       row.append(field(t(10), input));
+    }
+    if (target.id && capable("temperature") && lights[0].provider === "hue") {
+      const {min, max} = lights[0].temperature_mirek;
+      const caption = temperatureLabels[el("language").value] || temperatureLabels.nl;
+      const input = node("input");
+      input.type = "range";
+      input.dir = "rtl";
+      input.setAttribute("aria-label", caption);
+      input.min = min;
+      input.max = max;
+      input.value = state.mirek ?? Math.round((min + max) / 2);
+      const label = field(caption, input);
+      const reading = node("span");
+      label.append(reading);
+      const update = () => {
+        const kelvin = Math.round(1000000 / Number(input.value));
+        reading.textContent = kelvin + " K";
+        input.setAttribute("aria-valuetext", reading.textContent);
+      };
+      if (state.mirek != null) update();
+      input.addEventListener("input", update);
+      input.addEventListener("change", () => task(input, () => send("temperature", Number(input.value))));
+      row.append(label);
     }
     card.append(row);
   }

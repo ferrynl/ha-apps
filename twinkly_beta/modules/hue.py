@@ -1,7 +1,7 @@
 """Direct Hue CLIP v2 transport with caller-supplied verified TLS context."""
 import re
 import ssl
-from aiohttp import ClientSession, ClientTimeout, Fingerprint
+from aiohttp import ClientError, ClientSession, ClientTimeout, Fingerprint
 from .common import lan_ip, rgb, brightness, RateGate
 
 def xy_color(value):
@@ -23,6 +23,7 @@ class Hue:
         self.key = application_key
         self.tls = tls
         self.gate = RateGate(.15)
+        self.last_profiles = []
 
     async def request(self, method, path, body=None):
         async def send():
@@ -42,9 +43,15 @@ class Hue:
 
     async def profiles(self):
         from .profiles import hue_profiles
-        return hue_profiles(await self.lights(), await self.request("GET","device"))
+        lights = await self.lights()
+        devices = await self.request("GET", "device")
+        try:
+            connectivity = await self.request("GET", "zigbee_connectivity")
+        except (ClientError, OSError, TimeoutError, RuntimeError, ValueError):
+            connectivity = []
+        return hue_profiles(lights, devices, connectivity)
 
-    async def control(self, light_id, *, on=None, level=None, color=None):
+    async def control(self, light_id, *, on=None, level=None, color=None, mirek=None):
         if not re.fullmatch(r"[0-9a-fA-F-]{36}",light_id):
             raise ValueError("Invalid resource ID")
         body = {}
@@ -53,5 +60,9 @@ class Hue:
             body["on"] = {"on":on}
         if level is not None: body["dimming"] = {"brightness":brightness(level)}
         if color is not None: body["color"] = {"xy":xy_color(color)}
+        if mirek is not None:
+            if type(mirek) is not int or not 1 <= mirek <= 1000:
+                raise ValueError("Invalid color temperature")
+            body["color_temperature"] = {"mirek": mirek}
         if not body: raise ValueError("Empty command")
         return await self.request("PUT","light/"+light_id,body)

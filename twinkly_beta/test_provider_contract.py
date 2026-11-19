@@ -44,6 +44,23 @@ class ProviderContract(unittest.IsolatedAsyncioTestCase):
     async def test_hue_list(self):
         await self.hue.lights()
         self.hue.request.assert_awaited_once_with("GET","light")
+    async def test_hue_white_temperature(self):
+        await self.hue.control(RID, mirek=370)
+        self.hue.request.assert_awaited_once_with(
+            "PUT", "light/" + RID, {"color_temperature": {"mirek": 370}})
+        for value in (True, 0, 1001):
+            with self.assertRaises(ValueError):
+                await self.hue.control(RID, mirek=value)
+
+    async def test_hue_profiles_allow_missing_connectivity_resource(self):
+        self.hue.request.side_effect = [
+            [{"id": RID, "owner": {"rid": "device-id"}}],
+            [{"id": "device-id"}],
+            RuntimeError("Unavailable resource"),
+        ]
+        profiles = await self.hue.profiles()
+        self.assertEqual([(p["id"], p["status"]) for p in profiles], [(RID, "unknown")])
+
     async def test_hue_off(self):
         await self.hue.control(RID,on=False)
         self.hue.request.assert_awaited_once_with("PUT","light/"+RID,{"on":{"on":False}})

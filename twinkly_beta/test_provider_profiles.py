@@ -14,6 +14,23 @@ class ProfileTests(unittest.TestCase):
     def test_join(self):
         p=hue_profiles([{"id":"a","owner":{"rid":"d"}}],[{"id":"d","product_data":{"model_id":"LCT","software_version":"1"}}])[0]
         self.assertEqual((p["model"],p["firmware"]),("LCT","1"))
+    def test_hue_reachability_belongs_to_the_light_owner(self):
+        lights = [{"id": name, "owner": {"rid": name}} for name in ("a", "b", "c")]
+        profiles = hue_profiles(lights, [], [
+            {"owner": {"rid": "a"}, "status": "connectivity_issue"},
+            {"owner": {"rid": "b"}, "status": "connected"},
+        ])
+        self.assertEqual([profile["status"] for profile in profiles],
+                         ["unavailable", "online", "unknown"])
+
+    def test_mirek_is_current_only_in_white_mode(self):
+        temperature = {"mirek_schema": {"mirek_minimum": 153, "mirek_maximum": 500},
+                       "mirek": 370, "mirek_valid": False}
+        light = {"id": "a", "color_temperature": temperature}
+        self.assertIsNone(hue_profile(light)["state"]["mirek"])
+        temperature["mirek_valid"] = True
+        self.assertEqual(hue_profile(light)["state"]["mirek"], 370)
+
     def test_effects(self):
         self.assertEqual(hue_profile({"id":"a","effects":{"effect_values":["fire","fire",1]}})["capabilities"]["effects"],["fire"])
     def test_govee_unknown(self):
