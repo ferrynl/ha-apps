@@ -104,12 +104,14 @@ button:hover,.mixdesk button:hover{background:#2a313c;filter:none}.mixdesk butto
 .network-device,.network-hub{background:var(--studio-panel);border-radius:6px}.test-grid{gap:10px}.test-sample{border-radius:4px}
 @media(max-width:760px){.workspace-header{position:static;gap:6px}.workspace-nav{width:100%;flex-wrap:wrap}.workspace-nav a{flex:1 1 auto;text-align:center;padding:8px 4px}.desk-channel{padding:12px}.desk-grid{grid-template-columns:minmax(0,1fr)}button,select,input,.mixdesk button{min-height:44px}.device-actions button{min-height:44px}}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important;animation-duration:.01ms!important;transition-duration:.01ms!important}}
-.christmas-mark{display:grid;place-items:center;color:var(--studio-gold);width:40px;height:40px;flex:none}.workspace-brand .control-wordmark{font-size:15px;line-height:1.15;letter-spacing:.02em}</style>
+.christmas-mark{display:grid;place-items:center;color:var(--studio-gold);width:40px;height:40px;flex:none}.workspace-brand .control-wordmark{font-size:15px;line-height:1.15;letter-spacing:.02em}</style><link rel="stylesheet" href="lighting.css">
 <main>
 <header class="workspace-header"><h1 class="workspace-brand" aria-label="Christmas Control Center"><span class="christmas-mark" aria-hidden="true"><svg viewBox="0 0 36 36" width="36" height="36"><path d="M18 3 7 17h6L4 28h28l-9-11h6Z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><circle cx="18" cy="3" r="2" fill="currentColor"/><path d="M18 28v5" stroke="currentColor" stroke-width="2"/></svg></span><span class="control-wordmark" aria-hidden="true">Christmas<br>Control Center</span></h1>
-<nav class="workspace-nav"><a id="nav-control" href="#bediening"></a><a id="nav-network" href="#netwerk"></a><a id="nav-tests" href="#testcontrole"></a><a id="nav-settings" href="#instellingen"></a><a href="provider-studio#hue">Hue</a><a href="provider-studio#govee">Govee</a></nav></header>
+<nav class="workspace-nav"><a id="nav-home" href="#home">Home</a><a id="nav-control" href="#bediening"></a><a id="nav-network" href="#netwerk"></a><a id="nav-tests" href="#testcontrole"></a><a id="nav-settings" href="#instellingen"></a><a id="nav-hue" href="#hue">Philips Hue</a><a id="nav-govee" href="#govee">Govee</a></nav></header>
 <p id="message" role="status"></p>
-<div id="control-page">
+<p id="lighting-feedback" role="status"></p>
+<section id="lighting-panel" class="lighting-surface" hidden></section>
+<div id="control-page"><section id="twinkly-lighting" class="lighting-surface"></section>
 <section class="mixdesk"><div class="desk-brand"><span class="desk-lamp"></span><strong>CHRISTMAS / STUDIO</strong><span class="desk-model">LX · 01</span></div>
 <div class="desk-grid">
 <div class="desk-stack"><div class="desk-channel"><h2 data-text="all"></h2><div class="controls desk-controls" id="all"></div><div class="quick-colors"><span id="quick-color-label"></span><div class="controls" id="quick-colors"></div></div></div>
@@ -175,6 +177,7 @@ button:hover,.mixdesk button:hover{background:#2a313c;filter:none}.mixdesk butto
 </dialog>
 <section id="tests-page" hidden><h2 id="tests-title"></h2><p id="tests-help"></p><label id="tests-target-label" for="tests-target"></label> <select id="tests-target"></select><div id="tests-content"></div><div class="gap"><h2 id="individual-tests-title"></h2><select id="individual-tests-target"></select><div id="individual-tests-list"></div></div></section>
 <div id="settings-page" hidden><div class="settings-grid">
+<section id="lighting-settings" class="lighting-surface"></section>
 <section><h2 id="settings-general"></h2><select id="language" aria-label="Language"><option value="nl">Nederlands</option><option value="en">English</option><option value="es">Español</option><option value="de">Deutsch</option></select></section>
 <section><h2 id="settings-music"></h2><div class="controls gap" id="music-setup"></div><p id="ledfx-status" role="status"></p><details><summary>LedFX installeren en starten</summary><ol><li>Open in Home Assistant Instellingen → Apps → Appwinkel → ⋮ → Repositories.</li><li>Voeg <a href="https://github.com/Switch123456789/Home-Assistant-Apps" target="_blank" rel="noopener noreferrer">de LedFX-repository met Sendspin</a> toe en installeer LedFX.</li><li>Klik op Starten en zet Starten bij opstarten aan. Controleer bij een fout het tabblad Logboek.</li><li>Ga terug naar Twinkly, controleer LedFX en klik daarna op Music Assistant koppelen. Voeg LedFx Twinkly toe aan de afspeelgroep in Music Assistant.</li></ol></details><div class="controls gap tv-source"><label id="tv-source-label" for="tv-source"></label><select id="tv-source"></select><button id="tv-refresh"></button></div>
 </section>
@@ -1754,10 +1757,13 @@ byId('network-refresh').onclick = refreshNetwork;
 document.addEventListener('visibilitychange',() => { if (!document.hidden) refreshNetwork(); });
 
 function showPage() {
-  const page = {'#instellingen':'settings','#netwerk':'network','#testcontrole':'tests'}[location.hash] || 'control';
+  const page = {'#instellingen':'settings','#netwerk':'network','#testcontrole':'tests','#hue':'hue','#govee':'govee','#bediening':'control','#twinkly':'control'}[location.hash] || 'home';
   for (const name of ['control','settings','network','tests']) {
     byId(name + '-page').hidden = page !== name;
     byId('nav-' + name).setAttribute('aria-current',page === name ? 'page' : 'false');
+  }
+  for (const brand of ['home','hue','govee']) {
+    byId('nav-' + brand).setAttribute('aria-current', page === brand ? 'page' : 'false');
   }
   byId('nav-tests').textContent = testPageText[lang.value][0];
   const labels = networkText[lang.value];
@@ -1782,6 +1788,7 @@ function showPage() {
   }
   if (page === 'tests') renderTestPage();
   if (page === 'control') schedulePreview();
+  window.dispatchEvent(new CustomEvent('lighting-page', {detail: page}));
 }
 window.addEventListener('hashchange',showPage);
 const patternTarget = byId('pattern-target');
@@ -2198,4 +2205,5 @@ pollTrack();
 loadTvSources();
 loadGifLibrary().catch(() => {});
 loadMatrixGallery();
-</script></html>
+</script><script src="lighting.js"></script>
+</html>

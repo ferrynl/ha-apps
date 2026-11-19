@@ -5,7 +5,7 @@ for(const viewport of [{width:1440,height:900},{width:390,height:844}]){
   await page.goto('http://127.0.0.1:8765/index.html');
   await expect(page).toHaveTitle('Christmas Control Center');
   await expect(page.locator('h1')).toHaveAttribute('aria-label','Christmas Control Center');
-  await expect(page.locator('#control-page')).toBeVisible();
+  await expect(page.locator('#lighting-panel')).toBeVisible();
   await expect(page.locator('#tests-page')).toBeHidden();
   for(const id of ['settings','network','tests','control']){
    await page.locator('#nav-'+id).click();
@@ -34,4 +34,58 @@ test('spatial test shows the specific Join conflict', async ({page})=>{
  const rainbow=page.locator('#tests-content article').filter({hasText:'Regenboog'});
  await rainbow.getByRole('button').click();
  await expect(page.locator('#message')).toHaveText('HTTP 409 · '+error);
+});
+
+test('Home combines providers and keeps pairing in Settings', async ({page}) => {
+ const light = (id, provider, name, rgb, status='online') => ({
+  id, provider, name, status, capabilities:{power:provider!=='govee', brightness:rgb, rgb},
+  state:{on:true, brightness:rgb?65:null, color:rgb?[255,120,30]:null},
+ });
+ const groups = {};
+ let groupControl;
+ await page.route('**/lighting', route => route.fulfill({json:{
+  lights:[light('t','twinkly','Tree',true),light('h','hue','Living room',false),light('g','govee','Strip',false,'unknown')],
+  connections:{hue:[{id:'bridge',address:'192.168.1.2',status:'online'}],govee:[]}, groups,
+ }}));
+ await page.route('**/lighting/groups', route => {
+  const {name,members}=route.request().postDataJSON();
+  groups.mixed={name,members};
+  return route.fulfill({json:{id:'mixed'}});
+ });
+ await page.route('**/lighting/control', route => {
+  groupControl=route.request().postDataJSON();
+  return route.fulfill({json:{results:{t:'accepted',h:'skipped',g:'unconfirmed'}}});
+ });
+ await page.setViewportSize({width:390,height:844});
+ await page.goto('http://127.0.0.1:8765/index.html');
+ const home=page.locator('#lighting-panel');
+ await expect(home.locator('article')).toHaveCount(3);
+ await expect(home.locator('[data-provider=hue] input[type=color]')).toHaveCount(0);
+ await expect(home.locator('[data-provider=govee]')).toContainText('onbevestigd');
+ await expect(home.locator('[data-provider=govee] button')).toHaveCount(0);
+ await expect(page.getByText('Certificaat ophalen')).toHaveCount(0);
+ await home.getByLabel('Groepsnaam').fill('Together');
+ await home.getByLabel('Tree · Twinkly').check();
+ await home.getByLabel('Living room · Philips Hue').check();
+ await home.getByLabel('Strip · Govee').check();
+ await home.getByRole('button',{name:'Opslaan'}).click();
+ const group=home.locator('article').filter({hasText:'Together'});
+ await group.getByRole('button',{name:'Aan',exact:true}).click();
+ expect(groupControl).toEqual({group:'mixed',action:'power',value:true});
+ await expect(page.locator('#lighting-feedback')).toContainText('Onbevestigd · 1');
+ await page.locator('#nav-hue').click();
+ await expect(home.locator('article')).toHaveCount(1);
+ await expect(home.getByText('Living room')).toBeVisible();
+ await expect(home.getByText('Tree')).toHaveCount(0);
+ await page.locator('#nav-govee').click();
+ await expect(home.getByText('Strip')).toBeVisible();
+ await page.locator('#nav-control').click();
+ await expect(page.locator('#twinkly-lighting').getByText('Tree')).toBeVisible();
+ await page.locator('#nav-settings').click();
+ const settings=page.locator('#lighting-settings');
+ await expect(settings.getByText('bridge · 192.168.1.2 · Verbonden')).toBeVisible();
+ await settings.getByRole('button',{name:'Opnieuw koppelen',exact:true}).click();
+ await expect(settings.getByLabel('LAN-adres').first()).toHaveValue('192.168.1.2');
+ await expect(settings.getByRole('button',{name:'Certificaat ophalen'})).toBeVisible();
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBeTruthy();
 });

@@ -42,3 +42,33 @@ async def discover(timeout=3):
             if item:
                 found[item["device"]]=item
     return sorted(found.values(),key=lambda item:item["device"])
+
+async def statuses(addresses, timeout=1):
+    """Query configured private LAN addresses and match reports to their source."""
+    loop = asyncio.get_running_loop()
+    pending = {lan_ip(address) for address in addresses}
+    found = {}
+    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        sock.bind(("0.0.0.0", 4002))
+        sock.setblocking(False)
+        for address in pending:
+            await loop.sock_sendto(sock, packet("devStatus", {}), (address, 4003))
+        end = loop.time() + timeout
+        while pending and loop.time() < end:
+            try:
+                data, source = await asyncio.wait_for(loop.sock_recvfrom(sock, 8192), end - loop.time())
+            except TimeoutError:
+                break
+            if source[0] not in pending:
+                continue
+            try:
+                message = json.loads(data)["msg"]
+                report = message["data"]
+                if message["cmd"] != "devStatus" or not isinstance(report, dict):
+                    continue
+            except (ValueError, TypeError, KeyError):
+                continue
+            found[source[0]] = report
+            pending.remove(source[0])
+    return found

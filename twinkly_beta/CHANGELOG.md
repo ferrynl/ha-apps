@@ -1,3 +1,9 @@
+## 2.0.0-beta.3
+
+- Unified Home and dedicated Twinkly, Philips Hue and Govee pages, with pairing, certificate management and discovery in Settings.
+- Create cross-brand groups for power, brightness and RGB. Group commands report accepted, unconfirmed, skipped and failed lights separately.
+- Label Govee LAN state and commands as unconfirmed, and expose controls only for capabilities advertised in a local status reply.
+
 ## 2.0.0-beta.2
 
 - Start the LED Order test at the upper mapped end of each controller while following its physical wiring.

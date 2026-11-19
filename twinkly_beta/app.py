@@ -319,6 +319,8 @@ class Device:
         self.client = self.connect()
         self.restore = None
         self.last_mode = None
+        self.last_color = None
+        self.last_brightness = None
         self.mode = None
         self.mode_check = 0.0
         self.effects = []
@@ -583,6 +585,7 @@ class Device:
             self.set_mode("off")
         elif action == "color":
             self.color(value)
+            self.last_color = list(value)
             self.last_mode = "color"
         elif action == "effect":
             kind, index = value
@@ -601,6 +604,7 @@ class Device:
             response = self.client.set_brightness(value)
             self.replies += 1
             response.raise_for_status()
+            self.last_brightness = value
 
     def send(self, frame, mapping=None):
         now = time.monotonic()
@@ -2328,8 +2332,14 @@ class Controller:
         self.network_devices = []
         app = web.Application(middlewares=[ingress_only], client_max_size=720_000)
         from modules.provider_routes import install
-        install(app)
-        app.router.add_get('/provider-studio', lambda _: web.FileResponse('provider-studio.html', headers={'Cache-Control':'no-store'}))
+        install(app, controller=self)
+        async def legacy_provider_page(request):
+            raise web.HTTPFound("./#instellingen")
+
+        app.router.add_get("/provider-studio", legacy_provider_page)
+        for asset in ("lighting.js", "lighting.css"):
+            app.router.add_get("/" + asset, lambda _, filename=asset: web.FileResponse(
+                filename, headers={"Cache-Control": "no-store"}))
         app.cleanup_ctx.append(self.stream)
         app.router.add_get("/", lambda _: web.FileResponse(
             "index.html", headers={"Cache-Control": "no-store"}))

@@ -31,33 +31,58 @@ def validate(data):
 class ProviderStore:
     def __init__(self, directory="/data"):
         self.path=Path(directory)/"light-providers.json"
+        self.groups_path=Path(directory)/"lighting-groups.json"
 
-    def load(self):
+    @staticmethod
+    def read(path, default):
         try:
-            fd=os.open(self.path,os.O_RDONLY|os.O_NOFOLLOW)
+            fd=os.open(path,os.O_RDONLY|os.O_NOFOLLOW)
         except FileNotFoundError:
-            return {"version":1,"hue":{},"govee":{}}
+            return default
         with os.fdopen(fd,"r",encoding="utf-8") as stream:
             if os.fstat(stream.fileno()).st_mode & 0o077:
                 raise PermissionError("Provider configuration permissions too broad")
             raw=stream.read(1048577)
             if len(raw)>1048576:
                 raise ValueError("Provider configuration too large")
-            return validate(json.loads(raw))
+            return json.loads(raw)
+
+    def load(self):
+        return validate(self.read(self.path, {"version":1,"hue":{},"govee":{}}))
+
+    def load_groups(self):
+        groups = self.read(self.groups_path, {})
+        if not isinstance(groups, dict) or any(
+            not re.fullmatch(r"[a-f0-9]{32}", key)
+            or not isinstance(group, dict)
+            or not isinstance(group.get("name"), str)
+            or not isinstance(group.get("members"), list)
+            or any(not isinstance(member, str) for member in group["members"])
+            for key, group in groups.items()
+        ):
+            raise ValueError("Invalid lighting groups")
+        return groups
+
+    def save_groups(self, groups):
+        self.write(self.groups_path, groups)
 
     def save(self,data):
-        raw=json.dumps(validate(data),separators=(",",":"))
+        self.write(self.path, validate(data))
+
+    @staticmethod
+    def write(path, data):
+        raw=json.dumps(data,separators=(",",":"))
         if len(raw)>1048576:
             raise ValueError("Provider configuration too large")
-        self.path.parent.mkdir(mode=0o700,parents=True,exist_ok=True)
-        fd,tmp=tempfile.mkstemp(dir=self.path.parent,prefix=".providers-")
+        path.parent.mkdir(mode=0o700,parents=True,exist_ok=True)
+        fd,tmp=tempfile.mkstemp(dir=path.parent,prefix=".providers-")
         try:
             with os.fdopen(fd,"w",encoding="utf-8") as stream:
                 stream.write(raw)
                 stream.flush()
                 os.fsync(stream.fileno())
-            os.replace(tmp,self.path)
-            directory=os.open(self.path.parent,os.O_RDONLY|os.O_DIRECTORY)
+            os.replace(tmp,path)
+            directory=os.open(path.parent,os.O_RDONLY|os.O_DIRECTORY)
             try: os.fsync(directory)
             finally: os.close(directory)
         finally:
