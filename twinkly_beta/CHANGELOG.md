@@ -1,3 +1,8 @@
+## 0.1.44-beta.23
+
+- Recover a locally standalone Join controller when its native mapping ID matches every member and its LEDs fill the unique missing offset-zero segment.
+- Combine individual physical mapping segments by native offset when the controllers share a mapping ID. Keep the group's coordinate system for spatial tests.
+
 ## 0.1.44-beta.22
 
 - Merge native group and movie sync metadata and recover a missing Join master from its reported hardware identity.

@@ -293,6 +293,46 @@ class OfflineDeviceTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.status, 200)
         self.assertEqual(set(self.controller.physical_tests), {"second", "wall", "fourth"})
 
+    async def test_standalone_controller_recovers_by_shared_layout_and_leading_gap(self):
+        master = self.join_wall()
+        group = "native:wall-uid"
+        for index, key in enumerate(("master", "second", "wall", "fourth")):
+            device = self.controller.devices[key]
+            device.native_group_until = 0
+            summary = {"layout": {"uuid": "SHARED-LAYOUT"}}
+            if key == "master":
+                summary["group"] = {"mode": "none"}
+            else:
+                summary["group"] = dict(mode="slave", uid="wall-uid", size=840, offset=index * 210)
+            with patch.object(device, "api", side_effect=[summary, {"sync": {"mode": summary["group"]["mode"]}}]):
+                device.load_native_group()
+            device.layout = {"uuid": "shared-layout", "points": [[i, i, index, 0] for i in range(210)]}
+            device.layout_until = float("inf")
+
+        self.assertEqual(self.controller.native_groups()[group]["members"], ["master", "second", "wall", "fourth"])
+        response = await self.client.get("/group-layout", params={"id": group})
+        self.assertEqual(response.status, 200)
+        layout = await response.json()
+        self.assertEqual(layout["leds"], 840)
+        self.assertEqual([entry["points"][0][1] for entry in layout["members"]], [0, 1/3, 2/3, 1])
+        response = await self.client.post("/physical-test", json={"group": group, "test": "rainbow"})
+        self.assertEqual(response.status, 200)
+
+        self.device.layout["uuid"] = "different"
+        response = await self.client.get("/group-layout", params={"id": group})
+        self.assertEqual(response.status, 409)
+        self.assertIn("matching physical mapping IDs", (await response.json())["error"])
+
+        duplicate = app.Device(dict(master.row, id="duplicate"), self.controller.limit, self.controller.realtime_socket)
+        self.addCleanup(duplicate.client.session.close)
+        self.controller.devices["duplicate"] = duplicate
+        duplicate.native_layout_id = master.native_layout_id
+        duplicate.native_standalone = True
+        self.assertEqual(self.controller.native_groups()[group]["missing_master"], group)
+        duplicate.native_layout_id = "different"
+        self.device.native_group["offset"] = 421
+        self.assertEqual(self.controller.native_groups()[group]["missing_master"], group)
+
     async def test_manual_master_validates_offsets_and_map_and_can_be_removed(self):
         master = self.join_wall()
         group = "native:wall-uid"
