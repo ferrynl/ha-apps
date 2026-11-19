@@ -19,7 +19,8 @@ def hue_profile(light, device=None):
             "temperature":isinstance(temperature,dict),
             "segments":False,"effects":sorted(set(x for x in effects if isinstance(x,str))) if isinstance(effects,list) else []},
         "temperature_mirek":{"min":schema.get("mirek_minimum"),"max":schema.get("mirek_maximum")} if isinstance(temperature,dict) else None,
-        "state":{"on":(light.get("on") or {}).get("on"),"brightness":(light.get("dimming") or {}).get("brightness")},
+        "state":{"on":(light.get("on") or {}).get("on"),"brightness":(light.get("dimming") or {}).get("brightness"),
+                 "xy":(light.get("color") or {}).get("xy")},
         "verified":True
     }
 
@@ -41,5 +42,6 @@ def govee_profile(scan,status=None):
             "brightness":type(level) is int and 0<=level<=100,"rgb":rgb,
             "temperature":type(temp) is int and 2000<=temp<=9000,"segments":False,"effects":[]},
         "state":{"on":bool(power) if type(power) is int and power in (0,1) else None,
-            "brightness":level if type(level) is int and 0<=level<=100 else None},
+            "brightness":level if type(level) is int and 0<=level<=100 else None,
+                 "color":[color[c] for c in ("r","g","b")] if rgb else None},
         "verified":False}

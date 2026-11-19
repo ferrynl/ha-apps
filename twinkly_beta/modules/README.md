@@ -1,2 +1,5 @@
-# Direct providers (development)
-Independent Hue CLIP v2 and Govee LAN command transports. Hue requires a verified bridge TLS context and application key supplied by future pairing flow; no insecure TLS fallback. Govee UDP sends are not acknowledged. This is a foundation only: discovery, pairing, state, UI, shared engine, capability checks, gamut mapping, entertainment and real hardware tests remain. No HA light services used.
+# Direct light providers
+
+The shared lighting API combines the existing Twinkly controller with Philips Hue CLIP v2 and Govee LAN UDP. It resolves saved group members against the current inventory and checks the requested capability before sending each command.
+
+Hue pairing uses a user-confirmed certificate fingerprint and keeps the application key in local app data. Govee status reports provide provisional capabilities, and Govee sends are unconfirmed. Provider requests use private LAN addresses, and the app serves the API through Home Assistant ingress.
