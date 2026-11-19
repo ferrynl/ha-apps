@@ -1,4 +1,7 @@
 const {test,expect}=require('@playwright/test');
+if (process.env.TWINKLY_TEST_CHROME) {
+ test.use({launchOptions:{executablePath:process.env.TWINKLY_TEST_CHROME}});
+}
 for(const viewport of [{width:1440,height:900},{width:390,height:844}]){
  test('studio navigation and layout '+viewport.width,async({page})=>{
   await page.setViewportSize(viewport);
