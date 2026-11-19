@@ -801,7 +801,7 @@ class Controller:
             x, y = 1-y, x
         return x, y
 
-    def group_coordinates(self, key, members, mode):
+    def group_coordinates(self, key, members, mode, *, apply_reverse=True):
         device = self.devices[key]
         count = device.row["leds"]
         if mode == "join":
@@ -819,7 +819,7 @@ class Controller:
         def normal(v, lo, hi):
             return (v-lo)/(hi-lo) if hi > lo else .5
         settings = device.row.get("mapping_override", {})
-        if settings.get("reverse"):
+        if apply_reverse and settings.get("reverse"):
             selected.reverse()
         result = []
         for x, y, *_ in selected:
@@ -910,12 +910,21 @@ class Controller:
         return tuple(result)
 
     @staticmethod
+    def led_test_order(points):
+        indices = range(len(points))
+        return indices[::-1] if points and points[0][1] > points[-1][1] else indices
+
+    @staticmethod
     def physical_frame(kind, index, coords, elapsed):
+        if kind == "led":
+            offset = 3 * coords[int(elapsed * 8) % len(coords)]
+            frame = bytearray(3 * len(coords))
+            frame[offset:offset+3] = bytes((90, 90, 90))
+            return bytes(frame)
         palette = ((90,0,0),(0,90,0),(0,0,90),(90,90,0))
         def color(i, x, y):
             if kind == "identify": return palette[index % len(palette)]
             if kind == "rgb": return palette[int(elapsed / 2) % 3]
-            if kind == "led": return (90,90,90) if i == int(elapsed * 8) % len(coords) else (0,0,0)
             if kind == "rainbow": return tuple(round(v*90) for v in colorsys.hsv_to_rgb((x-elapsed/6)%1,1,1))
             position = x if kind == "horizontal" else y
             return (90,90,90) if abs(position-(elapsed/4)%1)<.08 else (0,0,0)
@@ -940,14 +949,21 @@ class Controller:
             if any(k in self.patterns or k in self.music or k in self.sequence_devices or self.devices[k].restore is not None for k in keys):
                 return self.group_conflict(data["group"], kind, "Stop active music, effects and sequences first.")
             mode = group.get("mode","sync")
-            if kind in ("identify","rgb","led"):
+            if kind in ("identify","rgb"):
                 coordinates = {k: [(0,0,0)]*self.devices[k].row["leds"] for k in keys}
             else:
                 try:
                     await self.load_group_layouts(keys, mode)
-                    coordinates = {k:self.group_coordinates(k,keys,mode) for k in keys}
+                    if kind == "led":
+                        coordinates = {k: self.led_test_order(self.group_coordinates(k, keys, mode, apply_reverse=False))
+                                       for k in keys}
+                    else:
+                        coordinates = {k:self.group_coordinates(k,keys,mode) for k in keys}
                 except ValueError as exc:
-                    return self.group_conflict(data["group"], kind, exc)
+                    if kind != "led":
+                        return self.group_conflict(data["group"], kind, exc)
+                    LOG.warning("group=%s operation=led using controller order: %s", data["group"], exc)
+                    coordinates = {k: range(self.devices[k].row["leds"]) for k in keys}
             start = time.monotonic()
             for index,k in enumerate(keys):
                 self.physical_tests[k] = (kind,index,coordinates[k],start)
