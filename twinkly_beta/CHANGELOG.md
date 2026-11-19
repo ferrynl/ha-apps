@@ -1,3 +1,7 @@
+## 2.0.0-beta.6
+
+- Match the visible height of the three navigation wordmarks and display the Hue artwork without the white background or duplicate label.
+
 ## 2.0.0-beta.5
 
 - Use the official Twinkly wordmark and the Philips Hue app icon in the navigation.
