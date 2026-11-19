@@ -38,6 +38,7 @@ class LightingTests(unittest.IsolatedAsyncioTestCase):
             "govee_statuses": {"192.168.1.3": {"onOff": 1, "color": {"r": 255, "g": 1, "b": 2}}},
             "Hue.control": None,
             "Govee.color": None,
+            "Govee.power": None,
         }.items():
             patcher = patch("modules.provider_routes." + name, new=AsyncMock(return_value=value))
             setattr(self, name.split(".")[-1], patcher.start())
@@ -123,3 +124,45 @@ class LightingTests(unittest.IsolatedAsyncioTestCase):
         lights = {light["id"]: light for light in data["lights"]}
         self.assertEqual(lights[self.hue]["status"], "unavailable")
         self.control.assert_awaited_once()
+
+    async def test_scene_applies_to_current_group_and_reports_each_command(self):
+        group = "a" * 32
+        self.store.save_groups({group: {"name": "Wall", "members": [self.twinkly]}})
+        reply = await self.client.post("/lighting/scenes", json={
+            "name": " Christmas Eve ", "group": group, "on": True,
+            "brightness": 40, "color": [255, 10, 0],
+        })
+        self.assertEqual(reply.status, 200)
+        scene = (await reply.json())["id"]
+        self.assertEqual(ProviderStore(self.store.path.parent).load_scenes()[scene]["name"], "Christmas Eve")
+        self.store.save_groups({group: {"name": "Wall", "members": [self.twinkly, self.hue, self.govee]}})
+        reply = await self.client.post(f"/lighting/scenes/{scene}/apply")
+        self.assertEqual(reply.status, 200)
+        self.assertEqual((await reply.json())["results"], {
+            self.twinkly: dict.fromkeys(("power", "color", "brightness"), "accepted"),
+            self.hue: {"power": "accepted", "color": "skipped", "brightness": "skipped"},
+            self.govee: {"power": "unconfirmed", "color": "unconfirmed", "brightness": "skipped"},
+        })
+        self.assertEqual([call.args[0]["action"] for call in self.controller.apply_control.await_args_list],
+                         ["on", "color", "brightness"])
+
+        self.store.save_groups({})
+        reply = await self.client.post(f"/lighting/scenes/{scene}/apply")
+        self.assertEqual(reply.status, 409)
+        reply = await self.client.post("/lighting/scenes", json={"id": scene, "delete": True})
+        self.assertEqual(reply.status, 200)
+        self.assertEqual(self.store.load_scenes(), {})
+
+    async def test_scene_rejects_invalid_input_and_off_only_sends_power(self):
+        group = "a" * 32
+        self.store.save_groups({group: {"name": "Wall", "members": [self.twinkly]}})
+        payload = {"name": "Off", "group": group, "on": True}
+        for change in ({"group": "missing"}, {"on": 1}, {"color": [0, 0, 0]}, {"brightness": 101}):
+            response = await self.client.post("/lighting/scenes", json={**payload, **change})
+            self.assertEqual(response.status, 400)
+        reply = await self.client.post("/lighting/scenes", json={**payload, "on": False, "brightness": 20})
+        self.assertEqual(reply.status, 200)
+        scene = (await reply.json())["id"]
+        reply = await self.client.post(f"/lighting/scenes/{scene}/apply")
+        self.assertEqual((await reply.json())["results"], {self.twinkly: {"power": "accepted"}})
+        self.controller.apply_control.assert_awaited_once_with({"id": "tree", "action": "off", "value": False})

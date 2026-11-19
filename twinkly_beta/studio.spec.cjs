@@ -84,13 +84,14 @@ test('Home combines providers and keeps pairing in Settings', async ({page}) => 
   state:{on:true, brightness:rgb?65:null, color:rgb?[255,120,30]:null},
  });
  const groups = {};
+ const scenes = {};
  let groupControl;
  let pairing;
  let temperature;
  await page.route('**/lighting', route => route.fulfill({json:{
   lights:[light('t','twinkly','Tree',true),{...light('h','hue','Living room',false),
    capabilities:{power:true,temperature:true}, temperature_mirek:{min:153,max:500}, state:{on:true,mirek:370}},light('g','govee','Strip',false,'unknown')],
-  connections:{hue:[{id:'bridge',address:'192.168.1.2',status:'online'}],govee:[]}, groups,
+  connections:{hue:[{id:'bridge',address:'192.168.1.2',status:'online'}],govee:[]}, groups, scenes,
  }}));
  await page.route('**/lighting/groups', route => {
   const {name,members}=route.request().postDataJSON();
@@ -106,6 +107,15 @@ test('Home combines providers and keeps pairing in Settings', async ({page}) => 
   groupControl=command;
   return route.fulfill({json:{results:{t:'accepted',h:'skipped',g:'unconfirmed'}}});
  });
+ await page.route('**/lighting/scenes', route => {
+  const scene=route.request().postDataJSON();
+  expect(scene).toEqual({name:'Kerstavond',group:'mixed',on:true,brightness:45});
+  scenes.christmas=scene;
+  return route.fulfill({json:{id:'christmas'}});
+ });
+ await page.route('**/lighting/scenes/christmas/apply', route => route.fulfill({json:{results:{
+  t:{power:'accepted',brightness:'accepted'}, h:{power:'accepted',brightness:'skipped'},
+ }}}));
  const fingerprint = 'ab'.repeat(32);
  await page.route('**/providers/hue/certificate', route => {
   expect(route.request().postDataJSON()).toEqual({address:'192.168.1.2'});
@@ -140,6 +150,12 @@ test('Home combines providers and keeps pairing in Settings', async ({page}) => 
  await group.getByRole('button',{name:'Aan',exact:true}).click();
  await expect(page.locator('#lighting-feedback')).toContainText('Onbevestigd · 1');
  expect(groupControl).toEqual({group:'mixed',action:'power',value:true});
+ const sceneForm=home.locator('.lighting-scene-form');
+ await sceneForm.getByLabel('Scènenaam').fill('Kerstavond');
+ await sceneForm.getByLabel('Helderheid').fill('45');
+ await sceneForm.getByRole('button',{name:'Opslaan'}).click();
+ await home.locator('article').filter({hasText:'Kerstavond'}).getByRole('button',{name:'Afspelen'}).click();
+ await expect(page.locator('#lighting-feedback')).toContainText('Living room · Aan Gelukt, Helderheid Overgeslagen');
  await page.locator('#nav-hue').click();
  await expect(home.locator('article')).toHaveCount(1);
  await expect(home.getByText('Living room')).toBeVisible();

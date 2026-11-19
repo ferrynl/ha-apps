@@ -32,6 +32,7 @@ class ProviderStore:
     def __init__(self, directory="/data"):
         self.path=Path(directory)/"light-providers.json"
         self.groups_path=Path(directory)/"lighting-groups.json"
+        self.scenes_path=Path(directory)/"lighting-scenes.json"
 
     @staticmethod
     def read(path, default):
@@ -65,6 +66,22 @@ class ProviderStore:
 
     def save_groups(self, groups):
         self.write(self.groups_path, groups)
+
+    def load_scenes(self):
+        scenes = self.read(self.scenes_path, {})
+        if not isinstance(scenes, dict) or any(
+            not re.fullmatch(r"[a-f0-9]{32}", key)
+            or not isinstance(scene, dict)
+            or not isinstance(scene.get("name"), str)
+            or not isinstance(scene.get("group"), str)
+            or type(scene.get("on")) is not bool
+            for key, scene in scenes.items()
+        ):
+            raise ValueError("Invalid lighting scenes")
+        return scenes
+
+    def save_scenes(self, scenes):
+        self.write(self.scenes_path, scenes)
 
     def save(self,data):
         self.write(self.path, validate(data))

@@ -13,6 +13,7 @@ ERRORS = (ClientError, OSError, RuntimeError, TimeoutError, ValueError, web.HTTP
 CAPABILITY = {"power": "power", "brightness": "brightness", "color": "rgb", "temperature": "temperature"}
 MAX_MEMBERS = 128
 MAX_GROUPS = 40
+MAX_SCENES = 40
 
 
 def light_key(*parts):
@@ -35,6 +36,21 @@ def color_from_xy(xy):
             for c in channels]
 
 
+def scene_settings(body):
+    name, group, on = body["name"], body["group"], body["on"]
+    if (not isinstance(name, str) or not 1 <= len(name.strip()) <= 60
+            or not isinstance(group, str) or type(on) is not bool):
+        raise ValueError("Invalid scene")
+    scene = {"name": name.strip(), "group": group, "on": on}
+    if on and body.get("brightness") is not None:
+        scene["brightness"] = brightness(body["brightness"])
+    if on and body.get("color") is not None:
+        scene["color"] = rgb(body["color"])
+        if not any(scene["color"]):
+            raise ValueError("Use power off for black")
+    return scene
+
+
 class Lighting:
     def __init__(self, controller, store, provider_inventory, provider_control):
         self.controller = controller
@@ -42,6 +58,7 @@ class Lighting:
         self.provider_inventory = provider_inventory
         self.provider_control = provider_control
         self.group_lock = asyncio.Lock()
+        self.control_lock = asyncio.Lock()
 
     async def lights(self):
         lights = {}
@@ -87,7 +104,12 @@ class Lighting:
             groups = self.store.load_groups()
         except ERRORS:
             groups = None
-        return web.json_response({"lights": list(lights.values()), "connections": connections, "groups": groups})
+        try:
+            scenes = self.store.load_scenes()
+        except ERRORS:
+            scenes = None
+        return web.json_response({"lights": list(lights.values()), "connections": connections,
+                                  "groups": groups, "scenes": scenes})
 
     async def save_group(self, request):
         try:
@@ -119,6 +141,56 @@ class Lighting:
         except (ValueError, TypeError):
             raise web.HTTPBadRequest()
         except OSError:
+            raise web.HTTPServiceUnavailable()
+
+    async def save_scene(self, request):
+        try:
+            body = await request.json()
+            if not isinstance(body, dict):
+                raise ValueError()
+            identifier = body.get("id")
+            async with self.group_lock:
+                scenes = self.store.load_scenes()
+                if identifier is not None and (not isinstance(identifier, str) or identifier not in scenes):
+                    raise web.HTTPNotFound()
+                if body.get("delete") is True:
+                    if identifier is None:
+                        raise ValueError()
+                    del scenes[identifier]
+                else:
+                    scene = scene_settings(body)
+                    if scene["group"] not in self.store.load_groups() or (identifier is None and len(scenes) >= MAX_SCENES):
+                        raise ValueError()
+                    identifier = identifier or uuid.uuid4().hex
+                    scenes[identifier] = scene
+                self.store.save_scenes(scenes)
+            return web.json_response({"id": identifier})
+        except (ValueError, KeyError, TypeError):
+            raise web.HTTPBadRequest()
+        except OSError:
+            raise web.HTTPServiceUnavailable()
+
+    async def apply_scene(self, request):
+        try:
+            async with self.control_lock:
+                scene = self.store.load_scenes().get(request.match_info["id"])
+                if scene is None:
+                    raise web.HTTPNotFound()
+                scene = scene_settings(scene)
+                group = self.store.load_groups().get(scene["group"])
+                if group is None:
+                    raise web.HTTPConflict()
+                members = group["members"]
+                lights, _ = await self.lights()
+                commands = [("power", scene["on"])]
+                commands.extend((action, scene[action]) for action in ("color", "brightness") if action in scene)
+                results = {key: {} for key in members}
+                for action, value in commands:
+                    outcomes = await asyncio.gather(*(self.send(key, lights.get(key), action, value) for key in members))
+                    for key, outcome in zip(members, outcomes):
+                        results[key][action] = outcome
+            return web.json_response({"results": results})
+        except (ValueError, KeyError, TypeError, OSError):
             raise web.HTTPServiceUnavailable()
 
     async def send(self, key, light, action, value):
@@ -173,11 +245,14 @@ class Lighting:
             raise web.HTTPBadRequest()
         except OSError:
             raise web.HTTPServiceUnavailable()
-        lights, _ = await self.lights()
-        results = await asyncio.gather(*(self.send(key, lights.get(key), action, value) for key in members))
+        async with self.control_lock:
+            lights, _ = await self.lights()
+            results = await asyncio.gather(*(self.send(key, lights.get(key), action, value) for key in members))
         return web.json_response({"results": dict(zip(members, results))})
 
     def install(self, router):
         router.add_get("/lighting", self.inventory)
         router.add_post("/lighting/groups", self.save_group)
         router.add_post("/lighting/control", self.control)
+        router.add_post("/lighting/scenes", self.save_scene)
+        router.add_post("/lighting/scenes/{id}/apply", self.apply_scene)
