@@ -1,3 +1,7 @@
+## 2.0.0-beta.6
+
+- Lock direct and transitive Python dependencies for reproducible builds and Aikido scanning.
+
 ## 2.0.0-beta.5
 
 - Use the official Twinkly wordmark and the Philips Hue app icon in the navigation.
