@@ -3,7 +3,7 @@ import asyncio
 from aiohttp import web, ClientError
 from .provider_store import ProviderStore
 from .hue import Hue
-from .hue_pairing import fingerprint, pair
+from .hue_pairing import fingerprint, pair, inspect_certificate
 from .govee import Govee
 from .common import lan_ip
 from .hue_discovery import discover as hue_discover
@@ -98,6 +98,18 @@ def install(app, store=None):
             return web.json_response({"ok":True,"confirmed":provider=="hue"})
         except (ValueError,KeyError,TypeError,ClientError,OSError,RuntimeError,TimeoutError):
             return web.json_response({"error":"control_failed"},status=400)
+    async def certificate(request):
+        if scan_lock.locked():
+            return web.json_response({"error":"scan_busy"},status=409)
+        async with scan_lock:
+            try:
+                body=await request.json()
+                address=lan_ip(body["address"])
+                pin=await inspect_certificate(address)
+                return web.json_response({"certificate_sha256":pin,"verified":False})
+            except (ValueError,KeyError,TypeError,OSError,TimeoutError):
+                return web.json_response({"error":"certificate_unavailable"},status=400)
+    app.router.add_post("/providers/hue/certificate",certificate)
     app.router.add_post("/providers/{provider}/connect",connect)
     app.router.add_post("/providers/{provider}/control",control)
     app.router.add_get("/providers/configured",configured)

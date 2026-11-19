@@ -70,3 +70,15 @@ class RouteTests(unittest.IsolatedAsyncioTestCase):
         self.store.save({"version":1,"hue":{},"govee":{"test":{"address":"192.168.1.4"}}})
         r=await self.client.post("/providers/govee/control",json={"id":"test","action":"brightness","value":101})
         self.assertEqual(r.status,400)
+
+    async def test_certificate_inspection_is_unverified(self):
+        with patch("modules.provider_routes.inspect_certificate",new=AsyncMock(return_value="ab"*32)) as inspect:
+            r=await self.client.post("/providers/hue/certificate",json={"address":"192.168.1.4"})
+            inspect.assert_awaited_once_with("192.168.1.4")
+        self.assertEqual(await r.json(),{"certificate_sha256":"ab"*32,"verified":False})
+        self.assertEqual(self.store.load()["hue"],{})
+    async def test_certificate_public_address_rejected(self):
+        with patch("modules.provider_routes.inspect_certificate",new=AsyncMock()) as inspect:
+            r=await self.client.post("/providers/hue/certificate",json={"address":"8.8.8.8"})
+            inspect.assert_not_awaited()
+        self.assertEqual(r.status,400)

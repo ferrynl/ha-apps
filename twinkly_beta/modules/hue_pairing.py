@@ -35,3 +35,20 @@ async def pair(address, certificate_sha256):
         async with session.post(f"https://{ip}/api",json={"devicetype":"christmas_control#local","generateclientkey":True},ssl=trust,allow_redirects=False) as response:
             response.raise_for_status()
             return pairing_result(await response.json())
+
+async def inspect_certificate(address):
+    """Unauthenticated TLS inspection only: never send HTTP or credentials."""
+    import asyncio, ssl, hashlib
+    ip=lan_ip(address)
+    context=ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+    context.check_hostname=False
+    context.verify_mode=ssl.CERT_NONE
+    reader,writer=await asyncio.wait_for(asyncio.open_connection(ip,443,ssl=context,server_hostname=ip,ssl_handshake_timeout=4),timeout=5)
+    try:
+        cert=writer.get_extra_info("ssl_object").getpeercert(binary_form=True)
+        if not cert: raise ValueError("No certificate")
+        return hashlib.sha256(cert).hexdigest()
+    finally:
+        writer.close()
+        try: await asyncio.wait_for(writer.wait_closed(),timeout=1)
+        except (OSError,TimeoutError): pass
