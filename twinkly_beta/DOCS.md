@@ -82,7 +82,7 @@ Het tv-scherm kan ook de afbeelding uit Home Assistant tonen. De app zoekt een a
 
 Gebruik **Tv-bron** bij het scherm om rechtstreeks een Home Assistant-mediaspeler te kiezen. **Automatisch** blijft de optie om de track op basis van LedFX te koppelen. De keuze wordt centraal bewaard. De instelling `media_player` dient als beginwaarde zolang je nog geen keuze in het mengpaneel hebt opgeslagen.
 
-Het mengpaneel heeft twee pagina’s. **Bediening** bevat licht, muziek, tv, scènepads, groepsbediening en apparaten. **Instellingen** bevat taal, Music Assistant, tv-bron, apparaatdetectie en beheer van groepen, scènes en effectafbeeldingen.
+Op de pagina **Twinkly** vind je het mengpaneel met licht, muziek, tv, scènepads en Twinkly-groepen. Via **Netwerk** en **Testcontrole** open je de Twinkly-diagnostiek. In **Instellingen** beheer je verbindingen, taal, Music Assistant, de tv-bron, Twinkly-groepen, scènes en effectafbeeldingen.
 
 Het Twinkly-beeldmerk is lokaal opgenomen als transparant SVG, gebaseerd op [Simple Icons](https://github.com/simple-icons/simple-icons/blob/develop/icons/twinkly.svg). Het merk is van Twinkly.
 
@@ -98,5 +98,10 @@ Onder **Matrix-GIF’s** staan 100 originele geanimeerde vierkanten in tien them
 
 Met **Showbouwer** maak je een reeks van maximaal 30 stappen met een patroon, lampgroep, duur en helderheid per stap. Muziekstappen gebruiken de huidige LedFX-stijl. De add-on speelt de show af en herstelt de vorige lampmodus bij het einde van elke stap. **Favorieten** biedt maximaal acht snelkeuzes voor de huidige doelkeuze van de effectengalerij.
 
-## Roadmap 2.0
-Philips Hue toevoegen als tweede lichtplatform. De huidige beta ondersteunt uitsluitend Twinkly.
+## Philips Hue en Govee
+
+Je koppelt Philips Hue en Govee via **Instellingen → Verbindingen**. Controleer voor Hue de SHA256-vingerafdruk via een vertrouwde bron en druk vlak voor het koppelen op de fysieke Bridge-knop. Activeer voor Govee eerst LAN-bediening in de Govee-app.
+
+**Home** toont de lampen van alle drie merken. In een gemengde groep kun je aan/uit, helderheid en kleur bedienen voor lampen die die functie aanbieden. Het resultaat vermeldt afzonderlijk welke lampen de opdracht hebben aangenomen, welke zijn overgeslagen of mislukt en welke Govee-opdrachten onbevestigd zijn. De bestaande Twinkly-groepen blijven beschikbaar voor effecten, lichtshows, muziek en LED-mapping.
+
+De app toont Govee-bediening zodra een lokaal statusbericht de benodigde functies aangeeft. Govee bevestigt de uitvoering van opdrachten niet. De directe bediening gebruikt je lokale netwerk.

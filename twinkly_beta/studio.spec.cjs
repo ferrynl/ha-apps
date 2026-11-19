@@ -43,6 +43,7 @@ test('Home combines providers and keeps pairing in Settings', async ({page}) => 
  });
  const groups = {};
  let groupControl;
+ let pairing;
  await page.route('**/lighting', route => route.fulfill({json:{
   lights:[light('t','twinkly','Tree',true),light('h','hue','Living room',false),light('g','govee','Strip',false,'unknown')],
   connections:{hue:[{id:'bridge',address:'192.168.1.2',status:'online'}],govee:[]}, groups,
@@ -55,6 +56,15 @@ test('Home combines providers and keeps pairing in Settings', async ({page}) => 
  await page.route('**/lighting/control', route => {
   groupControl=route.request().postDataJSON();
   return route.fulfill({json:{results:{t:'accepted',h:'skipped',g:'unconfirmed'}}});
+ });
+ const fingerprint = 'ab'.repeat(32);
+ await page.route('**/providers/hue/certificate', route => {
+  expect(route.request().postDataJSON()).toEqual({address:'192.168.1.2'});
+  return route.fulfill({json:{certificate_sha256:fingerprint,verified:false}});
+ });
+ await page.route('**/providers/hue/connect', route => {
+  pairing=route.request().postDataJSON();
+  return route.fulfill({json:{ok:true}});
  });
  await page.setViewportSize({width:390,height:844});
  await page.goto('http://127.0.0.1:8765/index.html');
@@ -86,6 +96,17 @@ test('Home combines providers and keeps pairing in Settings', async ({page}) => 
  await expect(settings.getByText('bridge · 192.168.1.2 · Verbonden')).toBeVisible();
  await settings.getByRole('button',{name:'Opnieuw koppelen',exact:true}).click();
  await expect(settings.getByLabel('LAN-adres').first()).toHaveValue('192.168.1.2');
- await expect(settings.getByRole('button',{name:'Certificaat ophalen'})).toBeVisible();
+ const certificate=settings.getByRole('button',{name:'Certificaat ophalen'});
+ page.once('dialog', dialog => dialog.dismiss());
+ await certificate.click();
+ await expect(settings.getByLabel('SHA256-vingerafdruk')).toHaveValue('');
+ page.once('dialog', async dialog => {
+  expect(dialog.message()).toContain(fingerprint);
+  await dialog.accept();
+ });
+ await certificate.click();
+ await expect(settings.getByLabel('SHA256-vingerafdruk')).toHaveValue(fingerprint);
+ await settings.locator('form').getByRole('button',{name:'Opnieuw koppelen'}).click();
+ await expect.poll(() => pairing).toEqual({id:'bridge',address:'192.168.1.2',certificate_sha256:fingerprint});
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBeTruthy();
 });
