@@ -69,6 +69,7 @@ def install(app, store=None, controller=None):
                 row = {"id": identifier, "address": address, "status": "unknown"}
                 if address in found:
                     row["report"] = found[address]
+                    row["status"] = "reported"
                 results.append(row)
             return results
 

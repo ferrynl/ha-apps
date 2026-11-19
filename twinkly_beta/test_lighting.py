@@ -59,6 +59,8 @@ class LightingTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(lights[self.hue]["capabilities"]["rgb"])
         self.assertTrue(lights[self.govee]["capabilities"]["rgb"])
         self.assertFalse(lights[self.govee]["verified"])
+        self.assertEqual(lights[self.govee]["status"], "reported")
+        self.assertEqual(lights[self.silent]["status"], "unknown")
         self.assertFalse(lights[self.silent]["capabilities"]["power"])
 
     async def test_cross_brand_group_gates_color_and_persists(self):
