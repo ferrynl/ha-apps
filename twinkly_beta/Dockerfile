@@ -1,6 +1,7 @@
 FROM python:3.12-slim-bookworm
 WORKDIR /app
 RUN pip install --no-cache-dir aiohttp==3.13.5 xled==0.7.0 Pillow==12.2.0
+COPY light_providers.py provider_lights.html ./
 COPY app.py index.html twinkly.svg config.yaml ./
 COPY effect_previews ./effect_previews
 COPY product_photos ./product_photos

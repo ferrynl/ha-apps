@@ -2350,6 +2350,8 @@ class Controller:
         app.router.add_get("/gifs", self.list_gifs)
         app.router.add_post("/gifs", self.save_gif)
         app.router.add_get("/gifs/{id}", self.gif_file)
+        from light_providers import register
+        register(app)
         return app
 
 
