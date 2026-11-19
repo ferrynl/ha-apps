@@ -339,6 +339,8 @@ class Device:
         self.wifi_observation = None
         self.network_details = {}
         self.native_group = None
+        self.native_layout_id = ""
+        self.native_standalone = False
         self.native_identity = dict(row.get("native_identity", {}))
         self.native_group_until = 0
         self.removed = False
@@ -463,9 +465,16 @@ class Device:
         received = False
         for path, field in (("summary", "group"), ("led/movie/config", "sync")):
             try:
-                group = self.api(path).get(field)
+                payload = self.api(path)
             except (ApplicationError, ValueError, RequestException):
                 continue
+            if path == "summary":
+                layout = payload.get("layout")
+                layout_id = layout.get("uuid") if isinstance(layout, dict) else None
+                self.native_layout_id = layout_id.strip().casefold() if isinstance(layout_id, str) else ""
+            group = payload.get(field)
+            if path == "summary":
+                self.native_standalone = isinstance(group, dict) and group.get("mode") == "none"
             if not isinstance(group, dict):
                 continue
             received = True
@@ -518,7 +527,9 @@ class Device:
             coords = [point.get(axis, 0 if axis == "z" else None) for axis in ("x", "y", "z")]
             if all(type(value) in (int, float) and math.isfinite(value) for value in coords):
                 points.append([index, *coords])
+        layout_id = data.get("uuid")
         self.layout = {"points": points, "source": data.get("source"),
+                       "uuid": layout_id.strip().casefold() if isinstance(layout_id, str) else "",
                        "synthesized": data.get("synthesized") is True}
         self.layout_until = time.monotonic() + 120
 
@@ -797,10 +808,7 @@ class Controller:
             entries = self.join_entries(members)
             leader, total = self.validate_join(entries)
             offset = entries[key]["offset"]
-            try:
-                points = self.mapped_points(self.devices[leader], total)
-            except ValueError as exc:
-                raise ValueError(f"{self.devices[leader].row['name']} does not expose a complete physical map for all {total} LEDs. Check the group mapping in Twinkly.") from exc
+            points = self.join_points(entries, leader, total)
             selected = [points[offset+i] for i in range(count)]
         else:
             points = self.mapped_points(device, count)
@@ -821,6 +829,24 @@ class Controller:
                 x = (members.index(key) + x) / len(members)
             result.append((x, y, _[0] if _ else 0))
         return tuple(result)
+
+    def join_points(self, entries, leader, total):
+        try:
+            return self.mapped_points(self.devices[leader], total)
+        except ValueError:
+            pass
+        layout_ids = {(self.devices[key].layout or {}).get("uuid") for key in entries}
+        if len(layout_ids) != 1 or not next(iter(layout_ids)):
+            raise ValueError(f"Join needs a complete map of all {total} LEDs or matching physical mapping IDs on every controller. Refresh the group mapping in Twinkly.")
+        points = {}
+        for key, info in entries.items():
+            device = self.devices[key]
+            try:
+                segment = self.mapped_points(device, device.row["leds"])
+            except ValueError as exc:
+                raise ValueError(f"{device.row.get('name', key)} returned an incomplete Join mapping. Refresh the group mapping in Twinkly.") from exc
+            points.update((info["offset"] + index, point) for index, point in segment.items())
+        return points
 
     def join_entries(self, members):
         for entries in self.native_memberships().values():
@@ -856,8 +882,16 @@ class Controller:
 
     async def load_group_layouts(self, keys, mode):
         if mode == "join":
-            master, _ = self.validate_join(self.join_entries(keys))
-            keys = [master]
+            master, total = self.validate_join(self.join_entries(keys))
+            device = self.devices[master]
+            if not await device.run(device.load_layout):
+                raise ValueError(f"Could not read the physical mapping from {device.row['name']}. Check the controller connection and retry.")
+            try:
+                self.mapped_points(device, total)
+            except ValueError:
+                keys = [key for key in keys if key != master]
+            else:
+                return
         results = await asyncio.gather(*(self.devices[key].run(self.devices[key].load_layout) for key in keys))
         failed = [self.devices[key].row["name"] for key, ok in zip(keys, results) if not ok]
         if failed:
@@ -1137,6 +1171,33 @@ class Controller:
                 if len(previous) <= 1:
                     previous.pop(key, None)
                     by_id[group_id][key] = dict(info, role="master", offset=0 if info.get("offset") is None else info["offset"])
+
+        layout_recoveries = {}
+        for group_id, entries in by_id.items():
+            if not entries or any(info["role"] != "slave" for info in entries.values()):
+                continue
+            layout_ids = {self.devices[key].native_layout_id for key in entries}
+            if len(layout_ids) != 1 or not next(iter(layout_ids)):
+                continue
+            layout_id = next(iter(layout_ids))
+            if not any(info.get("size") for info in entries.values()):
+                continue
+            candidates = []
+            for key, device in self.devices.items():
+                if (device.offline or device.native_layout_id != layout_id or not device.native_standalone
+                        or device.native_group is not None or device.row.get("native_master_for") not in (None, group_id)):
+                    continue
+                proposed = dict(entries, **{key: {"role": "master", "offset": 0}})
+                try:
+                    self.validate_join(proposed)
+                except ValueError:
+                    continue
+                candidates.append(key)
+            if len(candidates) == 1:
+                layout_recoveries.setdefault(candidates[0], []).append(group_id)
+        for key, group_ids in layout_recoveries.items():
+            if len(group_ids) == 1:
+                by_id[group_ids[0]][key] = {"role": "master", "offset": 0}
 
         for group_id, entries in by_id.items():
             manual = [key for key, device in self.devices.items()
