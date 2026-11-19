@@ -339,6 +339,7 @@ class Device:
         self.wifi_observation = None
         self.network_details = {}
         self.native_group = None
+        self.native_identity = dict(row.get("native_identity", {}))
         self.native_group_until = 0
         self.removed = False
         self.replies = 0
@@ -406,6 +407,7 @@ class Device:
 
     def read_product_code(self):
         info = self.api("gestalt")
+        self.remember_native_identity(info)
         self.product_code = info.get("product_code")
         self.model_checked = True
 
@@ -413,6 +415,7 @@ class Device:
         if time.monotonic() < self.details_until:
             return
         info = self.api("gestalt")
+        self.remember_native_identity(info)
         self.product_code = info.get("product_code") or self.product_code
         self.model_checked = True
         details = {key: info[key] for key in (
@@ -448,6 +451,10 @@ class Device:
         self.load_native_group()
         self.details_until = time.monotonic() + 60
 
+    def remember_native_identity(self, info):
+        self.native_identity.update({field: info[field] for field in ("uuid", "mac", "hw_id")
+                                     if isinstance(info.get(field), str) and info[field].strip()})
+
     def load_native_group(self):
         if time.monotonic() < self.native_group_until:
             return
@@ -463,8 +470,6 @@ class Device:
                 continue
             received = True
             role = group.get("mode")
-            if role == "none":
-                break
             if role not in ("master", "slave"):
                 continue
             uid = group.get("uid")
@@ -473,10 +478,9 @@ class Device:
             master = master.strip() if isinstance(master, str) else ""
             name = group.get("name")
             offset, size = group.get("offset"), group.get("size")
-            if offset is None and uid and role == "master":
-                offset = 0
             entry = {
                 "id": uid or master, "uid": bool(uid), "role": role,
+                "master_id": master,
                 "name": name.strip() if isinstance(name, str) else "",
                 "offset": offset if type(offset) is int and offset >= 0 else None,
                 "size": size if type(size) is int and size > 0 else None,
@@ -484,16 +488,23 @@ class Device:
             if reported is None:
                 reported = entry
             elif reported["role"] == entry["role"]:
+                if entry["uid"] and reported["uid"] and entry["id"] != reported["id"]:
+                    LOG.warning("lamp=%r reports conflicting native group UIDs", self.row["name"])
+                    continue
                 for field in ("offset", "size"):
                     if entry[field] is not None:
                         reported[field] = entry[field]
-                for field in ("id", "name"):
+                for field in ("id", "name", "master_id"):
                     if not reported[field] and entry[field]:
                         reported[field] = entry[field]
-                if entry["uid"]:
+                if entry["master_id"] and entry["master_id"].casefold() != reported["master_id"].casefold():
+                    reported["master_id"] = ""
+                if entry["uid"] and not reported["uid"]:
                     reported["id"] = entry["id"]
                     reported["uid"] = True
         if received:
+            if reported and reported["role"] == "master" and reported["offset"] is None:
+                reported["offset"] = 0
             self.native_group = reported
 
     def load_layout(self):
@@ -721,6 +732,8 @@ class Controller:
             if not 1 <= leds <= 4096 or profile not in ("RGB", "RGBW"):
                 raise ValueError("Onbekend ledprofiel of aantal leds")
             return {"id": str(info.get("mac") or info.get("hw_id") or host),
+                    "native_identity": {field: info[field] for field in ("uuid", "mac", "hw_id")
+                                        if isinstance(info.get(field), str) and info[field].strip()},
                     "name": str(info.get("device_name") or host), "ip": host,
                     "leds": leds, "profile": profile, "product_code": info.get("product_code"),
                     "protocol": 1 if str(info.get("product_version")) == "1" and leds <= 255 else 3}
@@ -731,6 +744,8 @@ class Controller:
         async with self.edit:
             key = row["id"]
             old = self.devices.get(key)
+            if old and "native_master_for" in old.row:
+                row["native_master_for"] = old.row["native_master_for"]
             if old and old.row == row:
                 return row
             if not old and len(self.devices) >= MAX_DEVICES:
@@ -779,23 +794,13 @@ class Controller:
         device = self.devices[key]
         count = device.row["leds"]
         if mode == "join":
-            entries = [self.devices[k] for k in members]
-            total = sum(d.row["leds"] for d in entries)
-            leader = next((d for d in entries if (d.native_group or {}).get("role") == "master"), None)
-            info = device.native_group or {}
-            offset = info.get("offset")
-            if leader is None or offset is None or offset + count > total:
-                raise ValueError("Join requires native group offsets and master mapping")
-            expected = 0
-            for d in sorted(entries, key=lambda d: (d.native_group or {}).get("offset") or 0):
-                if (d.native_group or {}).get("offset") != expected:
-                    raise ValueError("Join offsets are incomplete or overlapping")
-                expected += d.row["leds"]
+            entries = self.join_entries(members)
+            leader, total = self.validate_join(entries)
+            offset = entries[key]["offset"]
             try:
-                points = self.mapped_points(leader, total)
-            except ValueError:
-                # Local layouts cannot establish a common coordinate system.
-                raise ValueError("Native master does not expose the complete group mapping")
+                points = self.mapped_points(self.devices[leader], total)
+            except ValueError as exc:
+                raise ValueError(f"{self.devices[leader].row['name']} does not expose a complete physical map for all {total} LEDs. Check the group mapping in Twinkly.") from exc
             selected = [points[offset+i] for i in range(count)]
         else:
             points = self.mapped_points(device, count)
@@ -816,6 +821,52 @@ class Controller:
                 x = (members.index(key) + x) / len(members)
             result.append((x, y, _[0] if _ else 0))
         return tuple(result)
+
+    def join_entries(self, members):
+        for entries in self.native_memberships().values():
+            if entries.keys() == set(members):
+                return entries
+        return {key: self.devices[key].native_group or {} for key in members}
+
+    def validate_join(self, entries):
+        masters = [key for key, info in entries.items() if info.get("role") == "master"]
+        if not masters:
+            raise ValueError("Join needs exactly one native master. Bring the master online, refresh discovery, or explicitly associate it on the Test page.")
+        if len(masters) > 1:
+            names = ", ".join(self.devices[key].row.get("name", key) for key in masters)
+            raise ValueError(f"Multiple controllers report they are Join master ({names}). Check group membership in Twinkly.")
+        sizes = {info.get("size") for info in entries.values()} - {None}
+        if len(sizes) > 1:
+            raise ValueError("Controllers report different Join LED totals. Check group membership in Twinkly.")
+        missing = [self.devices[key].row.get("name", key) for key, info in entries.items() if info.get("offset") is None]
+        if missing:
+            raise ValueError(f"Join offset is missing for {', '.join(missing)}. Refresh discovery and check the group mapping in Twinkly.")
+        if entries[masters[0]]["offset"] != 0:
+            raise ValueError("The Join master must start at offset 0. Check member order in Twinkly.")
+        expected = 0
+        for key, info in sorted(entries.items(), key=lambda item: item[1].get("offset") or 0):
+            offset = info.get("offset")
+            if offset != expected:
+                name = self.devices[key].row.get("name", key)
+                raise ValueError(f"Join offset for {name} is {offset} (expected {expected}). Check member order and mapping in Twinkly.")
+            expected += self.devices[key].row["leds"]
+        if sizes and expected != next(iter(sizes)):
+            raise ValueError(f"Join reports {next(iter(sizes))} LEDs but its members account for {expected}. Bring the missing controllers online and refresh discovery.")
+        return masters[0], expected
+
+    async def load_group_layouts(self, keys, mode):
+        if mode == "join":
+            master, _ = self.validate_join(self.join_entries(keys))
+            keys = [master]
+        results = await asyncio.gather(*(self.devices[key].run(self.devices[key].load_layout) for key in keys))
+        failed = [self.devices[key].row["name"] for key, ok in zip(keys, results) if not ok]
+        if failed:
+            raise ValueError(f"Could not read the physical mapping from {', '.join(failed)}. Check the controller connection and retry.")
+
+    @staticmethod
+    def group_conflict(group, operation, reason):
+        LOG.warning("group=%s operation=%s rejected: %s", group, operation, reason)
+        return web.json_response({"error": str(reason)}, status=409)
 
     def group_mapping(self, key, members, mode, matrix=False):
         result = []
@@ -853,19 +904,16 @@ class Controller:
                     self.physical_tests.pop(k,None)
                 return web.json_response({"ok":True})
             if any(k in self.patterns or k in self.music or k in self.sequence_devices or self.devices[k].restore is not None for k in keys):
-                raise web.HTTPConflict(text="Stop active music, effects and sequences first")
+                return self.group_conflict(data["group"], kind, "Stop active music, effects and sequences first.")
             mode = group.get("mode","sync")
             if kind in ("identify","rgb","led"):
                 coordinates = {k: [(0,0,0)]*self.devices[k].row["leds"] for k in keys}
             else:
-                targets = keys if mode != "join" else [k for k in keys if (self.devices[k].native_group or {}).get("role") == "master"]
-                results = await asyncio.gather(*(self.devices[k].run(self.devices[k].load_layout) for k in targets))
-                if not targets or not all(results):
-                    raise web.HTTPConflict(text="Physical mapping unavailable")
                 try:
+                    await self.load_group_layouts(keys, mode)
                     coordinates = {k:self.group_coordinates(k,keys,mode) for k in keys}
                 except ValueError as exc:
-                    raise web.HTTPConflict(text=str(exc)) from exc
+                    return self.group_conflict(data["group"], kind, exc)
             start = time.monotonic()
             for index,k in enumerate(keys):
                 self.physical_tests[k] = (kind,index,coordinates[k],start)
@@ -878,15 +926,12 @@ class Controller:
             raise web.HTTPNotFound()
         keys = [k for k in group["members"] if k in self.devices]
         mode = group.get("mode", "sync")
-        targets = keys if mode != "join" else [k for k in keys if (self.devices[k].native_group or {}).get("role") == "master"]
-        results = await asyncio.gather(*(self.devices[k].run(self.devices[k].load_layout) for k in targets))
-        if not targets or not all(results):
-            return web.json_response({"error":"Physical mapping unavailable"}, status=409)
         try:
+            await self.load_group_layouts(keys, mode)
             members = [{"id":k, "name":self.devices[k].row["name"],
                         "points":self.group_coordinates(k,keys,mode)} for k in keys]
         except ValueError as exc:
-            return web.json_response({"error":str(exc)},status=409)
+            return self.group_conflict(request.query.get("id"), "layout", exc)
         return web.json_response({"mode":mode,"members":members,"leds":sum(len(m["points"]) for m in members)})
 
     def shared_pattern(self, pattern, tick):
@@ -1048,29 +1093,81 @@ class Controller:
                 groups[key] = group
             else:
                 local["native"] = True
-                if "layout_size" in group:
-                    local["layout_size"] = group["layout_size"]
+                if group["mode"] == "join":
                     local["members"] = group["members"]
                     local.setdefault("mode", group["mode"])
+                    for field in ("layout_size", "missing_master", "manual_master"):
+                        if field in group:
+                            local[field] = group[field]
         return groups
 
-    def native_groups(self):
+    def native_memberships(self):
         by_id = {}
         for key, device in self.devices.items():
             info = device.native_group
-            if info and info["id"]:
-                by_id.setdefault(info["id"], []).append((key, info))
+            if info and info.get("id"):
+                by_id.setdefault(info["id"], {})[key] = info
 
-        groups = {}
+        recoveries = {}
         for group_id, entries in by_id.items():
+            if any(info["role"] == "master" for info in entries.values()):
+                continue
+            references = {info["master_id"].casefold() for info in entries.values() if info.get("master_id")}
+            if len(references) != 1:
+                continue
+            reference = next(iter(references))
+            candidates = []
+            for key, device in self.devices.items():
+                info = device.native_group or {}
+                if key in entries or info.get("role") == "slave" or info.get("uid"):
+                    continue
+                identities = {value.strip().casefold() for value in getattr(device, "native_identity", {}).values()}
+                if info.get("id"):
+                    identities.add(info["id"].casefold())
+                if reference in identities:
+                    candidates.append(key)
+            if len(candidates) == 1:
+                recoveries.setdefault(candidates[0], []).append(group_id)
+
+        for key, group_ids in recoveries.items():
+            if len(group_ids) == 1:
+                group_id = group_ids[0]
+                info = self.devices[key].native_group or {}
+                previous = by_id.get(info.get("id"), {})
+                if len(previous) <= 1:
+                    previous.pop(key, None)
+                    by_id[group_id][key] = dict(info, role="master", offset=0 if info.get("offset") is None else info["offset"])
+
+        for group_id, entries in by_id.items():
+            manual = [key for key, device in self.devices.items()
+                      if device.row.get("native_master_for") == group_id
+                      and self.manual_master_candidate(key, entries)]
+            if len(manual) == 1:
+                proposed = dict(entries, **{manual[0]: {"role": "master", "offset": 0, "manual": True}})
+                try:
+                    self.validate_join(proposed)
+                except ValueError:
+                    continue
+                by_id[group_id] = proposed
+        return by_id
+
+    def manual_master_candidate(self, key, entries):
+        info = self.devices[key].native_group or {}
+        return (info.get("role") in (None, "master") and not info.get("id")
+                and all(entry["role"] != "master" for entry in entries.values()))
+
+    def native_groups(self):
+        groups = {}
+        for group_id, membership in self.native_memberships().items():
+            entries = list(membership.items())
             leaders = [key for key, info in entries if info["role"] == "master"]
-            has_uid = any(info["uid"] for _, info in entries)
-            if len(entries) < 2 or len(leaders) > 1 or (not leaders and not has_uid):
+            has_uid = any(info.get("uid") for _, info in entries)
+            if not entries or (len(entries) < 2 and not has_uid) or (not leaders and not has_uid):
                 continue
             entries.sort(key=lambda entry: (
-                entry[1]["offset"] is None, entry[1]["offset"] or 0))
+                entry[1].get("offset") is None, entry[1].get("offset") or 0))
             members = [key for key, _ in entries]
-            names = {info["name"] for _, info in entries if info["name"]}
+            names = {info["name"] for _, info in entries if info.get("name")}
             numbered = [re.fullmatch(r"(.+?)\s+\d+", self.devices[key].row["name"].strip())
                         for key in members]
             prefixes = {match[1] for match in numbered if match}
@@ -1080,15 +1177,77 @@ class Controller:
             elif all(numbered) and len(prefixes) == 1:
                 name = next(iter(prefixes))
             group = {"name": name, "members": members, "mode": "sync"}
-            sizes = {info["size"] for _, info in entries if info["size"] is not None}
-            offsets = {info["offset"] for _, info in entries if info["offset"] is not None}
-            if len(sizes) == 1 and len(offsets) >= 2 and max(offsets) < min(sizes):
-                group["layout_size"] = next(iter(sizes))
+            sizes = {info["size"] for _, info in entries if info.get("size") is not None}
+            joined = any((info.get("offset") or 0) > 0 for _, info in entries)
+            joined |= bool(has_uid and sizes and max(sizes) > max(self.devices[k].row["leds"] for k in members))
+            if joined:
+                if len(sizes) == 1:
+                    group["layout_size"] = next(iter(sizes))
                 group["mode"] = "join"
+                if not leaders:
+                    group["missing_master"] = "native:" + group_id
+                if len(leaders) == 1 and membership[leaders[0]].get("manual"):
+                    group["manual_master"] = {"group": "native:" + group_id, "device": leaders[0]}
+            elif len(entries) < 2:
+                continue
             key = "native:" + group_id
             group["name"] = self.native_group_names.get(key, group["name"])
             groups[key] = group
         return groups
+
+    async def associate_native_master(self, request):
+        data = await request.json()
+        group = data.get("group") if isinstance(data, dict) else None
+        key = data.get("device") if isinstance(data, dict) else None
+        if not isinstance(group, str) or not group.startswith("native:") or not isinstance(key, str):
+            raise web.HTTPBadRequest()
+        group_id = group.removeprefix("native:")
+        async with self.edit:
+            device = self.devices.get(key)
+            if device is None:
+                raise web.HTTPNotFound()
+            field = "native_master_for"
+            if data.get("remove") is True:
+                if device.row.get("native_master_for") != group_id:
+                    raise web.HTTPNotFound()
+                value = None
+            else:
+                entries = self.native_memberships().get(group_id)
+                try:
+                    group_info = self.native_groups().get(group, {})
+                    if not group_info.get("missing_master") or not entries or not self.manual_master_candidate(key, entries) or device.row.get(field):
+                        raise ValueError("Choose an unassociated controller for a Join group with a missing master.")
+                    if not any(info.get("size") for info in entries.values()):
+                        raise ValueError("Twinkly must report the full Join LED total before a master can be associated.")
+                    _, total = self.validate_join(dict(entries, **{key: {"role": "master", "offset": 0}}))
+                    device.layout_until = 0
+                    if not await device.run(device.load_layout):
+                        raise ValueError(f"Could not read {device.row['name']}'s mapping. Check its connection and retry.")
+                    try:
+                        self.mapped_points(device, total)
+                    except ValueError as exc:
+                        raise ValueError(f"{device.row['name']} needs a complete physical map for all {total} LEDs.") from exc
+                    current = self.native_memberships().get(group_id)
+                    if current != entries or not self.manual_master_candidate(key, current):
+                        raise ValueError("Native group membership changed during validation. Refresh and retry.")
+                except ValueError as exc:
+                    return self.group_conflict(group, "associate master", exc)
+                value = group_id
+            previous = device.row.get(field)
+            if value is None:
+                device.row.pop(field)
+            else:
+                device.row[field] = value
+            try:
+                self.save()
+            except OSError:
+                if previous is None:
+                    device.row.pop(field, None)
+                else:
+                    device.row[field] = previous
+                raise
+            LOG.info("group=%s explicit master device=%s removed=%s", group, key, value is None)
+        return web.json_response({"ok": True})
 
     async def rename_network_group(self, request):
         data = await request.json()
@@ -1421,11 +1580,8 @@ class Controller:
             routes = {}
             if group and action in ("pattern", "music"):
                 mode = group.get("mode", "sync")
-                targets = keys if mode != "join" else [k for k in keys if (self.devices[k].native_group or {}).get("role") == "master"]
-                results = await asyncio.gather(*(self.devices[k].run(self.devices[k].load_layout) for k in targets))
-                if not targets or not all(results):
-                    raise web.HTTPBadRequest(text="Physical group mapping unavailable")
                 try:
+                    await self.load_group_layouts(keys, mode)
                     routes = {k: self.group_mapping(k, keys, mode, matrix=action == "pattern" and value.startswith("matrix:")) for k in keys}
                     for k in keys:
                         d = self.devices[k]
@@ -2106,6 +2262,7 @@ class Controller:
         app.router.add_get("/layout", self.layout)
         app.router.add_post("/physical-test", self.physical_test)
         app.router.add_get("/group-layout", self.group_layout)
+        app.router.add_post("/network/groups/master", self.associate_native_master)
         app.router.add_get("/mapping-settings", self.mapping_settings)
         app.router.add_post("/mapping-settings", self.mapping_settings)
         app.router.add_get("/details", self.details)

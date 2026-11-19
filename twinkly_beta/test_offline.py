@@ -247,6 +247,83 @@ class OfflineDeviceTest(unittest.IsolatedAsyncioTestCase):
             "name": "Muur", "members": ["master", "wall", "fourth"], "layout_size": 840, "mode": "join",
         })
 
+    def join_wall(self, *, master_id=""):
+        for index, key in enumerate(("master", "second", "wall", "fourth")):
+            if key not in self.controller.devices:
+                row = dict(ROW, id=key, name=f"Muur {index + 1}", ip=f"192.168.1.{150 + index}")
+                device = app.Device(row, self.controller.limit, self.controller.realtime_socket)
+                self.addCleanup(device.client.session.close)
+                self.controller.devices[key] = device
+            if index:
+                device = self.controller.devices[key]
+                with patch.object(device, "api", side_effect=[
+                    {"group": {"mode": "slave", "uid": "wall-uid", "name": "Muur2026"}},
+                    {"sync": {"mode": "slave", "master_id": master_id, "offset": 210 * index, "size": 840}},
+                ]):
+                    device.load_native_group()
+        return self.controller.devices["master"]
+
+    async def test_missing_master_recovers_only_with_native_identity(self):
+        master = self.join_wall(master_id="MASTER-UUID")
+        group = "native:wall-uid"
+        self.assertEqual(self.controller.native_groups()[group]["members"], ["second", "wall", "fourth"])
+        master.remember_native_identity({"uuid": "master-uuid"})
+        self.assertEqual(self.controller.native_groups()[group]["members"], ["master", "second", "wall", "fourth"])
+        master.layout = {"points": [[i, i, i, 0] for i in range(840)]}
+        master.layout_until = float("inf")
+        response = await self.client.get("/group-layout", params={"id": group})
+        self.assertEqual(response.status, 200)
+        self.assertEqual((await response.json())["leds"], 840)
+
+    async def test_spatial_tests_and_layout_explain_missing_master(self):
+        self.join_wall()
+        group = "native:wall-uid"
+        self.assertEqual(self.controller.native_groups()[group]["missing_master"], group)
+        with self.assertLogs("twinkly", "WARNING") as logged:
+            response = await self.client.get("/group-layout", params={"id": group})
+            self.assertEqual(response.status, 409)
+            self.assertIn("explicitly associate", (await response.json())["error"])
+            for test in ("rainbow", "horizontal", "vertical"):
+                response = await self.client.post("/physical-test", json={"group": group, "test": test})
+                self.assertEqual(response.status, 409)
+                self.assertIn("exactly one native master", (await response.json())["error"])
+                self.assertIn(f"operation={test}", logged.output[-1])
+        self.assertFalse(self.controller.physical_tests)
+        response = await self.client.post("/physical-test", json={"group": group, "test": "identify"})
+        self.assertEqual(response.status, 200)
+        self.assertEqual(set(self.controller.physical_tests), {"second", "wall", "fourth"})
+
+    async def test_manual_master_validates_offsets_and_map_and_can_be_removed(self):
+        master = self.join_wall()
+        group = "native:wall-uid"
+        association = {"group": group, "device": "master"}
+        self.device.native_group["offset"] = 421
+        response = await self.client.post("/network/groups/master", json=association)
+        self.assertEqual(response.status, 409)
+        self.assertIn("Muur 3 is 421 (expected 420)", (await response.json())["error"])
+        self.device.native_group["offset"] = 420
+        with patch.object(master, "api", return_value={"coordinates": []}):
+            response = await self.client.post("/network/groups/master", json=association)
+        self.assertEqual(response.status, 409)
+        self.assertIn("complete physical map for all 840 LEDs", (await response.json())["error"])
+        self.assertNotIn("native_master_for", master.row)
+        with patch.object(master, "api", return_value={"coordinates": [{"x": i, "y": i} for i in range(840)]}):
+            response = await self.client.post("/network/groups/master", json=association)
+        self.assertEqual(response.status, 200)
+        self.assertEqual(self.controller.native_groups()[group]["manual_master"], association)
+        self.assertEqual(next(row for row in json.loads(app.DATA.read_text()) if row["id"] == "master")["native_master_for"], "wall-uid")
+        response = await self.client.post("/network/groups/master", json=dict(association, remove=True))
+        self.assertEqual(response.status, 200)
+        self.assertEqual(self.controller.native_groups()[group]["missing_master"], group)
+
+    async def test_incomplete_offsets_are_reported_even_with_a_native_master(self):
+        master = self.join_wall(master_id="known-master")
+        master.remember_native_identity({"uuid": "known-master"})
+        self.device.native_group["offset"] = None
+        response = await self.client.post("/physical-test", json={"group": "native:wall-uid", "test": "vertical"})
+        self.assertEqual(response.status, 409)
+        self.assertIn("Join offset is missing for Muur 3", (await response.json())["error"])
+
     async def test_removal_is_saved_and_group_still_works(self):
         online = await self.client.post("/remove-device", json={"id": "wall"})
         self.assertEqual(await online.json(), {"ok": False})

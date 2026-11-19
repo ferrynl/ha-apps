@@ -19,3 +19,19 @@ for(const viewport of [{width:1440,height:900},{width:390,height:844}]){
   await page.screenshot({path:'test-results/studio-'+viewport.width+'.png',fullPage:true,animations:'disabled'});
  });
 }
+
+test('spatial test shows the specific Join conflict', async ({page})=>{
+ const id='native:wall-uid';
+ const error='Join offset is missing for Muur 3. Refresh discovery and check the group mapping in Twinkly.';
+ await page.route('**/status', route=>route.fulfill({json:{
+  display_groups:{[id]:{name:'Muur2026',members:[],mode:'join',missing_master:id}}, devices:[]
+ }}));
+ await page.route('**/physical-test', async route=>{
+  expect(route.request().postDataJSON()).toEqual({group:id,test:'rainbow'});
+  await route.fulfill({status:409,json:{error}});
+ });
+ await page.goto('http://127.0.0.1:8765/index.html#testcontrole');
+ const rainbow=page.locator('#tests-content article').filter({hasText:'Regenboog'});
+ await rainbow.getByRole('button').click();
+ await expect(page.locator('#message')).toHaveText('HTTP 409 · '+error);
+});
