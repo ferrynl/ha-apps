@@ -84,8 +84,8 @@ test('Home combines providers and keeps pairing in Settings', async ({page}) => 
  await home.getByRole('button',{name:'Opslaan'}).click();
  const group=home.locator('article').filter({hasText:'Together'});
  await group.getByRole('button',{name:'Aan',exact:true}).click();
- expect(groupControl).toEqual({group:'mixed',action:'power',value:true});
  await expect(page.locator('#lighting-feedback')).toContainText('Onbevestigd · 1');
+ expect(groupControl).toEqual({group:'mixed',action:'power',value:true});
  await page.locator('#nav-hue').click();
  await expect(home.locator('article')).toHaveCount(1);
  await expect(home.getByText('Living room')).toBeVisible();
@@ -100,14 +100,18 @@ test('Home combines providers and keeps pairing in Settings', async ({page}) => 
  await settings.getByRole('button',{name:'Opnieuw koppelen',exact:true}).click();
  await expect(settings.getByLabel('LAN-adres').first()).toHaveValue('192.168.1.2');
  const certificate=settings.getByRole('button',{name:'Certificaat ophalen'});
- page.once('dialog', dialog => dialog.dismiss());
- await certificate.click();
+ await Promise.all([
+  page.waitForEvent('dialog').then(dialog => dialog.dismiss()),
+  certificate.click(),
+ ]);
  await expect(settings.getByLabel('SHA256-vingerafdruk')).toHaveValue('');
- page.once('dialog', async dialog => {
-  expect(dialog.message()).toContain(fingerprint);
-  await dialog.accept();
- });
- await certificate.click();
+ await Promise.all([
+  page.waitForEvent('dialog').then(async dialog => {
+   expect(dialog.message()).toContain(fingerprint);
+   await dialog.accept();
+  }),
+  certificate.click(),
+ ]);
  await expect(settings.getByLabel('SHA256-vingerafdruk')).toHaveValue(fingerprint);
  await settings.locator('form').getByRole('button',{name:'Opnieuw koppelen'}).click();
  await expect.poll(() => pairing).toEqual({id:'bridge',address:'192.168.1.2',certificate_sha256:fingerprint});
