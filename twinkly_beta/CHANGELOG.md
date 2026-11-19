@@ -1,3 +1,8 @@
+## 2.0.0-beta.10
+
+- Save named scenes on Home for mixed Twinkly, Hue and Govee groups. Set power and optionally brightness and RGB color.
+- Apply a scene to the current group members and see the result of each command per light.
+
 ## 2.0.0-beta.9
 
 - Show Philips Hue reachability per light on Home, the Hue page and the network map. Keep known lights visible if the bridge temporarily drops offline.

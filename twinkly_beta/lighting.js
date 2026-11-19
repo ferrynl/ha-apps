@@ -8,6 +8,12 @@
   const temperatureLabels = {
     nl: "Wittemperatuur", en: "White temperature", de: "Weißtemperatur", es: "Temperatura del blanco",
   };
+  const sceneWords = {
+    nl: ["Scènes", "Scènenaam", "Groep", "Afspelen", "Groep ontbreekt", "Maak een gemengde groep om een scène op te slaan."],
+    en: ["Scenes", "Scene name", "Group", "Apply", "Group missing", "Create a mixed group to save a scene."],
+    de: ["Szenen", "Szenenname", "Gruppe", "Anwenden", "Gruppe fehlt", "Erstelle eine gemischte Gruppe, um eine Szene zu speichern."],
+    es: ["Escenas", "Nombre de escena", "Grupo", "Aplicar", "Falta el grupo", "Crea un grupo mixto para guardar una escena."],
+  };
   const brands = {twinkly: "Twinkly", hue: "Philips Hue", govee: "Govee"};
   const wordmarks = {twinkly: "twinkly-nav-logo.svg", hue: "hue-app-icon.webp", govee: "govee-logo.png"};
   const el = id => document.getElementById(id);
@@ -19,6 +25,7 @@
   let data;
   let pending;
   let editing;
+  let editingScene;
   let context = "";
   let groupBusy = false;
 
@@ -38,12 +45,14 @@
 
   async function task(item, callback) {
     item.disabled = true;
+    item.dataset.running = "";
     try {
       await callback();
     } catch (error) {
       feedback.textContent = t(error.message === "pairing_permission" ? 21 : 32);
     } finally {
       item.disabled = false;
+      delete item.dataset.running;
     }
   }
 
@@ -227,6 +236,124 @@
     return section;
   }
 
+  function sceneList() {
+    const [title, nameLabel, groupLabel, applyLabel, missingGroup, needsGroup] =
+      sceneWords[el("language").value] || sceneWords.nl;
+    const section = node("section", "", "lighting-scenes");
+    section.append(node("h3", title));
+    if (!data.scenes || !data.groups) {
+      section.append(node("p", t(32)));
+      return section;
+    }
+    const grid = node("div", "", "lighting-grid");
+    const groups = Object.entries(data.groups);
+    for (const [id, scene] of Object.entries(data.scenes)) {
+      const card = node("article", "", "lighting-card");
+      const group = data.groups[scene.group];
+      const options = [group?.name || missingGroup, t(scene.on ? 7 : 8)];
+      if (scene.brightness != null) options.push(scene.brightness + "%");
+      if (scene.color) options.push(stateColor(scene.color));
+      const apply = button(applyLabel, async () => {
+        const names = new Map(data.lights.map(light => [light.id, light.name]));
+        const {results} = await api("lighting/scenes/" + encodeURIComponent(id) + "/apply", {});
+        const outcomes = {accepted: 29, unconfirmed: 30, skipped: 31, failed: 32};
+        const actions = {power: t(scene.on ? 7 : 8), brightness: t(9), color: t(10)};
+        feedback.textContent = Object.entries(results).map(([key, commands]) => {
+          const resultsText = Object.entries(commands).map(([action, outcome]) =>
+            actions[action] + " " + t(outcomes[outcome])).join(", ");
+          return (names.get(key) || t(37)) + " · " + resultsText;
+        }).join(" / ");
+        await refresh(false);
+      });
+      apply.disabled = !group;
+      card.append(node("h4", scene.name), node("p", options.join(" · ")), apply,
+        button(t(26), () => {
+          editingScene = id;
+          render();
+          panel.querySelector(".lighting-scene-form input").focus();
+        }));
+      grid.append(card);
+    }
+    section.append(grid);
+    if (!groups.length && editingScene === undefined) {
+      section.append(node("p", needsGroup));
+      return section;
+    }
+
+    const scene = data.scenes[editingScene];
+    const form = node("form", "", "lighting-form lighting-scene-form");
+    const name = node("input");
+    name.required = true;
+    name.maxLength = 60;
+    name.value = scene?.name || "";
+    const group = node("select");
+    group.required = true;
+    const placeholder = node("option", missingGroup);
+    placeholder.value = "";
+    placeholder.disabled = true;
+    group.append(placeholder);
+    for (const [id, row] of groups) {
+      const option = node("option", row.name);
+      option.value = id;
+      group.append(option);
+    }
+    group.value = scene ? (data.groups[scene.group] ? scene.group : "") : groups[0]?.[0] || "";
+    const power = node("select");
+    for (const [value, label] of [["on", t(7)], ["off", t(8)]]) {
+      const option = node("option", label);
+      option.value = value;
+      power.append(option);
+    }
+    power.value = scene?.on === false ? "off" : "on";
+    const level = node("input");
+    level.type = "number";
+    level.min = 1;
+    level.max = 100;
+    level.placeholder = "1–100%";
+    level.value = scene?.brightness ?? "";
+    const color = node("input");
+    color.type = "color";
+    color.value = stateColor(scene?.color) || "#ffbf69";
+    color.setAttribute("aria-label", t(10));
+    const useColor = node("input");
+    useColor.type = "checkbox";
+    useColor.checked = Boolean(scene?.color);
+    const update = () => {
+      const on = power.value === "on";
+      level.disabled = useColor.disabled = !on;
+      color.disabled = !on || !useColor.checked;
+    };
+    update();
+    power.addEventListener("change", update);
+    useColor.addEventListener("change", update);
+    const save = node("button", t(25));
+    form.append(field(nameLabel, name), field(groupLabel, group), field(t(7) + " / " + t(8), power),
+      field(t(9), level), field(t(10), useColor), color, save);
+    form.addEventListener("submit", event => {
+      event.preventDefault();
+      task(save, async () => {
+        const on = power.value === "on";
+        const payload = {id: editingScene, name: name.value, group: group.value, on};
+        if (on && level.value) payload.brightness = Number(level.value);
+        if (on && useColor.checked) payload.color = color.value.slice(1).match(/../g).map(channel => parseInt(channel, 16));
+        await api("lighting/scenes", payload);
+        editingScene = undefined;
+        await refresh();
+      });
+    });
+    if (scene) {
+      form.append(button(t(28), () => { editingScene = undefined; render(); }),
+        button(t(27), async () => {
+          if (!window.confirm(t(27) + " · " + scene.name + "?")) return;
+          await api("lighting/scenes", {id: editingScene, delete: true});
+          editingScene = undefined;
+          await refresh();
+        }));
+    }
+    section.append(form);
+    return section;
+  }
+
   function connectionCard(brand) {
     const card = node("article", "", "lighting-card");
     card.dataset.provider = brand;
@@ -328,7 +455,7 @@
       }
     }
     mount.append(grid);
-    if (context === "home") mount.append(groupList());
+    if (context === "home") mount.append(groupList(), sceneList());
   }
 
   async function refresh(force = true) {
@@ -338,7 +465,7 @@
       await pending;
     } finally {
       const settingsInUse = context === "settings" && settings.querySelector("details[open]");
-      const groupInUse = context === "home" && (groupBusy || panel.querySelector(".lighting-group-form:focus-within"));
+      const groupInUse = context === "home" && (groupBusy || panel.querySelector(".lighting-group-form:focus-within, .lighting-scene-form:focus-within"));
       if (force || (!settingsInUse && !groupInUse && JSON.stringify(previous) !== JSON.stringify(data))) {
         render();
       }
@@ -362,6 +489,6 @@
     if (document.hidden || pending || groupBusy || !["home", "hue", "govee", "control"].includes(context)) return;
     const mount = context === "control" ? studio : panel;
     if (!mount.contains(document.activeElement) && !mount.querySelector(".lighting-group-form input:checked") &&
-        !mount.querySelector("button:disabled")) refresh(false).catch(() => {});
+        !mount.querySelector("button[data-running]")) refresh(false).catch(() => {});
   }, 15000);
 })();

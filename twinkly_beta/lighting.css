@@ -31,3 +31,8 @@
 .brand-wordmark-govee { width:4rem; }
 .menu-logo-filters { position:absolute; }
 #network-title { margin:0; }
+
+.lighting-scenes { margin-top:1rem; }
+.lighting-scenes .lighting-card h4 { margin:0; }
+.lighting-scene-form select, .lighting-scene-form input[type=number] { min-width:0; max-width:100%; }
+.lighting-scene-form input[type=color] { width:3.5rem; }
