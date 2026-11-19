@@ -1,3 +1,7 @@
+## 2.0.0-beta.2
+
+- Start the LED Order test at the upper mapped end of each controller while following its physical wiring.
+
 ## 0.1.44-beta.23
 
 - Recover a locally standalone Join controller when its native mapping ID matches every member and its LEDs fill the unique missing offset-zero segment.
