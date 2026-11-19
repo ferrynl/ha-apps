@@ -58,14 +58,15 @@ test('Security Center maps all Hue lights to their own bridge beside Twinkly', a
  }}));
  await page.route('**/providers/hue/inventory', route => route.fulfill({json:{devices:[
   {id:'unavailable',address:'192.168.1.21',status:'unavailable',lights:[]},
-  {id:'living',address:'192.168.1.22',status:'online',lights:[{id:'one',name:'Hue window'},{id:'two',name:'Hue table'}]},
+  {id:'living',address:'192.168.1.22',status:'online',lights:[{id:'one',name:'Hue window'},{id:'two',name:'Hue table',status:'unavailable'}]},
   {id:'hall',address:'192.168.1.23',status:'online',lights:[{id:'one',name:'Hue hall'}]},
  ]}}));
  await page.goto('http://127.0.0.1:8765/index.html#netwerk',{waitUntil:'domcontentloaded'});
  await expect(page.getByRole('heading',{name:'Security Center'})).toBeVisible();
  await expect(page.locator('#network-world article')).toHaveCount(7);
  await expect(page.locator('#network-world').getByText('Hue window')).toBeVisible();
- await expect(page.locator('#network-world').getByText('Hue table')).toBeVisible();
+ const offlineHue = page.locator('#network-world article').filter({hasText:'Hue table'});
+ await expect(offlineHue).toContainText('Offline');
  await expect(page.locator('#network-world').getByText('Hue hall')).toBeVisible();
  const links = await page.evaluate(() => networkLinks.map(([source,target]) => [
   JSON.parse(source.id.slice('device:'.length)), JSON.parse(target.id.slice('device:'.length)),
@@ -85,8 +86,10 @@ test('Home combines providers and keeps pairing in Settings', async ({page}) => 
  const groups = {};
  let groupControl;
  let pairing;
+ let temperature;
  await page.route('**/lighting', route => route.fulfill({json:{
-  lights:[light('t','twinkly','Tree',true),light('h','hue','Living room',false),light('g','govee','Strip',false,'unknown')],
+  lights:[light('t','twinkly','Tree',true),{...light('h','hue','Living room',false),
+   capabilities:{power:true,temperature:true}, temperature_mirek:{min:153,max:500}, state:{on:true,mirek:370}},light('g','govee','Strip',false,'unknown')],
   connections:{hue:[{id:'bridge',address:'192.168.1.2',status:'online'}],govee:[]}, groups,
  }}));
  await page.route('**/lighting/groups', route => {
@@ -95,7 +98,12 @@ test('Home combines providers and keeps pairing in Settings', async ({page}) => 
   return route.fulfill({json:{id:'mixed'}});
  });
  await page.route('**/lighting/control', route => {
-  groupControl=route.request().postDataJSON();
+  const command=route.request().postDataJSON();
+  if (command.action==='temperature') {
+   temperature=command;
+   return route.fulfill({json:{results:{h:'accepted'}}});
+  }
+  groupControl=command;
   return route.fulfill({json:{results:{t:'accepted',h:'skipped',g:'unconfirmed'}}});
  });
  const fingerprint = 'ab'.repeat(32);
@@ -115,6 +123,11 @@ test('Home combines providers and keeps pairing in Settings', async ({page}) => 
   images.filter(image => image.complete && image.naturalWidth > 0).length,
  )).toBe(3);
  await expect(home.locator('[data-provider=hue] input[type=color]')).toHaveCount(0);
+ const white = home.getByRole('slider',{name:'Wittemperatuur'});
+ await expect(white).toHaveValue('370');
+ await expect(white).toHaveAttribute('aria-valuetext','2703 K');
+ await white.fill('400');
+ await expect.poll(() => temperature).toEqual({id:'h',action:'temperature',value:400});
  await expect(home.locator('[data-provider=govee]')).toContainText('onbevestigd');
  await expect(home.locator('[data-provider=govee] button')).toHaveCount(0);
  await expect(page.getByText('Certificaat ophalen')).toHaveCount(0);
@@ -130,6 +143,7 @@ test('Home combines providers and keeps pairing in Settings', async ({page}) => 
  await page.locator('#nav-hue').click();
  await expect(home.locator('article')).toHaveCount(1);
  await expect(home.getByText('Living room')).toBeVisible();
+ await expect(home.getByRole('slider',{name:'Wittemperatuur'})).toBeVisible();
  await expect(home.locator('.lighting-brand-mark img')).toHaveAttribute('src','hue-app-icon.webp');
  await expect(home.getByText('Tree')).toHaveCount(0);
  await page.locator('#nav-govee').click();

@@ -1,3 +1,9 @@
+## 2.0.0-beta.9
+
+- Show Philips Hue reachability per light on Home, the Hue page and the network map. Keep known lights visible if the bridge temporarily drops offline.
+- Adjust warm or cool white on supported Hue lights from Home and the Hue page, within the limits reported by each light.
+- Bring the four Python dependency security updates from the source repository into the beta build.
+
 ## 2.0.0-beta.8
 
 - Use the same local brand wordmarks in the navigation and on light cards.

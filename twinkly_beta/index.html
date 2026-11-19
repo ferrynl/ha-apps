@@ -1704,6 +1704,7 @@ function renderNetwork(rows, labels) {
     addText(card,'strong',row.name);
     if (row.kind === 'hue-light') {
       addText(card,'small','Philips Hue');
+      if (row.offline) addText(card,'span',labels[8]);
       continue;
     }
     addText(card,'small',row.ip);
@@ -1790,7 +1791,8 @@ async function refreshNetwork() {
       return [{id, name: 'Philips Hue Bridge', ip: bridge.address,
         kind: 'hue-bridge', offline: bridge.status !== 'online'},
         ...(bridge.lights || []).map(light => ({
-          id: JSON.stringify(['hue', bridge.id, light.id]), bridge: id, name: light.name, kind: 'hue-light'
+          id: JSON.stringify(['hue', bridge.id, light.id]), bridge: id, name: light.name,
+          kind: 'hue-light', offline: light.status === 'unavailable'
         }))];
     });
     const rows = [...data.devices, ...hueRows];

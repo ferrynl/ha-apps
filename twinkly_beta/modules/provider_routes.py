@@ -75,11 +75,13 @@ def install(app, store=None, controller=None):
 
         async def bridge(identifier, record):
             row = {"id": identifier, "address": record["address"]}
+            client = adapter(provider, identifier, record)
             try:
-                lights = await adapter(provider, identifier, record).profiles()
-                return dict(row, lights=lights, status="online")
+                client.last_profiles = await client.profiles()
+                return dict(row, lights=client.last_profiles, status="online")
             except connection_errors:
-                return dict(row, lights=[], status="unavailable")
+                lights = [{**profile, "status": "unavailable"} for profile in client.last_profiles]
+                return dict(row, lights=lights, status="unavailable")
 
         return await asyncio.gather(*(bridge(identifier, record) for identifier, record in records.items()))
 
@@ -125,7 +127,7 @@ def install(app, store=None, controller=None):
             record = store.load()[provider][identifier]
             client = adapter(provider, identifier, record)
             if provider == "hue":
-                field = {"power": "on", "brightness": "level", "color": "color"}[action]
+                field = {"power": "on", "brightness": "level", "color": "color", "temperature": "mirek"}[action]
                 await client.control(light_id, **{field: value})
             else:
                 await {"power": client.power, "brightness": client.dim, "color": client.color}[action](value)

@@ -10,7 +10,7 @@ from .common import brightness, rgb
 from .profiles import govee_profile
 
 ERRORS = (ClientError, OSError, RuntimeError, TimeoutError, ValueError, web.HTTPException)
-CAPABILITY = {"power": "power", "brightness": "brightness", "color": "rgb"}
+CAPABILITY = {"power": "power", "brightness": "brightness", "color": "rgb", "temperature": "temperature"}
 MAX_MEMBERS = 128
 MAX_GROUPS = 40
 
@@ -77,7 +77,8 @@ class Lighting:
                     state = dict(profile["state"])
                     if brand == "hue":
                         state["color"] = color_from_xy(state.pop("xy", None))
-                    lights[key] = {**profile, "state": state, "id": key, "status": row["status"]}
+                    status = profile.get("status", row["status"]) if row["status"] == "online" else row["status"]
+                    lights[key] = {**profile, "state": state, "id": key, "status": status}
         return lights, connections
 
     async def inventory(self, request):
@@ -125,6 +126,10 @@ class Lighting:
                 or light["status"] == "unavailable"):
             return "skipped"
         brand, *parts = json.loads(key)
+        if action == "temperature":
+            limits = light.get("temperature_mirek")
+            if brand != "hue" or not limits or not limits["min"] <= value <= limits["max"]:
+                return "skipped"
         try:
             if brand == "twinkly":
                 payload = {"id": parts[0], "action": action, "value": value}
@@ -154,6 +159,8 @@ class Lighting:
                 value = rgb(value)
                 if not any(value):
                     raise ValueError()
+            elif action == "temperature" and type(value) is int and 1 <= value <= 1000 and "group" not in body:
+                pass
             else:
                 raise ValueError()
             if "group" in body:
