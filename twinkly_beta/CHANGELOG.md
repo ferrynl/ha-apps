@@ -1,3 +1,9 @@
+## 0.1.44-beta.22
+
+- Merge native group and movie sync metadata and recover a missing Join master from its reported hardware identity.
+- Show and log the specific reason a group mapping or spatial test is blocked. Keep basic tests available for the discovered controllers.
+- Allow a missing Join master to be explicitly associated or removed on the Test page. Check offsets, LED totals and the controller's full physical map before saving.
+
 ## 0.1.44-beta.21
 
 - Rename beta to Christmas Control Center; preserve addon slug, ports and settings. Philips Hue planned for 2.0, not included yet.

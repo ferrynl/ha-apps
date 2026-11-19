@@ -413,7 +413,16 @@ async function request(path, data) {
   const response = await fetch('./' + path, data === undefined ? {cache:'no-store'} : {
     method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data)
   });
-  if (!response.ok) throw Error('HTTP ' + response.status);
+  if (!response.ok) {
+    const body = await response.text();
+    let reason = body;
+    if (response.headers.get('content-type')?.includes('application/json')) {
+      try { reason = JSON.parse(body).error; } catch {}
+    } else if (!response.headers.get('content-type')?.startsWith('text/plain')) {
+      reason = '';
+    }
+    throw Error('HTTP ' + response.status + (reason ? ' · ' + reason : ''));
+  }
   return response.json();
 }
 function translated(el, key) { el.dataset.text = key; el.textContent = t(key); }
@@ -693,11 +702,37 @@ function renderTestPage(){
  byId('nav-tests').textContent=byId('tests-title').textContent=labels[0];
  byId('tests-help').textContent=labels[1];byId('tests-target-label').textContent=labels[2];
  const options=Object.entries(groups), before=target.value;
- const signature=JSON.stringify([lang.value,options]);
+ const devices=status?.devices || [];
+ const signature=JSON.stringify([lang.value,options,devices.map(({id,name})=>[id,name])]);
  if(target.dataset.signature!==signature){target.replaceChildren(...options.map(([id,g])=>new Option(g.name,id)));if(groups[before])target.value=before;target.dataset.signature=signature;}
  const id=target.value, group=groups[id], key=JSON.stringify([signature,id]);
  if(key===testPageSignature)return;testPageSignature=key;content.replaceChildren();
  if(!group){content.textContent=labels[12];return;}
+ const masterLabels=({
+   nl:['Join-master ontbreekt','Kies de master','Master koppelen','Masterkoppeling verwijderen'],
+   en:['Join master missing','Select the master','Associate master','Remove master association'],
+   de:['Join-Master fehlt','Master auswählen','Master zuordnen','Master-Zuordnung entfernen'],
+   es:['Falta el maestro de Join','Selecciona el maestro','Asociar maestro','Quitar asociación del maestro']
+ })[lang.value];
+ if(group.missing_master || group.manual_master){
+   const controls=document.createElement('div');controls.className='controls';
+   const select=document.createElement('select'), action=document.createElement('button');
+   const manual=group.manual_master;
+   action.textContent=masterLabels[manual ? 3 : 2];
+   if(!manual){
+     const warning=document.createElement('p');warning.textContent=masterLabels[0];content.append(warning);
+     select.setAttribute('aria-label',masterLabels[1]);
+     select.append(new Option(masterLabels[1],''));
+     for(const device of devices.filter(d=>!group.members.includes(d.id))) select.append(new Option(device.name,device.id));
+     action.disabled=true;select.onchange=()=>{action.disabled=!select.value;};
+     controls.append(select);
+   }
+   action.onclick=()=>perform(action,async()=>{
+     await request('network/groups/master',manual ? {...manual,remove:true} : {group:group.missing_master,device:select.value});
+     return t('done');
+   });
+   controls.append(action);content.append(controls);
+ }
      const map = document.createElement('div'); map.className='led-map';
     const openMap = document.createElement('button');
     openMap.textContent=({nl:'Groepsmapping',en:'Group mapping',de:'Gruppenmapping',es:'Mapa del grupo'})[lang.value];
