@@ -59,9 +59,15 @@ def scene_preview_palette(scene):
             colors.append(color)
         if len(colors) == 5:
             return colors
+    if colors:
+        return colors
     if actions and all((action.get("on") or {}).get("on") is False for action in actions):
         return [[38, 43, 58]]
-    return colors
+    for dimming in palette.get("dimming") or ():
+        color = scene_preview_color({"dimming": dimming})
+        if color is not None:
+            return [color]
+    return []
 
 
 class Hue:

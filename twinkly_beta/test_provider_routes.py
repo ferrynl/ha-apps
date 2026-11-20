@@ -137,6 +137,7 @@ class RouteTests(unittest.IsolatedAsyncioTestCase):
                  "actions": [{"action": warm}]},
                 {"id": "warm", "group": group, "actions": [{"action": off}, {"action": warm}]},
                 {"id": "dim", "group": group, "actions": [{"action": dim}]},
+                {"id": "dim-palette", "group": group, "palette": {"dimming": [dim["dimming"]]}},
                 {"id": "off", "group": group, "actions": [{"action": off}]},
                 {"id": "unknown", "group": group},
             ],
@@ -153,6 +154,7 @@ class RouteTests(unittest.IsolatedAsyncioTestCase):
             "palette": [[225, 238, 255]],
             "warm": [[255, 172, 96]],
             "dim": [[96, 92, 85]],
+            "dim-palette": [[96, 92, 85]],
             "off": [[38, 43, 58]],
             "unknown": None,
         })
