@@ -456,3 +456,38 @@ test('a saved mixed show keeps playing after leaving Home and stops from a secon
  await expect(remoteBuilder.getByRole('button',{name:'Afspelen'})).toBeEnabled();
  await second.context.close();
 });
+
+test('Mijn Huis previews the sweep order and displays the last command result', async ({page}) => {
+ const ids = ['["twinkly","left"]','["hue","bridge","right"]','["govee","off","off"]'];
+ const lights = ids.map((id,index) => ({id,name:['Links','Rechts','Uit'][index],
+  provider:['twinkly','hue','govee'][index],status:'online',capabilities:{rgb:true},state:{on:index < 2}}));
+ const layout = {revision:'layout',photo_version:'photo',points:ids.map((id,index)=>[id,[15+index*30,60]])};
+ await page.route('**/lighting', route => route.fulfill({json:{lights, groups:{}, scenes:{}, connections:{}}}));
+ await page.route('**/lighting/projects/photo?*', route => route.fulfill({contentType:'image/svg+xml',
+  body:'<svg xmlns="http://www.w3.org/2000/svg" width="480" height="240"></svg>'}));
+ let playback = {state:'idle'};
+ let started = false;
+ await page.route('**/lighting/projects', route => {
+  if (route.request().method() === 'POST') {
+   expect(route.request().postDataJSON()).toEqual({action:'spatial',revision:'layout',direction:'left',
+    color:[255,189,99],delay:550});
+   started = true;
+   playback = {state:'complete',kind:'spatial',last:{step:2,milliseconds:24,results:{[ids[0]]:{color:'accepted'}}}};
+  }
+  return route.fulfill({json:{layout,shows:[],playback}});
+ });
+ await page.goto('http://127.0.0.1:8765/index.html#mijn-huis');
+ const effect = page.locator('.house-effects');
+ await expect(effect.getByText('Lampen die meedoen · 2 / 3')).toBeVisible();
+ await effect.getByRole('checkbox',{name:'Volgorde tonen'}).check();
+ const markers = page.locator('.house-marker');
+ await expect(markers.nth(0)).toHaveAttribute('data-order','1');
+ await effect.getByLabel('Richting').selectOption('left');
+ await expect(markers.nth(0)).toHaveAttribute('data-order','2');
+ await expect(markers.nth(1)).toHaveAttribute('data-order','1');
+ expect(started).toBe(false);
+ await effect.getByRole('button',{name:'Afspelen'}).click();
+ await expect(effect.getByText('Kleurveeg klaar')).toBeVisible();
+ await effect.getByText('Laatste uitgevoerde stap 2 · Opdrachttijd in de app 24 ms').click();
+ await expect(effect.getByText('Links · Geaccepteerd')).toBeVisible();
+});

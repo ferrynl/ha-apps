@@ -236,6 +236,12 @@ class Lighting:
                 await self.lamp_test.stop()
             await self.music.stop()
 
+    async def send_spatial_color(self, key, light, color, stop):
+        async with self.control_lock:
+            if stop.is_set() or key in self.music.members or (self.lamp_test and self.lamp_test.target == key):
+                return "skipped"
+            return await self.send(key, light, "color", color)
+
     async def send(self, key, light, action, value):
         if (not light or not light["capabilities"].get(CAPABILITY[action])
                 or light["status"] == "unavailable"):
