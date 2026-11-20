@@ -176,7 +176,7 @@ def install(app, lighting):
 
     async def photo(request):
         try:
-            layout = (await asyncio.to_thread(load))["layout"]
+            layout = (await current())["layout"]
             if layout["photo"] is None:
                 raise web.HTTPNotFound()
             return web.Response(body=base64.b64decode(layout["photo"], validate=True),
@@ -191,8 +191,9 @@ def install(app, lighting):
             action = body["action"]
             encoded = body.get("photo")
             async with lock:
-                data = await asyncio.to_thread(load)
-                shows, layout = data["shows"], data["layout"]
+                latest = await load()
+                shows, layout = latest["shows"].copy(), latest["layout"]
+                data = {"shows": shows, "layout": layout}
                 if action == "save":
                     show_id = body.get("id")
                     show = show_settings(body)
