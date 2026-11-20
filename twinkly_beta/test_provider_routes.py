@@ -119,6 +119,44 @@ class RouteTests(unittest.IsolatedAsyncioTestCase):
             {"id": "offline", "status": "unavailable", "address": "192.168.1.3", "collections": []},
         ])
 
+    async def test_hue_scene_previews_use_palette_white_temperature_and_brightness(self):
+        self.store.save({"version": 1, "govee": {}, "hue": {
+            "bridge": {"address": "192.168.1.2", "application_key": "abcdefghij", "certificate_sha256": "ab" * 32},
+        }})
+        group = {"rtype": "room", "rid": "room"}
+        warm = {"color_temperature": {"mirek": 500}}
+        cool = {"color_temperature": {"mirek": 153}}
+        dim = {"dimming": {"brightness": 4}}
+        off = {"on": {"on": False}, **cool}
+        resources = {
+            "room": [{"id": "room"}],
+            "zone": [],
+            "grouped_light": [],
+            "scene": [
+                {"id": "palette", "group": group, "palette": {"color_temperature": [cool]},
+                 "actions": [{"action": warm}]},
+                {"id": "warm", "group": group, "actions": [{"action": off}, {"action": warm}]},
+                {"id": "dim", "group": group, "actions": [{"action": dim}]},
+                {"id": "off", "group": group, "actions": [{"action": off}]},
+                {"id": "unknown", "group": group},
+            ],
+        }
+
+        async def request(client, method, resource):
+            return resources[resource]
+
+        with patch("modules.hue.Hue.request", autospec=True, side_effect=request):
+            response = await self.client.get("/providers/hue/collections")
+        self.assertEqual(response.status, 200)
+        scenes = (await response.json())["bridges"][0]["collections"][0]["scenes"]
+        self.assertEqual({scene["id"]: scene.get("palette") for scene in scenes}, {
+            "palette": [[225, 238, 255]],
+            "warm": [[255, 172, 96]],
+            "dim": [[96, 92, 85]],
+            "off": [[38, 43, 58]],
+            "unknown": None,
+        })
+
     async def test_hue_collection_actions_use_native_resource_commands(self):
         self.store.save({"version": 1, "govee": {}, "hue": {
             "bridge": {"address": "192.168.1.2", "application_key": "abcdefghij", "certificate_sha256": "ab" * 32},

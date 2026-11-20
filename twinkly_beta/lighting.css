@@ -50,7 +50,7 @@
 .hue-scene-card > button { overflow-wrap: anywhere; }
 .hue-scene-card > button:first-child { display: grid; gap: .35rem; text-align: left; padding: .35rem .5rem .5rem; }
 .hue-scene-cover { display: block; width: 100%; aspect-ratio: 2 / 1; border-radius: .3rem; overflow: hidden;
-  background: var(--studio-inset) url("hue-app-icon.webp") center / 2rem no-repeat; }
+  background: linear-gradient(145deg, #454b61, #262a3a 62%, #171b28); }
 .hue-scene-cover img { display: block; width: 100%; height: 100%; object-fit: cover; }
 .hue-scene-upload { position: relative; display: grid; place-items: center; text-align: center; min-height: 2.75rem;
   padding: .2rem; color: var(--studio-gold); cursor: pointer; }

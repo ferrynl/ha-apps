@@ -1,4 +1,5 @@
 """Direct Hue CLIP v2 transport with caller-supplied verified TLS context."""
+import math
 import re
 import ssl
 from aiohttp import ClientError, ClientSession, ClientTimeout, Fingerprint
@@ -15,6 +16,53 @@ def xy_color(value):
     if not total:
         raise ValueError("Use off for black")
     return {"x":x/total,"y":y/total}
+
+def scene_preview_color(settings):
+    color = color_from_xy((settings.get("color") or {}).get("xy"))
+    mirek = (settings.get("color_temperature") or {}).get("mirek")
+    level = (settings.get("dimming") or {}).get("brightness")
+    has_level = type(level) in (int, float) and math.isfinite(level)
+    if color is None and type(mirek) is int and mirek > 0:
+        # Approximate the visible white tone from cool (153 mired) to warm (500 mired).
+        warmth = max(0, min(1, (mirek - 153) / (500 - 153)))
+        color = [round(225 + 30 * warmth), round(238 - 66 * warmth), round(255 - 159 * warmth)]
+    if color is None:
+        if not has_level:
+            return None
+        color = [240, 229, 213]
+    if has_level:
+        # Keep dim scenes recognizable in a thumbnail.
+        lightness = .25 + .75 * math.sqrt(max(0, min(100, level)) / 100)
+        color = [round(channel * lightness) for channel in color]
+    return color
+
+
+def scene_preview_palette(scene):
+    palette = scene.get("palette") or {}
+    colors = []
+    for entries in (palette.get("color") or (), palette.get("color_temperature") or ()):
+        for settings in entries:
+            color = scene_preview_color(settings)
+            if color and color not in colors:
+                colors.append(color)
+            if len(colors) == 5:
+                return colors
+    if colors:
+        return colors
+
+    actions = [target.get("action") or {} for target in scene.get("actions") or ()]
+    for action in actions:
+        if (action.get("on") or {}).get("on") is False:
+            continue
+        color = scene_preview_color(action)
+        if color and color not in colors:
+            colors.append(color)
+        if len(colors) == 5:
+            return colors
+    if actions and all((action.get("on") or {}).get("on") is False for action in actions):
+        return [[38, 43, 58]]
+    return colors
+
 
 class Hue:
     def __init__(self, address, application_key, tls):
@@ -92,16 +140,7 @@ class Hue:
             entry = by_group.get((group.get("rtype"), group.get("rid")))
             if entry is not None:
                 info = {"id": scene["id"], "name": scene.get("metadata", {}).get("name") or scene["id"]}
-                palette = []
-                for target in scene.get("actions", ()):
-                    action = target.get("action", {})
-                    if action.get("on", {}).get("on") is False:
-                        continue
-                    color = color_from_xy(action.get("color", {}).get("xy"))
-                    if color and color not in palette:
-                        palette.append(color)
-                    if len(palette) == 5:
-                        break
+                palette = scene_preview_palette(scene)
                 if palette:
                     info["palette"] = palette
                 entry["scenes"].append(info)
