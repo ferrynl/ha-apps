@@ -10,6 +10,8 @@ from types import SimpleNamespace
 
 from aiohttp import web
 
+from .update_status import UpdateStatus
+
 
 def dependencies(lock):
     packages = []
@@ -77,21 +79,32 @@ async def local_checks(middleware, data_dir):
     return checks
 
 
+def parse_version(contents):
+    match = re.search(r"^version:[ \t]*(['\"]?)([^\s'\"]+)\1[ \t]*$", contents, re.MULTILINE)
+    return match.group(2) if match else None
+
+
 def install(app, directory, data_dir, middleware):
     lock = directory / "requirements.lock"
     config = directory / "config.yaml"
 
-    async def status(request):
+    updates = UpdateStatus(parse_version, platform.python_version())
+
+    def installed_version():
         try:
-            match = re.search(r"^version:\s*(['\"]?)([^\s'\"]+)\1\s*$",
-                              config.read_text(encoding="utf-8"), re.MULTILINE)
-            version = match.group(2) if match else None
-        except OSError:
-            version = None
+            return parse_version(config.read_text(encoding="utf-8"))
+        except (OSError, UnicodeError):
+            return None
+
+    def installed_packages():
         try:
-            packages = dependencies(lock)
+            return dependencies(lock)
         except (OSError, ValueError):
-            packages = None
+            return None
+
+    async def status(request):
+        version = installed_version()
+        packages = installed_packages()
         checks = await local_checks(middleware, data_dir)
         checks.insert(0, {"id": "middleware_installed",
                           "result": "pass" if middleware in request.app.middlewares else "fail"})
@@ -100,8 +113,14 @@ def install(app, directory, data_dir, middleware):
             "runtime": {"python": platform.python_version(), "architecture": platform.machine(),
                         "root": os.geteuid() == 0},
             "dependencies": packages,
+            "updates": updates.report,
             "checks": checks,
             "checked_at": datetime.now(timezone.utc).isoformat(),
         }, headers={"Cache-Control": "no-store"})
 
+    async def check_updates(request):
+        report = await updates.check(installed_version(), installed_packages())
+        return web.json_response(report, headers={"Cache-Control": "no-store"})
+
     app.router.add_get("/security-center/status", status)
+    app.router.add_post("/security-center/updates", check_updates)

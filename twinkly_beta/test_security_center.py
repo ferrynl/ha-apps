@@ -1,10 +1,11 @@
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import patch, AsyncMock
 
 from app import ingress_only
-from modules.security_center import credentials_check, dependencies, local_checks
+from modules.security_center import credentials_check, dependencies, local_checks, parse_version
+from modules.update_status import BETA_CONFIG, UpdateStatus, compare
 
 
 class SecurityCenterTest(unittest.IsolatedAsyncioTestCase):
@@ -30,3 +31,26 @@ class SecurityCenterTest(unittest.IsolatedAsyncioTestCase):
                     {"name": "twinkly-test", "expected": "2.0", "installed": "1.0"}
                 ])
                 installed.assert_called_once_with("twinkly-test")
+
+    async def test_update_check_reports_partial_failure_and_reuses_cache(self):
+        async def releases(session, url, limit):
+            if url == BETA_CONFIG:
+                return b'version: 2.0.0-beta.31\n'
+            if url.endswith('/unreachable/json'):
+                raise TimeoutError
+            return b'{"info":{"version":"3.0","requires_python":">=3.13","yanked":false}}'
+
+        packages = [{"name": "example", "installed": "2.0"},
+                    {"name": "unreachable", "installed": "1.0"}]
+        checker = UpdateStatus(parse_version, "3.12.9")
+        with patch("modules.update_status.fetch_bytes", AsyncMock(side_effect=releases)) as fetch:
+            report = await checker.check("2.0.0-beta.9", packages)
+            self.assertEqual(report["app"], {"latest": "2.0.0-beta.31", "result": "update"})
+            self.assertEqual([row["result"] for row in report["packages"]], ["incompatible_python", "unavailable"])
+            self.assertEqual(await checker.check("2.0.0-beta.9", packages), report)
+            self.assertEqual(fetch.await_count, 3)
+
+    def test_version_sorting_does_not_offer_prereleases_or_downgrades(self):
+        self.assertEqual(compare("1.10", "1.9")["result"], "ahead")
+        self.assertEqual(compare("1.0", "1.0.0")["result"], "current")
+        self.assertEqual(compare("1.9", "2.0rc1")["result"], "unavailable")

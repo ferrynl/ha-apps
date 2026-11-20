@@ -28,6 +28,13 @@
       "Reglas de Ingress activas", "Ingress permitido", "Acceso directo bloqueado", "POST requiere JSON",
       "Comprobación local permitida", "Comprobación vía Ingress bloqueada", "Permisos del archivo de credenciales"],
   };
+  const updateWords = {
+    nl: ["Controleren op updates", "Versies opzoeken…", "Update beschikbaar", "Actueel", "Geïnstalleerde versie is nieuwer", "Nieuwere Python-versie vereist", "Onbekend", "Niet geïnstalleerd", "Nieuwste versie", "Laatste updatecheck", "Updatecheck mislukt.", "Bibliotheekupdates", "Pakketten kunnen niet worden gecontroleerd."],
+    en: ["Check for updates", "Looking up versions…", "Update available", "Up to date", "Installed version is newer", "Newer Python required", "Unknown", "Not installed", "Latest version", "Last update check", "Update check failed.", "Library updates", "Packages could not be checked."],
+    de: ["Nach Updates suchen", "Versionen werden gesucht…", "Update verfügbar", "Aktuell", "Installierte Version ist neuer", "Neuere Python-Version erforderlich", "Unbekannt", "Nicht installiert", "Neueste Version", "Letzte Updateprüfung", "Updateprüfung fehlgeschlagen.", "Bibliotheksupdates", "Pakete konnten nicht geprüft werden."],
+    es: ["Buscar actualizaciones", "Buscando versiones…", "Actualización disponible", "Al día", "La versión instalada es más reciente", "Requiere una versión de Python más reciente", "Desconocido", "No instalado", "Última versión", "Última búsqueda", "Falló la búsqueda de actualizaciones.", "Actualizaciones de bibliotecas", "No se pudieron comprobar los paquetes."],
+  };
+  const updateResults = {update: 2, current: 3, ahead: 4, incompatible_python: 5, unavailable: 6, not_installed: 7};
   const ids = ["middleware_installed", "ingress_access", "direct_access", "json_only",
     "health_loopback", "health_ingress_denied", "credentials_permissions"];
   const results = {pass: 18, fail: 19, not_configured: 20, unavailable: 21};
@@ -36,6 +43,9 @@
   let loading = false;
   let failed = false;
   let report;
+  let updateReport;
+  let updating = false;
+  let updateFailed = false;
   let dependenciesOpen = false;
 
   function node(tag, text, className) {
@@ -55,16 +65,30 @@
 
   function show() {
     const t = words[language.value] || words.nl;
+    const u = updateWords[language.value] || updateWords.nl;
+    const updateText = row => (row.latest ? u[8] + " · " + row.latest + " · " : "") + u[updateResults[row.result] ?? 6];
     const refresh = node("button", t[3]);
     refresh.type = "button";
     refresh.disabled = loading;
     refresh.onclick = () => load(true);
+    const updateButton = node("button", updating ? u[1] : u[0]);
+    updateButton.type = "button";
+    updateButton.id = "security-update-check";
+    updateButton.disabled = updating;
+    updateButton.onclick = checkUpdates;
     const notification = node("p", loading ? t[4] : failed ? t[5] : "");
     notification.setAttribute("role", "status");
     const cards = node("div", "", "lighting-grid");
     const source = node("article", "", "lighting-card");
     source.append(node("h3", t[0]), link(t[6], "/tree/main/twinkly_beta"),
-      link(t[7], "/actions/workflows/twinkly-beta-bundled-previews.yml"));
+      link(t[7], "/actions/workflows/twinkly-beta-bundled-previews.yml"), updateButton);
+    const updateNotification = node("p", updating ? u[1] : updateFailed ? u[10] : "");
+    updateNotification.setAttribute("role", "status");
+    source.append(updateNotification);
+    if (updateReport) {
+      const checked = new Date(updateReport.checked_at).toLocaleString(language.value || "nl");
+      source.append(node("p", updateText(updateReport.app)), node("p", u[9] + " · " + checked));
+    }
     const runtime = node("article", "", "lighting-card");
     runtime.append(node("h3", t[1]));
     const checks = node("article", "", "lighting-card");
@@ -80,14 +104,21 @@
         detail.open = dependenciesOpen;
         detail.ontoggle = () => { dependenciesOpen = detail.open; };
         const list = node("ul");
+        const latest = new Map((updateReport?.packages || []).map(pkg => [pkg.name, pkg]));
         for (const pkg of report.dependencies) {
           const summary = pkg.expected === pkg.installed ? pkg.installed
             : (pkg.installed || t[14]) + " → " + pkg.expected;
-          list.append(node("li", pkg.name + " · " + summary));
+          const updateRow = latest.get(pkg.name);
+          list.append(node("li", pkg.name + " · " + summary + (updateRow ? " · " + updateText(updateRow) : "")));
         }
         detail.append(node("summary", t[12] + " · " + (total - mismatches) + " / " + total), list);
         runtime.append(node("p", t[13] + " · " + mismatches), detail);
       } else runtime.append(node("p", t[15]));
+      if (updateReport) {
+        const available = updateReport.packages.filter(row => row.result === "update").length;
+        const unknown = updateReport.packages.filter(row => row.result === "unavailable").length;
+        runtime.append(node("p", updateReport.packages_checked ? u[11] + " · " + available + " · " + u[6] + " · " + unknown : u[12]));
+      }
       const items = node("ul");
       for (const check of report.checks) {
         const index = ids.indexOf(check.id);
@@ -109,12 +140,32 @@
       const response = await fetch("security-center/status", {cache: "no-store"});
       if (!response.ok) throw new Error("Security status unavailable");
       report = await response.json();
+      if (report.updates && !updating) updateReport = report.updates;
     } catch {
       failed = true;
     } finally {
       loading = false;
       show();
       if (restoreFocus && active) root.querySelector("button").focus();
+    }
+  }
+
+  async function checkUpdates() {
+    if (updating) return;
+    updating = true;
+    updateFailed = false;
+    show();
+    try {
+      const response = await fetch("security-center/updates", {method: "POST",
+        headers: {"Content-Type": "application/json"}, body: "{}"});
+      if (!response.ok) throw new Error("Update check unavailable");
+      updateReport = await response.json();
+    } catch {
+      updateFailed = true;
+    } finally {
+      updating = false;
+      show();
+      if (active) root.querySelector("#security-update-check").focus();
     }
   }
 

@@ -603,3 +603,27 @@ test('Security Center shows runtime inventory, release links and local checks', 
  await expect(modules.getByText('Rechtstreekse toegang geblokkeerd · Geslaagd')).toBeVisible();
  await expect(modules.getByText('Toegangsrechten van de sleutelopslag · Niet ingesteld')).toBeVisible();
 });
+
+test('Security Center checks app and package updates on request', async ({page}) => {
+ let requests = 0;
+ await page.route('**/security-center/status', route => route.fulfill({json:{
+  version:'2.0.0-beta.30',runtime:{python:'3.12.0',architecture:'amd64',root:false},
+  dependencies:[{name:'aiohttp',expected:'3.14.5',installed:'3.14.5'}],
+  checks:[],checked_at:'2026-11-20T00:00:00Z'
+ }}));
+ await page.route('**/security-center/updates', route => {
+  expect(route.request().method()).toBe('POST');
+  requests++;
+  return route.fulfill({json:{app:{latest:'2.0.0-beta.31',result:'update'},
+   packages:[{name:'aiohttp',latest:'3.15.0',result:'update'}],packages_checked:true,checked_at:'2026-11-20T00:00:00Z'}});
+ });
+ await page.goto('http://127.0.0.1:8765/index.html#security-center');
+ const modules = page.locator('#security-modules');
+ await expect(modules.getByText('Geïnstalleerde bèta · 2.0.0-beta.30')).toBeVisible();
+ expect(requests).toBe(0);
+ await modules.getByRole('button',{name:'Controleren op updates'}).click();
+ await expect(modules.getByText('Nieuwste versie · 2.0.0-beta.31 · Update beschikbaar')).toBeVisible();
+ await modules.getByText('Pakketten volgens lockfile · 1 / 1').click();
+ await expect(modules.getByText('aiohttp · 3.14.5 · Nieuwste versie · 3.15.0 · Update beschikbaar')).toBeVisible();
+ expect(requests).toBe(1);
+});
