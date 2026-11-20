@@ -1,5 +1,6 @@
 """Ingress-protected provider endpoints. No credentials in responses."""
 import asyncio
+import json
 import re
 
 from aiohttp import web, ClientError
@@ -12,6 +13,7 @@ from .common import lan_ip
 from .hue_discovery import discover as hue_discover
 from .govee_discovery import discover as govee_discover, statuses as govee_statuses
 from .lighting import Lighting
+from .hue_tests import HueTests, TESTS, test_plan
 
 
 def install(app, store=None, controller=None):
@@ -167,4 +169,47 @@ def install(app, store=None, controller=None):
 
         lighting = Lighting(controller, store, unified_inventory, send)
         lighting.install(app.router)
+        hue_tests = HueTests()
+        lighting.hue_tests = hue_tests
+
+        async def hue_test_status(request):
+            return web.json_response(hue_tests.status())
+
+        async def hue_test_control(request):
+            try:
+                body = await request.json()
+                test = body["test"]
+                if not isinstance(test, str) or test not in TESTS | {"stop"}:
+                    raise ValueError()
+                async with lighting.control_lock:
+                    if test == "stop":
+                        await hue_tests.stop()
+                        return web.json_response(hue_tests.status())
+                    key = body["id"]
+                    provider, bridge, light_id = json.loads(key)
+                    if provider != "hue" or not re.fullmatch(r"[0-9a-fA-F-]{36}", light_id):
+                        raise ValueError()
+                    await hue_tests.stop()
+                    if key in lighting.music.members:
+                        await lighting.music.stop()
+                    record = store.load()["hue"][bridge]
+                    client = adapter("hue", bridge, record)
+                    path = "light/" + light_id
+                    resources = await client.request("GET", path)
+                    if not resources or resources[0].get("id") != light_id:
+                        raise web.HTTPNotFound()
+                    changes, restore = test_plan(resources[0], test)
+
+                    async def apply(change):
+                        await client.request("PUT", path, change)
+
+                    hue_tests.start(key, test, apply, changes, restore)
+                return web.json_response(hue_tests.status())
+            except (KeyError, TypeError, ValueError):
+                raise web.HTTPBadRequest()
+            except connection_errors:
+                raise web.HTTPServiceUnavailable()
+
+        app.router.add_get("/lighting/hue-test", hue_test_status)
+        app.router.add_post("/lighting/hue-test", hue_test_control)
         app.cleanup_ctx.append(lighting.music_cleanup)

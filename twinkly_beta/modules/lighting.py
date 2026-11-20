@@ -61,6 +61,7 @@ class Lighting:
         self.group_lock = asyncio.Lock()
         self.control_lock = asyncio.Lock()
         self.music = MixedMusic(controller, self.send)
+        self.hue_tests = None
 
     async def lights(self):
         lights = {}
@@ -186,6 +187,8 @@ class Lighting:
                 if group is None:
                     raise web.HTTPConflict()
                 members = group["members"]
+                if self.hue_tests and self.hue_tests.target in members:
+                    await self.hue_tests.stop()
                 if self.music.members.intersection(members):
                     await self.music.stop()
                 lights, _ = await self.lights()
@@ -211,6 +214,8 @@ class Lighting:
                     return web.json_response(self.music.status())
                 group = body["group"]
                 members = self.store.load_groups()[group]["members"]
+                if self.hue_tests and self.hue_tests.target in members:
+                    await self.hue_tests.stop()
                 await self.music.stop()
                 lights, _ = await self.lights()
                 result = await self.music.start(group, {key: lights.get(key) for key in members})
@@ -223,6 +228,8 @@ class Lighting:
     async def music_cleanup(self, app):
         yield
         async with self.control_lock:
+            if self.hue_tests:
+                await self.hue_tests.stop()
             await self.music.stop()
 
     async def send(self, key, light, action, value):
@@ -278,6 +285,8 @@ class Lighting:
         except OSError:
             raise web.HTTPServiceUnavailable()
         async with self.control_lock:
+            if self.hue_tests and self.hue_tests.target in members:
+                await self.hue_tests.stop()
             if self.music.members.intersection(members):
                 await self.music.stop()
             lights, _ = await self.lights()

@@ -26,6 +26,12 @@
     de: ["Frame-Alter", "Befehlsdauer", "Fehlgeschlagen", "In der App gemessen, ohne Reaktionszeit der Lampe."],
     es: ["Antigüedad del fotograma", "Duración del comando", "Fallidos", "Medido en la aplicación, sin el tiempo de reacción de la luz."],
   };
+  const hueTestWords = {
+    nl: ["Kies een Hue-lamp", "Identificeren", "Aan/uit-test", "Dimtest", "RGB-test", "Regenboog", "Warm/koel wit", "Hue-test stoppen", "Hue-test loopt", "Vorige stand hersteld", "Hue-test mislukt. Controleer de lamp en stop eventuele effecten.", "Vorige stand kon niet worden hersteld.", "Tests gelden voor de hele Hue-lamp. LED-volgorde en richtingstests staan bij Twinkly."],
+    en: ["Choose a Hue light", "Identify", "Power test", "Dimmer test", "RGB test", "Rainbow", "Warm/cool white", "Stop Hue test", "Hue test running", "Previous state restored", "Hue test failed. Check the light and stop any effects.", "Could not restore the previous state.", "Tests apply to the whole Hue light. LED order and direction tests are under Twinkly."],
+    de: ["Hue-Lampe auswählen", "Identifizieren", "Ein-/Aus-Test", "Dimmtest", "RGB-Test", "Regenbogen", "Warm-/Kaltweiß", "Hue-Test stoppen", "Hue-Test läuft", "Vorheriger Zustand wiederhergestellt", "Hue-Test fehlgeschlagen. Prüfe die Lampe und beende aktive Effekte.", "Der vorherige Zustand konnte nicht wiederhergestellt werden.", "Tests gelten für die ganze Hue-Lampe. LED-Reihenfolge und Richtungstests findest du bei Twinkly."],
+    es: ["Elige una luz Hue", "Identificar", "Prueba de encendido", "Prueba de brillo", "Prueba RGB", "Arcoíris", "Blanco cálido/frío", "Detener prueba Hue", "Prueba Hue en curso", "Estado anterior restaurado", "La prueba Hue falló. Comprueba la luz y detén cualquier efecto.", "No se pudo restaurar el estado anterior.", "Las pruebas se aplican a toda la luz Hue. Las pruebas de orden LED y dirección están en Twinkly."],
+  };
   const brands = {twinkly: "Twinkly", hue: "Philips Hue", govee: "Govee"};
   const wordmarks = {twinkly: "twinkly-nav-logo.svg", hue: "hue-app-icon.webp", govee: "govee-logo.png"};
   const el = id => document.getElementById(id);
@@ -461,10 +467,85 @@
     return card;
   }
 
+  const hueTestSection = node("section", "", "lighting-surface gap");
+  el("tests-content").after(hueTestSection);
+  let hueTestChoice = "";
+  let hueTestStatus;
+  let hueTestTimer;
+  let hueTestBusy = false;
+
+  async function updateHueTest() {
+    clearTimeout(hueTestTimer);
+    try {
+      hueTestStatus = await api("lighting/hue-test");
+    } catch {
+      hueTestStatus = {result: "failed"};
+    }
+    if (context === "tests") renderHueTests();
+  }
+
+  function renderHueTests() {
+    clearTimeout(hueTestTimer);
+    const labels = hueTestWords[el("language").value] || hueTestWords.nl;
+    const lights = (data?.lights || []).filter(light => light.provider === "hue");
+    hueTestSection.replaceChildren(node("h3", brands.hue), node("p", labels[12]));
+    const select = node("select");
+    select.append(new Option(labels[0], ""));
+    for (const light of lights) {
+      const option = new Option(light.name + " · " + status(light), light.id);
+      option.disabled = light.status === "unavailable";
+      select.append(option);
+    }
+    select.value = lights.some(light => light.id === hueTestChoice && light.status !== "unavailable") ? hueTestChoice : "";
+    const selected = lights.find(light => light.id === select.value);
+    select.onchange = () => {
+      hueTestChoice = select.value;
+      renderHueTests();
+      hueTestSection.querySelector("select").focus();
+    };
+    hueTestSection.append(field(labels[0], select));
+    const actions = node("div", "", "lighting-controls");
+    const run = async test => {
+      hueTestBusy = true;
+      clearTimeout(hueTestTimer);
+      try {
+        hueTestStatus = await api("lighting/hue-test", {test, id: selected?.id});
+      } catch {
+        hueTestStatus = {result: "failed"};
+      } finally {
+        hueTestBusy = false;
+        if (context === "tests") renderHueTests();
+      }
+    };
+    const running = hueTestStatus?.result === "running";
+    const tests = [["identify", "power"], ["power", "power"], ["brightness", "brightness"],
+      ["rgb", "rgb"], ["rainbow", "rgb"], ["temperature", "temperature"]];
+    for (const [index, [test, capability]] of tests.entries()) {
+      const action = button(labels[index + 1], () => run(test));
+      action.disabled = hueTestBusy || running || !selected?.capabilities[capability];
+      actions.append(action);
+    }
+    const stop = button(labels[7], () => run("stop"));
+    stop.disabled = hueTestBusy || !running;
+    actions.append(stop);
+    const result = {running: 8, restored: 9, failed: 10, restore_failed: 11}[hueTestStatus?.result];
+    hueTestSection.append(actions);
+    if (result != null) {
+      const message = node("p", labels[result]);
+      message.setAttribute("role", "status");
+      hueTestSection.append(message);
+    }
+    if (running && !hueTestBusy) hueTestTimer = setTimeout(updateHueTest, 1000);
+  }
+
   function render() {
     panel.hidden = !["home", "hue", "govee"].includes(context);
+    if (context === "tests") {
+      renderHueTests();
+      return;
+    }
     const mount = context === "control" ? studio : context === "settings" ? settings : panel;
-    if (!["home", "hue", "govee", "control", "settings"].includes(context)) return;
+    if (!["home", "hue", "govee", "control", "settings", "tests"].includes(context)) return;
     mount.replaceChildren();
     const title = context === "settings" ? t(12) : context === "home" ? t(1) : brands[context] || brands.twinkly;
     const heading = node("div", "", "lighting-heading");
@@ -511,9 +592,10 @@
     const previous = context;
     context = event.detail;
     if (previous !== context) feedback.textContent = "";
+    if (previous !== context && context === "tests") updateHueTest();
     el("nav-home").textContent = t(0);
     render();
-    if (previous !== context && ["home", "hue", "govee", "control", "settings"].includes(context)) {
+    if (previous !== context && ["home", "hue", "govee", "control", "settings", "tests"].includes(context)) {
       refresh(false).catch(() => { feedback.textContent = t(32); });
     }
   });

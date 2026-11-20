@@ -1,3 +1,8 @@
+## 2.0.0-beta.13
+
+- Add Philips Hue to the Test Center with identification, power, dimming, RGB, rainbow and warm/cool white checks per light.
+- Use the lamp's advertised capabilities and restore its previous settings after the test or when stopped. Keep pixel mapping checks in the Twinkly section.
+
 ## 2.0.0-beta.12
 
 - Smooth shared LedFX color changes for Hue and Govee while keeping the existing update limit.
