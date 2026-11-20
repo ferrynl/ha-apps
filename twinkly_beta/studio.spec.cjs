@@ -91,7 +91,7 @@ test('Home combines providers and keeps pairing in Settings', async ({page}) => 
  let temperature;
  await page.route('**/lighting', route => route.fulfill({json:{
   lights:[light('t','twinkly','Tree',true),{...light('h','hue','Living room',false),
-   capabilities:{power:true,temperature:true}, temperature_mirek:{min:153,max:500}, state:{on:true,mirek:370}},light('g','govee','Strip',false,'unknown')],
+   capabilities:{power:true,temperature:true}, temperature_mirek:{min:153,max:500}, state:{on:true,mirek:370}},{...light('g','govee','Strip',false,'unknown'),capabilities:{power:true}}],
   connections:{hue:[{id:'bridge',address:'192.168.1.2',status:'online'}],govee:[]}, groups, scenes, music,
  }}));
  await page.route('**/lighting/groups', route => {
@@ -122,6 +122,15 @@ test('Home combines providers and keeps pairing in Settings', async ({page}) => 
  await page.route('**/lighting/scenes/christmas/apply', route => route.fulfill({json:{results:{
   t:{power:'accepted',brightness:'accepted'}, h:{power:'accepted',brightness:'skipped'},
  }}}));
+ let goveeTest={result:null};
+ await page.route('**/lighting/govee-test', route => {
+  if (route.request().method()==='POST') {
+   const {test,id}=route.request().postDataJSON();
+   expect(id).toBe('g');
+   goveeTest={result:test==='stop'?'restored':'running'};
+  }
+  return route.fulfill({json:goveeTest});
+ });
  let hueTest={result:null};
  await page.route('**/lighting/hue-test', route => {
   if (route.request().method()==='POST') {
@@ -154,7 +163,7 @@ test('Home combines providers and keeps pairing in Settings', async ({page}) => 
  await white.fill('400');
  await expect.poll(() => temperature).toEqual({id:'h',action:'temperature',value:400});
  await expect(home.locator('[data-provider=govee]')).toContainText('onbevestigd');
- await expect(home.locator('[data-provider=govee] button')).toHaveCount(0);
+ await expect(home.locator('[data-provider=govee] button')).toHaveCount(2);
  await expect(page.getByText('Certificaat ophalen')).toHaveCount(0);
  await home.getByLabel('Groepsnaam').fill('Together');
  await home.getByLabel('Tree · Twinkly').check();
@@ -183,13 +192,20 @@ test('Home combines providers and keeps pairing in Settings', async ({page}) => 
  await expect(home.locator('.lighting-brand-mark img')).toHaveAttribute('src','hue-app-icon.webp');
  await expect(home.getByText('Tree')).toHaveCount(0);
  await page.locator('#nav-tests').click();
- const hueTests=page.locator('#tests-page .lighting-surface');
+ const hueTests=page.locator('#tests-page .provider-test-hue');
  await hueTests.getByLabel('Kies een Hue-lamp').selectOption('h');
  await expect(hueTests.getByRole('button',{name:'RGB-test'})).toBeDisabled();
  await hueTests.getByRole('button',{name:'Warm/koel wit'}).click();
  await expect(hueTests.getByRole('status')).toHaveText('Hue-test loopt');
  await hueTests.getByRole('button',{name:'Hue-test stoppen'}).click();
  await expect(hueTests.getByRole('status')).toHaveText('De bridge heeft het herstel van de vorige stand nog niet bevestigd.');
+ const goveeTests=page.locator('#tests-page .provider-test-govee');
+ await goveeTests.getByLabel('Kies een Govee-lamp').selectOption('g');
+ await expect(goveeTests.getByRole('button',{name:'RGB-test'})).toBeDisabled();
+ await goveeTests.getByRole('button',{name:'Identificeren'}).click();
+ await expect(goveeTests.getByRole('status')).toHaveText('Govee-test loopt');
+ await goveeTests.getByRole('button',{name:'Govee-test stoppen'}).click();
+ await expect(goveeTests.getByRole('status')).toHaveText('Vorige stand hersteld');
  await page.locator('#nav-govee').click();
  await expect(home.getByText('Strip')).toBeVisible();
  await page.locator('#nav-control').click();
