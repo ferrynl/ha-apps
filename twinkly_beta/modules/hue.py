@@ -3,6 +3,7 @@ import re
 import ssl
 from aiohttp import ClientError, ClientSession, ClientTimeout, Fingerprint
 from .common import lan_ip, rgb, brightness, RateGate
+from .profiles import color_from_xy
 
 def xy_color(value):
     r,g,b = [v/255 for v in rgb(value)]
@@ -90,10 +91,20 @@ class Hue:
             group = scene.get("group", {})
             entry = by_group.get((group.get("rtype"), group.get("rid")))
             if entry is not None:
-                entry["scenes"].append({
-                    "id": scene["id"],
-                    "name": scene.get("metadata", {}).get("name") or scene["id"],
-                })
+                info = {"id": scene["id"], "name": scene.get("metadata", {}).get("name") or scene["id"]}
+                palette = []
+                for target in scene.get("actions", ()):
+                    action = target.get("action", {})
+                    if action.get("on", {}).get("on") is False:
+                        continue
+                    color = color_from_xy(action.get("color", {}).get("xy"))
+                    if color and color not in palette:
+                        palette.append(color)
+                    if len(palette) == 5:
+                        break
+                if palette:
+                    info["palette"] = palette
+                entry["scenes"].append(info)
         return collections
 
     async def control_collection(self, resource_id, action, value=None):

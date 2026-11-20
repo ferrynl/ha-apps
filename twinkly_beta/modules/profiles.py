@@ -2,6 +2,25 @@
 
 Unknown features remain disabled. Discovery does not authenticate devices.
 """
+import math
+
+
+def color_from_xy(xy):
+    if not isinstance(xy, dict):
+        return None
+    x, y = xy.get("x"), xy.get("y")
+    if not all(type(v) in (float, int) and math.isfinite(v) and 0 <= v <= 1 for v in (x, y)) or y < .001:
+        return None
+    X, Z = x / y, (1 - x - y) / y
+    linear = (1.656492 * X - .354851 - .255038 * Z,
+              -.707196 * X + 1.655397 + .036152 * Z,
+              .051713 * X - .121364 + 1.011530 * Z)
+    scale = max(1, *linear)
+    channels = [max(0, value / scale) for value in linear]
+    return [round(255 * (12.92 * c if c <= .0031308 else 1.055 * c ** (1 / 2.4) - .055))
+            for c in channels]
+
+
 def hue_profile(light, device=None):
     device=device or {}
     product=device.get("product_data") or {}

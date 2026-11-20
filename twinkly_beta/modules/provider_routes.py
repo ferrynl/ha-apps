@@ -13,6 +13,7 @@ from .common import lan_ip
 from .hue_discovery import discover as hue_discover
 from .govee_discovery import discover as govee_discover, statuses as govee_statuses
 from .lighting import Lighting
+from .hue_scene_images import install as install_hue_scene_images, scene_image_path
 from .hue_tests import LampTest, TESTS as HUE_TESTS, test_plan as hue_test_plan
 from . import govee_tests
 
@@ -25,6 +26,7 @@ def install(app, store=None, controller=None):
     clients = {}
     lighting = None
     collection_lock = asyncio.Lock()
+    scene_images = install_hue_scene_images(app, store)
     connection_errors = (ClientError, TimeoutError, ValueError, OSError, RuntimeError)
 
     def adapter(provider, identifier, record):
@@ -135,7 +137,8 @@ def install(app, store=None, controller=None):
                 field = {"power": "on", "brightness": "level", "color": "color", "temperature": "mirek"}[action]
                 await client.control(light_id, **{field: value})
             else:
-                await {"power": client.power, "brightness": client.dim, "color": client.color}[action](value)
+                await {"power": client.power, "brightness": client.dim, "color": client.color,
+                       "temperature": client.temperature}[action](value)
 
     async def control(request):
         provider = request.match_info["provider"]
@@ -153,6 +156,14 @@ def install(app, store=None, controller=None):
             row = {"id": identifier, "address": record["address"]}
             try:
                 collections = await adapter("hue", identifier, record).collections()
+                for collection in collections:
+                    for scene in collection["scenes"]:
+                        try:
+                            path = scene_image_path(scene_images, identifier, scene["id"])
+                        except ValueError:
+                            continue
+                        if path.is_file():
+                            scene["has_image"] = True
                 return dict(row, collections=collections, status="online")
             except (*connection_errors, KeyError, TypeError):
                 return dict(row, collections=[], status="unavailable")

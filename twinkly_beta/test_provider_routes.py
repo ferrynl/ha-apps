@@ -1,6 +1,9 @@
+import base64
+from io import BytesIO
 import unittest
 import tempfile
 from unittest.mock import AsyncMock, patch
+from PIL import Image
 from aiohttp import web
 from aiohttp.test_utils import TestClient, TestServer
 from modules.provider_routes import install
@@ -139,3 +142,28 @@ class RouteTests(unittest.IsolatedAsyncioTestCase):
             })
             self.assertEqual(response.status, 400)
             send.assert_not_awaited()
+
+    async def test_scene_image_is_stored_by_bridge_and_can_be_removed(self):
+        self.store.save({"version": 1, "govee": {}, "hue": {
+            name: {"address": address, "application_key": "abcdefghij", "certificate_sha256": "ab" * 32}
+            for name, address in [("first", "192.168.1.2"), ("second", "192.168.1.3")]
+        }})
+        scene = "00000000-0000-4000-8000-000000000001"
+        path = f"/providers/hue/scene-image/first/{scene}"
+        image = BytesIO()
+        Image.new("RGB", (16, 12), "red").save(image, "JPEG")
+        encoded = base64.b64encode(image.getvalue()).decode("ascii")
+        response = await self.client.post(path, json={"image": "invalid"})
+        self.assertEqual(response.status, 400)
+        response = await self.client.post(path, json={"image": encoded})
+        self.assertEqual(response.status, 200)
+        response = await self.client.get(path)
+        self.assertEqual(response.content_type, "image/jpeg")
+        with Image.open(BytesIO(await response.read())) as decoded:
+            self.assertEqual(decoded.size, (16, 12))
+        response = await self.client.get(f"/providers/hue/scene-image/second/{scene}")
+        self.assertEqual(response.status, 404)
+        response = await self.client.post(path, json={"image": None})
+        self.assertEqual(response.status, 200)
+        response = await self.client.get(path)
+        self.assertEqual(response.status, 404)

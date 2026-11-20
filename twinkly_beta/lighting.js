@@ -11,6 +11,13 @@
     de: ["Hue-Räume und -Zonen", "Raum", "Zone", "Hue-Szenen", "Keine Räume oder Zonen gefunden.", "Beende den Hue-Test oder die gemischte Musik auf dieser Bridge und versuche es erneut."],
     es: ["Habitaciones y zonas Hue", "Habitación", "Zona", "Escenas Hue", "No se encontraron habitaciones ni zonas.", "Detén la prueba Hue o la música mixta en este puente e inténtalo de nuevo."],
   };
+  const previewWords = {
+    nl: ["Afbeelding kiezen", "Afbeelding verwijderen", "Masterfader muziek"],
+    en: ["Choose image", "Remove image", "Music master fader"],
+    de: ["Bild auswählen", "Bild entfernen", "Musik-Masterfader"],
+    es: ["Elegir imagen", "Eliminar imagen", "Control maestro de música"],
+  };
+  const previewText = () => previewWords[el("language").value] || previewWords.nl;
   const temperatureLabels = {
     nl: "Wittemperatuur", en: "White temperature", de: "Weißtemperatur", es: "Temperatura del blanco",
   };
@@ -62,6 +69,7 @@
   let collections = [];
   let collectionsStatus = "loading";
   let collectionsRead = 0;
+  const sceneImageRevisions = new Map();
 
   function node(tag, text, className) {
     const item = document.createElement(tag);
@@ -176,6 +184,27 @@
       input.addEventListener("change", () => task(input, () => send("temperature", Number(input.value))));
       row.append(label);
     }
+    if (target.id && capable("temperature") && lights[0].provider === "govee") {
+      const caption = temperatureLabels[el("language").value] || temperatureLabels.nl;
+      const input = node("input");
+      input.type = "range";
+      input.min = 2000;
+      input.max = 9000;
+      input.step = 1;
+      input.setAttribute("aria-label", caption);
+      input.value = state.color_temperature_kelvin;
+      const reading = node("span");
+      const label = field(caption, input);
+      label.append(reading);
+      const update = () => {
+        reading.textContent = input.value + " K";
+        input.setAttribute("aria-valuetext", reading.textContent);
+      };
+      update();
+      input.addEventListener("input", update);
+      input.addEventListener("change", () => task(input, () => send("temperature", Number(input.value))));
+      row.append(label);
+    }
     card.append(row);
   }
 
@@ -217,6 +246,29 @@
       const music = data.music?.group === id;
       if (music) {
         card.append(node("p", data.music.live ? activeMusic : waitingMusic));
+        const master = node("input");
+        master.type = "range";
+        master.min = 1;
+        master.max = 100;
+        master.value = data.music.level ?? 100;
+        const reading = node("output");
+        const caption = previewText()[2];
+        master.setAttribute("aria-label", caption);
+        const label = field(caption, master);
+        label.append(reading);
+        const readLevel = () => {
+          reading.value = master.value + "%";
+          master.setAttribute("aria-valuetext", reading.value);
+        };
+        readLevel();
+        master.addEventListener("input", readLevel);
+        master.addEventListener("change", () => task(master, async () => {
+          const result = await api("lighting/music", {group: id, level: Number(master.value)});
+          if (data.music.group === id) data.music.level = result.level;
+          const failed = Object.values(result.results).filter(status => status === "failed").length;
+          feedback.textContent = failed ? t(32) + " · " + failed : "";
+        }));
+        card.append(label);
         const timings = Object.entries(data.music.timings || {});
         if (timings.length) {
           const [frame, command, failed, hint] = timingWords[el("language").value] || timingWords.nl;
@@ -565,6 +617,55 @@
   const hueTestPanel = lampTestPanel("hue", el("tests-content"));
   const goveeTestPanel = lampTestPanel("govee", hueTestPanel.section);
 
+  function hueSceneCard(bridge, scene, activate) {
+    const [chooseImage, removeImage] = previewText();
+    const card = node("div", "", "hue-scene-card");
+    const path = "providers/hue/scene-image/" + encodeURIComponent(bridge) + "/" + encodeURIComponent(scene.id);
+    const play = button(scene.name, activate);
+    const cover = node("span", "", "hue-scene-cover");
+    cover.setAttribute("aria-hidden", "true");
+    if (scene.has_image) {
+      const image = node("img");
+      image.alt = "";
+      image.loading = "lazy";
+      image.src = path + "?v=" + (sceneImageRevisions.get(path) || 0);
+      cover.append(image);
+    } else {
+      const colors = (scene.palette || []).map(stateColor).filter(Boolean);
+      if (colors.length === 1) cover.style.backgroundColor = colors[0];
+      if (colors.length > 1) cover.style.backgroundImage = "linear-gradient(125deg, " + colors.join(", ") + ")";
+    }
+    play.prepend(cover);
+    const upload = node("input");
+    upload.type = "file";
+    upload.accept = "image/jpeg,image/png,image/webp";
+    upload.className = "hue-scene-file";
+    upload.setAttribute("aria-label", chooseImage + " · " + scene.name);
+    const update = async image => {
+      await api(path, {image});
+      sceneImageRevisions.set(path, Date.now());
+      await loadCollections();
+    };
+    const choose = node("label", "", "hue-scene-upload");
+    choose.append(node("span", chooseImage), upload);
+    upload.addEventListener("change", () => {
+      if (upload.files.length) task(upload, async () => {
+        try {
+          await update(await encodeImage(upload.files[0]));
+        } finally {
+          upload.value = "";
+        }
+      });
+    });
+    card.append(play, choose);
+    if (scene.has_image) {
+      const remove = button(removeImage, () => update(null));
+      remove.setAttribute("aria-label", removeImage + " · " + scene.name);
+      card.append(remove);
+    }
+    return card;
+  }
+
   function renderCollections() {
     hueCollections.hidden = context !== "hue";
     if (hueCollections.hidden) return;
@@ -617,9 +718,9 @@
         }
         if (controls.childElementCount) card.append(controls);
         if (collection.scenes.length) {
-          const scenes = node("div", "", "lighting-controls");
+          const scenes = node("div", "", "hue-scenes");
           for (const scene of collection.scenes) {
-            scenes.append(button(scene.name, () => send(scene.id, "recall")));
+            scenes.append(hueSceneCard(bridge.id, scene, () => send(scene.id, "recall")));
           }
           card.append(node("h5", labels[3]), scenes);
         }
