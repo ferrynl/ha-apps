@@ -1,3 +1,8 @@
+## 2.0.0-beta.15
+
+- Add Govee LAN identification, on/off, dimming, RGB and rainbow tests to the Test Center.
+- Require readable LAN state before making changes and verify restoration with a fresh status report.
+
 ## 2.0.0-beta.14
 
 - Verify the previous Hue lamp state by reading it back from the bridge after each test. Report when the restore command is accepted but the original settings cannot be confirmed.

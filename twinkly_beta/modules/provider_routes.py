@@ -13,7 +13,8 @@ from .common import lan_ip
 from .hue_discovery import discover as hue_discover
 from .govee_discovery import discover as govee_discover, statuses as govee_statuses
 from .lighting import Lighting
-from .hue_tests import HueTests, TESTS, test_plan
+from .hue_tests import LampTest, TESTS as HUE_TESTS, test_plan as hue_test_plan
+from . import govee_tests
 
 
 def install(app, store=None, controller=None):
@@ -169,51 +170,90 @@ def install(app, store=None, controller=None):
 
         lighting = Lighting(controller, store, unified_inventory, send)
         lighting.install(app.router)
-        hue_tests = HueTests()
-        lighting.hue_tests = hue_tests
+        lamp_test = LampTest()
+        lighting.lamp_test = lamp_test
 
-        async def hue_test_status(request):
-            return web.json_response(hue_tests.status())
+        def test_provider(request):
+            brand = request.match_info["brand"]
+            if brand not in ("hue", "govee"):
+                raise web.HTTPNotFound()
+            return brand
 
-        async def hue_test_control(request):
+        def test_status(brand):
+            status = lamp_test.status()
+            if status["id"] and json.loads(status["id"])[0] != brand:
+                return {"id": None, "test": None, "result": None}
+            return status
+
+        async def lamp_test_status(request):
+            return web.json_response(test_status(test_provider(request)))
+
+        async def lamp_test_control(request):
+            brand = test_provider(request)
+            supported = HUE_TESTS if brand == "hue" else govee_tests.TESTS
             try:
                 body = await request.json()
                 test = body["test"]
-                if not isinstance(test, str) or test not in TESTS | {"stop"}:
+                if not isinstance(test, str) or test not in supported | {"stop"}:
                     raise ValueError()
                 async with lighting.control_lock:
                     if test == "stop":
-                        await hue_tests.stop()
-                        return web.json_response(hue_tests.status())
+                        if test_status(brand)["id"]:
+                            await lamp_test.stop()
+                        return web.json_response(test_status(brand))
                     key = body["id"]
-                    provider, bridge, light_id = json.loads(key)
-                    if provider != "hue" or not re.fullmatch(r"[0-9a-fA-F-]{36}", light_id):
+                    provider, identifier, light_id = json.loads(key)
+                    if provider != brand:
                         raise ValueError()
-                    await hue_tests.stop()
+                    if brand == "hue":
+                        if not re.fullmatch(r"[0-9a-fA-F-]{36}", light_id):
+                            raise ValueError()
+                    elif light_id != identifier:
+                        raise ValueError()
+                    record = store.load()[brand][identifier]
+                    await lamp_test.stop()
                     if key in lighting.music.members:
                         await lighting.music.stop()
-                    record = store.load()["hue"][bridge]
-                    client = adapter("hue", bridge, record)
-                    path = "light/" + light_id
-                    async def read():
-                        resources = await client.request("GET", path)
-                        return resources[0] if resources and resources[0].get("id") == light_id else {}
+                    client = adapter(brand, identifier, record)
+                    if brand == "hue":
+                        path = "light/" + light_id
 
-                    light = await read()
-                    if not light:
-                        raise web.HTTPNotFound()
-                    changes, restore = test_plan(light, test)
+                        async def read():
+                            resources = await client.request("GET", path)
+                            return resources[0] if resources and resources[0].get("id") == light_id else {}
 
-                    async def apply(change):
-                        await client.request("PUT", path, change)
+                        async def apply(change):
+                            await client.request("PUT", path, change)
 
-                    hue_tests.start(key, test, apply, read, changes, restore)
-                return web.json_response(hue_tests.status())
+                        light = await read()
+                        if not light:
+                            raise web.HTTPNotFound()
+                        changes, restore = hue_test_plan(light, test)
+                    else:
+                        async def read():
+                            async with scan_lock:
+                                reports = await govee_statuses({client.address})
+                            return govee_tests.test_state(reports.get(client.address, {}))
+
+                        async def apply(change):
+                            on = change.get("on", {}).get("on")
+                            if on is True:
+                                await client.power(True)
+                            if "dimming" in change:
+                                await client.dim(change["dimming"]["brightness"])
+                            if "rgb" in change:
+                                await client.color(change["rgb"])
+                            if on is False:
+                                await client.power(False)
+
+                        changes, restore = govee_tests.test_plan(await read(), test)
+                    lamp_test.start(key, test, apply, read, changes, restore)
+                return web.json_response(lamp_test.status())
             except (KeyError, TypeError, ValueError):
                 raise web.HTTPBadRequest()
             except connection_errors:
                 raise web.HTTPServiceUnavailable()
 
-        app.router.add_get("/lighting/hue-test", hue_test_status)
-        app.router.add_post("/lighting/hue-test", hue_test_control)
+        app.router.add_get("/lighting/{brand:hue|govee}-test", lamp_test_status)
+        app.router.add_post("/lighting/{brand:hue|govee}-test", lamp_test_control)
         app.cleanup_ctx.append(lighting.music_cleanup)

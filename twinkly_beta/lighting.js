@@ -32,6 +32,12 @@
     de: ["Hue-Lampe auswählen", "Identifizieren", "Ein-/Aus-Test", "Dimmtest", "RGB-Test", "Regenbogen", "Warm-/Kaltweiß", "Hue-Test stoppen", "Hue-Test läuft", "Vorheriger Zustand wiederhergestellt", "Hue-Test fehlgeschlagen. Prüfe die Lampe und beende aktive Effekte.", "Der vorherige Zustand konnte nicht wiederhergestellt werden.", "Tests gelten für die ganze Hue-Lampe. LED-Reihenfolge und Richtungstests findest du bei Twinkly.", "Die Bridge hat den vorherigen Zustand noch nicht bestätigt."],
     es: ["Elige una luz Hue", "Identificar", "Prueba de encendido", "Prueba de brillo", "Prueba RGB", "Arcoíris", "Blanco cálido/frío", "Detener prueba Hue", "Prueba Hue en curso", "Estado anterior restaurado", "La prueba Hue falló. Comprueba la luz y detén cualquier efecto.", "No se pudo restaurar el estado anterior.", "Las pruebas se aplican a toda la luz Hue. Las pruebas de orden LED y dirección están en Twinkly.", "El puente no ha confirmado que se haya restaurado el estado anterior."],
   };
+  const goveeTestWords = {
+    nl: ["Kies een Govee-lamp", "Identificeren", "Aan/uit-test", "Dimtest", "RGB-test", "Regenboog", "", "Govee-test stoppen", "Govee-test loopt", "Vorige stand hersteld", "Govee-test mislukt. Controleer LAN-bediening en de lampstatus.", "Vorige stand kon niet worden hersteld.", "Tests gelden voor de hele Govee-lamp. Beschikbaarheid hangt af van de LAN-status.", "De lamp heeft het herstel niet bevestigd."],
+    en: ["Choose a Govee light", "Identify", "Power test", "Dimmer test", "RGB test", "Rainbow", "", "Stop Govee test", "Govee test running", "Previous state restored", "Govee test failed. Check LAN control and the light status.", "Could not restore the previous state.", "Tests apply to the whole Govee light. Availability depends on LAN status.", "The light did not confirm restoration."],
+    de: ["Govee-Lampe auswählen", "Identifizieren", "Ein-/Aus-Test", "Dimmtest", "RGB-Test", "Regenbogen", "", "Govee-Test stoppen", "Govee-Test läuft", "Vorheriger Zustand wiederhergestellt", "Govee-Test fehlgeschlagen. Prüfe LAN-Steuerung und Lampenstatus.", "Der vorherige Zustand konnte nicht wiederhergestellt werden.", "Tests gelten für die ganze Govee-Lampe. Die Verfügbarkeit hängt vom LAN-Status ab.", "Die Lampe hat die Wiederherstellung nicht bestätigt."],
+    es: ["Elige una luz Govee", "Identificar", "Prueba de encendido", "Prueba de brillo", "Prueba RGB", "Arcoíris", "", "Detener prueba Govee", "Prueba Govee en curso", "Estado anterior restaurado", "La prueba Govee falló. Comprueba el control LAN y el estado.", "No se pudo restaurar el estado anterior.", "Las pruebas se aplican a toda la luz Govee. La disponibilidad depende del estado LAN.", "La luz no confirmó la restauración."],
+  };
   const brands = {twinkly: "Twinkly", hue: "Philips Hue", govee: "Govee"};
   const wordmarks = {twinkly: "twinkly-nav-logo.svg", hue: "hue-app-icon.webp", govee: "govee-logo.png"};
   const el = id => document.getElementById(id);
@@ -467,81 +473,91 @@
     return card;
   }
 
-  const hueTestSection = node("section", "", "lighting-surface gap");
-  el("tests-content").after(hueTestSection);
-  let hueTestChoice = "";
-  let hueTestStatus;
-  let hueTestTimer;
-  let hueTestBusy = false;
+  function lampTestPanel(brand, after) {
+    const section = node("section", "", "lighting-surface gap provider-test-" + brand);
+    after.after(section);
+    let choice = "";
+    let testStatus;
+    let timer;
+    let busy = false;
 
-  async function updateHueTest() {
-    clearTimeout(hueTestTimer);
-    try {
-      hueTestStatus = await api("lighting/hue-test");
-    } catch {
-      hueTestStatus = {result: "failed"};
-    }
-    if (context === "tests") renderHueTests();
-  }
-
-  function renderHueTests() {
-    clearTimeout(hueTestTimer);
-    const labels = hueTestWords[el("language").value] || hueTestWords.nl;
-    const lights = (data?.lights || []).filter(light => light.provider === "hue");
-    hueTestSection.replaceChildren(node("h3", brands.hue), node("p", labels[12]));
-    const select = node("select");
-    select.append(new Option(labels[0], ""));
-    for (const light of lights) {
-      const option = new Option(light.name + " · " + status(light), light.id);
-      option.disabled = light.status === "unavailable";
-      select.append(option);
-    }
-    select.value = lights.some(light => light.id === hueTestChoice && light.status !== "unavailable") ? hueTestChoice : "";
-    const selected = lights.find(light => light.id === select.value);
-    select.onchange = () => {
-      hueTestChoice = select.value;
-      renderHueTests();
-      hueTestSection.querySelector("select").focus();
-    };
-    hueTestSection.append(field(labels[0], select));
-    const actions = node("div", "", "lighting-controls");
-    const run = async test => {
-      hueTestBusy = true;
-      clearTimeout(hueTestTimer);
+    async function update() {
+      clearTimeout(timer);
       try {
-        hueTestStatus = await api("lighting/hue-test", {test, id: selected?.id});
+        testStatus = await api("lighting/" + brand + "-test");
       } catch {
-        hueTestStatus = {result: "failed"};
-      } finally {
-        hueTestBusy = false;
-        if (context === "tests") renderHueTests();
+        testStatus = {result: "failed"};
       }
-    };
-    const running = hueTestStatus?.result === "running";
-    const tests = [["identify", "power"], ["power", "power"], ["brightness", "brightness"],
-      ["rgb", "rgb"], ["rainbow", "rgb"], ["temperature", "temperature"]];
-    for (const [index, [test, capability]] of tests.entries()) {
-      const action = button(labels[index + 1], () => run(test));
-      action.disabled = hueTestBusy || running || !selected?.capabilities[capability];
-      actions.append(action);
+      if (context === "tests") renderTests();
     }
-    const stop = button(labels[7], () => run("stop"));
-    stop.disabled = hueTestBusy || !running;
-    actions.append(stop);
-    const result = {running: 8, restored: 9, failed: 10, restore_failed: 11, restore_unverified: 13}[hueTestStatus?.result];
-    hueTestSection.append(actions);
-    if (result != null) {
-      const message = node("p", labels[result]);
-      message.setAttribute("role", "status");
-      hueTestSection.append(message);
+
+    function renderTests() {
+      clearTimeout(timer);
+      const labels = brand === "hue" ? (hueTestWords[el("language").value] || hueTestWords.nl) :
+        (goveeTestWords[el("language").value] || goveeTestWords.nl);
+      const lights = (data?.lights || []).filter(light => light.provider === brand);
+      section.replaceChildren(node("h3", brands[brand]), node("p", labels[12]));
+      const select = node("select");
+      select.append(new Option(labels[0], ""));
+      for (const light of lights) {
+        const option = new Option(light.name + " · " + status(light), light.id);
+        option.disabled = light.status === "unavailable";
+        select.append(option);
+      }
+      select.value = lights.some(light => light.id === choice && light.status !== "unavailable") ? choice : "";
+      const selected = lights.find(light => light.id === select.value);
+      select.onchange = () => {
+        choice = select.value;
+        renderTests();
+        section.querySelector("select").focus();
+      };
+      section.append(field(labels[0], select));
+      const actions = node("div", "", "lighting-controls");
+      const run = async test => {
+        busy = true;
+        clearTimeout(timer);
+        try {
+          testStatus = await api("lighting/" + brand + "-test", {test, id: selected?.id});
+        } catch {
+          testStatus = {result: "failed"};
+        } finally {
+          busy = false;
+          if (context === "tests") renderTests();
+        }
+      };
+      const running = testStatus?.result === "running";
+      const tests = [["identify", "power"], ["power", "power"], ["brightness", "brightness"],
+        ["rgb", "rgb"], ["rainbow", "rgb"], ["temperature", "temperature"]];
+      for (const [index, [test, capability]] of tests.entries()) {
+        if (brand === "govee" && test === "temperature") continue;
+        const action = button(labels[index + 1], () => run(test));
+        action.disabled = busy || running || !selected?.capabilities[capability] ||
+          (brand === "govee" && capability === "rgb" && Boolean(selected?.state.color_temperature_kelvin));
+        actions.append(action);
+      }
+      const stop = button(labels[7], () => run("stop"));
+      stop.disabled = busy || !running;
+      actions.append(stop);
+      const result = {running: 8, restored: 9, failed: 10, restore_failed: 11, restore_unverified: 13}[testStatus?.result];
+      section.append(actions);
+      if (result != null) {
+        const message = node("p", labels[result]);
+        message.setAttribute("role", "status");
+        section.append(message);
+      }
+      if (running && !busy) timer = setTimeout(update, 1000);
     }
-    if (running && !hueTestBusy) hueTestTimer = setTimeout(updateHueTest, 1000);
+    return {section, update, render: renderTests};
   }
+
+  const hueTestPanel = lampTestPanel("hue", el("tests-content"));
+  const goveeTestPanel = lampTestPanel("govee", hueTestPanel.section);
 
   function render() {
     panel.hidden = !["home", "hue", "govee"].includes(context);
     if (context === "tests") {
-      renderHueTests();
+      hueTestPanel.render();
+      goveeTestPanel.render();
       return;
     }
     const mount = context === "control" ? studio : context === "settings" ? settings : panel;
@@ -592,7 +608,10 @@
     const previous = context;
     context = event.detail;
     if (previous !== context) feedback.textContent = "";
-    if (previous !== context && context === "tests") updateHueTest();
+    if (previous !== context && context === "tests") {
+      hueTestPanel.update();
+      goveeTestPanel.update();
+    }
     el("nav-home").textContent = t(0);
     render();
     if (previous !== context && ["home", "hue", "govee", "control", "settings", "tests"].includes(context)) {

@@ -74,6 +74,8 @@ def matches_snapshot(light, snapshot):
         actual = temperature.get("mirek")
         return (temperature.get("mirek_valid") is True and type(actual) is int
                 and abs(actual - snapshot["color_temperature"]["mirek"]) <= 1)
+    if "rgb" in snapshot:
+        return light.get("rgb") == snapshot["rgb"]
     if "color" in snapshot:
         if (light.get("color_temperature") or {}).get("mirek_valid") is True:
             return False
@@ -96,7 +98,7 @@ async def confirm_restore(read, snapshot):
     return False
 
 
-class HueTests:
+class LampTest:
     def __init__(self):
         self.task = None
         self.wakeup = None
@@ -131,11 +133,11 @@ class HueTests:
             try:
                 await send(restore)
             except ERRORS:
-                LOG.warning("Failed to restore Hue light after test", exc_info=True)
+                LOG.warning("Failed to restore light after test", exc_info=True)
                 result = "restore_failed"
             else:
                 if not await confirm_restore(read, restore):
-                    LOG.warning("Hue bridge did not confirm the restored state for %s", self.target)
+                    LOG.warning("Provider did not confirm the restored state for %s", self.target)
                     result = "restore_unverified"
             self.result = result
 

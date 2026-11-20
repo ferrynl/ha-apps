@@ -256,3 +256,20 @@ class LightingTests(unittest.IsolatedAsyncioTestCase):
         read = AsyncMock(return_value={"on": {"on": True}})
         self.assertFalse(await confirm_restore(read, {"on": {"on": False}}))
         self.assertEqual(read.await_count, 3)
+
+
+    async def test_govee_test_restores_power_and_requires_a_lan_status(self):
+        sent = asyncio.Event()
+
+        async def power(on):
+            sent.set()
+
+        with patch("modules.provider_routes.Govee.power", new=AsyncMock(side_effect=power)) as send:
+            reply = await self.client.post("/lighting/govee-test", json={"test": "identify", "id": self.silent})
+            self.assertEqual(reply.status, 409)
+            reply = await self.client.post("/lighting/govee-test", json={"test": "identify", "id": self.govee})
+            self.assertEqual(reply.status, 200, await reply.text())
+            await asyncio.wait_for(sent.wait(), 1)
+            reply = await self.client.post("/lighting/govee-test", json={"test": "stop"})
+            self.assertEqual((await reply.json())["result"], "restored")
+            self.assertEqual([call.args for call in send.await_args_list], [(False,), (True,)])
