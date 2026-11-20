@@ -3,6 +3,9 @@ on:
   pull_request:
     branches: [main]
     paths: ['twinkly_beta/**', '.github/workflows/twinkly-beta-bundled-previews.yml']
+  push:
+    branches: [main]
+    paths: ['twinkly_beta/**', '.github/workflows/twinkly-beta-bundled-previews.yml']
 permissions:
   contents: read
 jobs:
@@ -26,6 +29,39 @@ jobs:
           format: spdx-json
           artifact-name: twinkly-beta-${{ runner.arch }}.spdx.json
           upload-release-assets: false
+      - name: Read beta version
+        id: beta
+        run: |
+          version="$(sed -n 's/^version: //p' twinkly_beta/config.yaml)"
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+-beta\.[0-9]+$ ]]
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+      - name: Scan beta container vulnerabilities
+        id: scan
+        uses: anchore/scan-action@27805bf3b4e84b4a5c980df22ed233c00390a439 # v7.4.2
+        with:
+          image: twinkly-beta:latest
+          output-format: json
+          fail-build: false
+      - name: Summarize security findings
+        if: success()
+        env:
+          REPORT: ${{ steps.scan.outputs.json }}
+          VERSION: ${{ steps.beta.outputs.version }}
+        run: |
+          {
+            printf '## Christmas Control Center %s · %s\n\n' "$VERSION" "$RUNNER_ARCH"
+            printf '| Severity | Findings |\n| --- | ---: |\n'
+            jq -er '.matches | if type != "array" then error("Expected a Grype matches array") else . end
+              | group_by(.vulnerability.severity)
+              | if length == 0 then "| No findings | 0 |"
+                else .[] | "| \(.[0].vulnerability.severity) | \(length) |" end' "$REPORT"
+          } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always() && steps.scan.outputs.json != ''
+        with:
+          name: christmas-control-center-${{ steps.beta.outputs.version }}-${{ runner.arch }}-security
+          path: ${{ steps.scan.outputs.json }}
+          if-no-files-found: error
   browser:
     runs-on: ubuntu-24.04
     steps:

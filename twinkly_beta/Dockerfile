@@ -2,7 +2,7 @@ FROM python:3.12-slim-bookworm
 WORKDIR /app
 COPY requirements.lock ./
 RUN pip install --no-cache-dir --no-deps -r requirements.lock && pip check
-COPY app.py index.html lighting.js lighting.css twinkly.svg twinkly-nav-logo.svg hue-app-icon.webp govee-logo.png config.yaml ./
+COPY app.py index.html lighting.js lighting-tools.js lighting.css twinkly.svg twinkly-nav-logo.svg hue-app-icon.webp govee-logo.png config.yaml ./
 COPY project.html project.css project.js CHANGELOG.md ROADMAP.md ./
 COPY effect_previews ./effect_previews
 COPY product_photos ./product_photos
