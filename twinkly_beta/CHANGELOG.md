@@ -1,3 +1,7 @@
+## 2.0.0-beta.31
+
+- Controleer in het Security Center of er een nieuwere Christmas Control Center-bèta of Python-bibliotheekversie beschikbaar is. De app toont de gevonden versies en vermeldt wanneer een bibliotheek een andere Python-versie vereist. De controle installeert geen updates.
+
 ## 2.0.0-beta.30
 
 - Open het Security Center voor drie nieuwe onderdelen. Bekijk de geïnstalleerde release en links naar broncode en GitHub-rapporten, vergelijk de bibliotheekversies in de container met de lockfile en controleer lokaal de Ingress-regels en de toegangsrechten van het sleutelbestand.
