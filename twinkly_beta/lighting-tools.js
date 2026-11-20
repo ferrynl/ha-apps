@@ -24,6 +24,24 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, pr
     es: ["Barrido de color", "Dirección", "Izquierda a derecha", "Derecha a izquierda", "Arriba abajo", "Abajo arriba", "Tiempo entre luces (ms)", "Mostrar orden", "Luces participantes", "Participan las luces RGB cuyo estado encendido es conocido. El color elegido permanece al terminar.", "Último paso ejecutado", "Tiempo de comando en la aplicación", "Barrido terminado", "Barrido detenido", "Barrido fallido", "Preparando barrido…", "Aceptado", "Omitido", "Fallido"],
   };
   const directions = {right: [0, 1], left: [0, -1], down: [1, 1], up: [1, -1]};
+  const wallGuide = {
+    nl: ["Handleiding Mijn Huis", "Maak één foto per muur.", "Fotografeer de muur recht van voren, in goed licht. Zorg dat de hele muur en de plekken voor je lampen zichtbaar zijn.",
+      "Upload de foto van de muur die je wilt inrichten.", "Kies een lamp uit de lijst en tik op de plek waar die hangt. Versleep de markering om de positie aan te passen en gebruik de hoekgreep of schuifregelaar voor de grootte.",
+      "Kies onder Effect een kleurveeg of kleurverloop. Zet Volgorde tonen aan om het effect vooraf op je foto te bekijken.",
+      "Mijn Huis bewaart één muur tegelijk. Bij een andere foto worden de huidige lampplaatsingen gewist."],
+    en: ["My Home guide", "Take one photo per wall.", "Photograph the wall straight on in good light. Include the whole wall and the spots where your lights will go.",
+      "Upload the photo of the wall you want to set up.", "Choose a light from the list and tap where it hangs. Drag its marker to reposition it and use the corner handle or slider to resize it.",
+      "Under Effect, choose a colour sweep or gradient. Turn on Show order to preview it on your photo.",
+      "My Home saves one wall at a time. Replacing the photo clears the current light placements."],
+    de: ["Anleitung für Mein Zuhause", "Mache ein Foto pro Wand.", "Fotografiere die Wand frontal und bei gutem Licht. Die ganze Wand und alle vorgesehenen Lampenpositionen sollten sichtbar sein.",
+      "Lade das Foto der Wand hoch, die du einrichten möchtest.", "Wähle eine Lampe aus der Liste und tippe auf ihre Position. Ziehe die Markierung, um sie zu verschieben. Ändere die Größe mit dem Eckgriff oder Schieberegler.",
+      "Wähle unter Effekt einen Farbverlauf oder eine Farbwelle. Aktiviere Reihenfolge anzeigen für die Vorschau auf deinem Foto.",
+      "Mein Zuhause speichert jeweils eine Wand. Ein neues Foto löscht die aktuellen Lampenpositionen."],
+    es: ["Guía de Mi casa", "Haz una foto por pared.", "Fotografía la pared de frente y con buena luz. Incluye toda la pared y los lugares donde colocarás las luces.",
+      "Sube la foto de la pared que quieras configurar.", "Elige una luz y toca el lugar donde está instalada. Arrastra el marcador para moverlo y usa el tirador o el control deslizante para cambiar su tamaño.",
+      "Elige un barrido o un degradado en Efecto. Activa Mostrar orden para ver una vista previa en la foto.",
+      "Mi casa guarda una pared a la vez. Al sustituir la foto se borran las posiciones actuales de las luces."],
+  };
   const timingLabels = {
     nl: ["Effect", "Kleurverloop", "Eindkleur", "Timingcorrectie (ms)", "Stuur de opdracht voor deze lamp eerder als hij trager reageert.", "Kleurverloop klaar", "Kleurverloop gestopt", "Kleurverloop mislukt", "Kleurverloop wordt voorbereid…", "Het verloop verdeelt de kleuren over de lampposities in de gekozen richting."],
     en: ["Effect", "Colour gradient", "End colour", "Timing correction (ms)", "Send the command earlier for this light if it responds more slowly.", "Gradient complete", "Gradient stopped", "Gradient failed", "Preparing gradient…", "The gradient distributes colours over the light positions in the selected direction."],
@@ -50,7 +68,21 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, pr
   const houseTitle = node("h2");
   houseTitle.id = "house-title";
   mount.append(showSection);
-  house.append(houseTitle, spatialSection);
+  const guide = node("details", "", "house-guide");
+  guide.open = true;
+  let guideLanguage;
+  house.append(houseTitle, guide, spatialSection);
+  function renderWallGuide() {
+    const current = language();
+    if (guideLanguage === current) return;
+    guideLanguage = current;
+    const [title, first, photo, upload, place, effect, limit] = wallGuide[current] || wallGuide.nl;
+    const steps = node("ol");
+    const firstStep = node("li");
+    firstStep.append(node("strong", first), document.createTextNode(" " + photo));
+    steps.append(firstStep, node("li", upload), node("li", place), node("li", effect));
+    guide.replaceChildren(node("summary", title), steps, node("p", limit));
+  }
 
   function read(key, fallback) {
     try { return JSON.parse(localStorage.getItem(key)) ?? fallback; }
@@ -662,6 +694,7 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, pr
     mount.hidden = page !== "home";
     house.hidden = page !== "house";
     nav.textContent = houseTitle.textContent = h(0);
+    if (page === "house") renderWallGuide();
     nav.setAttribute("aria-current", page === "house" ? "page" : "false");
     if (!visible) {
       clearInterval(timer);

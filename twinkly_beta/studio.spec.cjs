@@ -29,6 +29,11 @@ for(const viewport of [{width:1440,height:900},{width:390,height:844}]){
    await expect(page.locator('#nav-'+id)).toHaveAttribute('aria-current','page');
    expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBeTruthy();
   }
+  const guide = page.locator('.house-guide');
+  await expect(guide.getByText('Maak één foto per muur.', {exact:true})).toBeVisible();
+  await expect(guide.getByText(/Mijn Huis bewaart één muur tegelijk/)).toBeVisible();
+  await guide.locator('summary').click();
+  await expect(guide.locator('ol')).toBeHidden();
   await page.locator('#nav-settings').click();
   for(const lang of ['en','es','de','nl']) await page.locator('#language').selectOption(lang);
   await page.locator('#nav-control').click();
