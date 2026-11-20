@@ -312,7 +312,7 @@ test('Hue rooms and zones retain their own controls and Bridge scenes', async ({
  await expect.poll(() => requests.length).toBe(1);
  await zone.getByRole('button',{name:'Uit',exact:true}).click();
  await expect.poll(() => requests.length).toBe(2);
- await room.getByRole('button',{name:'Avondlicht'}).click();
+ await room.getByRole('button',{name:'Avondlicht',exact:true}).click();
  await expect.poll(() => requests).toEqual([
   {bridge:'hue-a', id:'room-control', action:'power', value:true},
   {bridge:'hue-a', id:'zone-control', action:'power', value:false},
