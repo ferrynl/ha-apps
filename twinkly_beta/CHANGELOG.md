@@ -1,8 +1,13 @@
-## 2.0.0-beta.22
+## 2.0.0-beta.23
 
 - Beperk de toegang tot bestanden met GIF's, effecten en productafbeeldingen.
 - Laad het Twinkly-logo lokaal en geef technische LedFX-foutdetails niet door aan de browser.
 - Bouw op Debian Trixie, voer de app zonder rootrechten uit en controleer lokaal of de app reageert.
+
+## 2.0.0-beta.22
+
+- Open **Mijn Huis** via het hoofdmenu. De foto-editor heeft een eigen pagina met een lampenlijst en productfoto’s voor herkende Twinkly-modellen. Andere lampen hebben een algemene lampillustratie.
+- Plaats lampen op je foto, versleep ze en pas de grootte aan met de hoekgreep of schuifregelaar. De grootte wordt samen met de positie op je Home Assistant-server bewaard. Eerdere foto’s en posities blijven beschikbaar.
 
 ## 2.0.0-beta.21
 

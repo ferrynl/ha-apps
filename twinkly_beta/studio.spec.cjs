@@ -10,7 +10,7 @@ for(const viewport of [{width:1440,height:900},{width:390,height:844}]){
   await expect(page.locator('h1')).toHaveAttribute('aria-label','Christmas Control Center');
   await expect(page.locator('#lighting-panel')).toBeVisible();
   expect(await page.locator('.workspace-nav a').evaluateAll(links => links.map(link => link.id))).toEqual([
-   'nav-home','nav-control','nav-hue','nav-govee','nav-tests','nav-network','nav-settings',
+   'nav-home','nav-house','nav-control','nav-hue','nav-govee','nav-tests','nav-network','nav-settings',
   ]);
   await expect(page.getByRole('link',{name:'Twinkly',exact:true}).locator('img')).toHaveAttribute('src','twinkly-nav-logo.svg');
   await expect(page.getByRole('link',{name:'Philips Hue',exact:true}).locator('img')).toHaveAttribute('src','hue-app-icon.webp');
@@ -23,7 +23,7 @@ for(const viewport of [{width:1440,height:900},{width:390,height:844}]){
    images.filter(image => image.complete && image.naturalWidth > 0).length,
   )).toBe(3);
   await expect(page.locator('#tests-page')).toBeHidden();
-  for(const id of ['settings','network','tests','control']){
+  for(const id of ['settings','network','tests','control','house']){
    await page.locator('#nav-'+id).click();
    await expect(page.locator('#'+id+'-page')).toBeVisible();
    await expect(page.locator('#nav-'+id)).toHaveAttribute('aria-current','page');
@@ -363,36 +363,61 @@ function mockProjects(state) {
 
 const newProjects = () => ({shows:[], layout:{revision:0, points:[], photo_version:null}, playback:{state:'idle'}});
 
-test('Spatial Light Studio shows the server photo and positions in a new browser session', async ({browser}) => {
+
+test('Mijn Huis saves lamp moves and sizes across browser sessions', async ({browser}) => {
  const state = newProjects();
- const light = {id:'["hue","bridge","window"]', provider:'hue', name:'Hue raam', status:'online', capabilities:{}, state:{}};
+ const light = {id:'["twinkly","lamp"]', provider:'twinkly', name:'Twinkly Strings', product_code:'TWS500SPP1', status:'online', capabilities:{}, state:{}};
  const setup = async () => {
-  const context = await browser.newContext();
+  const context = await browser.newContext({viewport:{width:1440,height:1000}});
   await context.route('**/lighting', route => route.fulfill({json:{lights:[light], groups:{}, scenes:{}, connections:{}}}));
   await context.route('**/lighting/projects', mockProjects(state));
-  await context.route('**/lighting/projects/photo?*', route => route.fulfill({contentType:'image/png',
-   body:Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jR1sAAAAASUVORK5CYII=','base64'),
+  await context.route('**/lighting/projects/photo?*', route => route.fulfill({
+   contentType:'image/svg+xml', body:'<svg xmlns="http://www.w3.org/2000/svg" width="640" height="360"><rect width="640" height="360" fill="#445"/></svg>',
+  }));
+  await context.route('**/product-photo/*', route => route.fulfill({
+   contentType:'image/svg+xml', body:'<svg xmlns="http://www.w3.org/2000/svg" width="80" height="80"><circle cx="40" cy="40" r="20" fill="gold"/></svg>',
   }));
   const page = await context.newPage();
   await page.goto('http://127.0.0.1:8765/index.html#home');
+  await page.getByRole('link',{name:'Mijn Huis'}).click();
   return {context, page};
  };
  const {context, page} = await setup();
- const studio = page.locator('#lighting-tools section').filter({hasText:'Spatial Light Studio'});
+ const house = page.locator('#house-page');
+ await expect(house.getByRole('heading',{name:'Mijn Huis'})).toBeVisible();
+ await expect(page.locator('#lighting-tools')).toBeHidden();
  const photo = await page.evaluate(() => document.createElement('canvas').toDataURL('image/png').split(',')[1]);
- await studio.getByLabel('Kies een foto').setInputFiles({
+ await house.getByLabel('Kies een foto').setInputFiles({
   name:'kamer.png', mimeType:'image/png', buffer:Buffer.from(photo,'base64'),
  });
- await studio.getByLabel('Kies een lamp').selectOption(light.id);
- await studio.getByRole('button',{name:'Plaats in het midden'}).click();
- const marker = studio.getByRole('button',{name:/Hue raam · Locatie/});
- await expect(marker).toHaveAccessibleName('Hue raam · Locatie 50%, 50%');
- await marker.press('ArrowRight');
- await expect(marker).toHaveAccessibleName('Hue raam · Locatie 51%, 50%');
+ await house.locator('.house-lamp-choice').filter({hasText:'Twinkly Strings'}).click();
+ await expect(house.locator('.house-lamp-choice img')).toHaveAttribute('src',/product-photo\//);
+ await house.getByRole('button',{name:'Plaats in het midden'}).click();
+ const marker = house.locator('.house-marker-lamp');
+ const stage = house.locator('.lighting-spatial-stage');
+ await expect(marker).toHaveAccessibleName('Twinkly Strings · Locatie 50%, 50%');
+ const photoBounds = await stage.boundingBox();
+ const lampBounds = await marker.boundingBox();
+ await page.mouse.move(lampBounds.x + lampBounds.width / 2, lampBounds.y + lampBounds.height / 2);
+ await page.mouse.down();
+ await page.mouse.move(lampBounds.x + lampBounds.width / 2 - photoBounds.width * .15,
+  lampBounds.y + lampBounds.height / 2 + photoBounds.height * .1, {steps:6});
+ await page.mouse.up();
+ await expect(marker).toHaveAccessibleName('Twinkly Strings · Locatie 35%, 60%');
+ const handle = house.getByRole('button',{name:'Grootte · Twinkly Strings'});
+ const handleBounds = await handle.boundingBox();
+ await page.mouse.move(handleBounds.x + handleBounds.width / 2, handleBounds.y + handleBounds.height / 2);
+ await page.mouse.down();
+ await page.mouse.move(handleBounds.x + handleBounds.width / 2 + photoBounds.width * .05,
+  handleBounds.y + handleBounds.height / 2, {steps:6});
+ await page.mouse.up();
+ await expect.poll(() => Math.round(state.layout.points[0][1][2])).toBe(22);
+ await expect(house.getByRole('slider',{name:'Grootte'})).toHaveValue('22');
  await context.close();
  const second = await setup();
- await expect(second.page.getByRole('button',{name:'Hue raam · Locatie 51%, 50%'})).toBeVisible();
- await expect(second.page.getByAltText('Foto van de ruimte')).toHaveAttribute('src','lighting/projects/photo?v=photo-1');
+ await expect(second.page.locator('.house-marker-lamp')).toHaveAccessibleName('Twinkly Strings · Locatie 35%, 60%');
+ const width = await second.page.locator('.house-marker').evaluate(marker => parseFloat(marker.style.width));
+ expect(width).toBeCloseTo(22, 0);
  await second.context.close();
 });
 

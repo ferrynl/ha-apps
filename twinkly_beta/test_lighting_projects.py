@@ -92,6 +92,17 @@ class LightingProjectsTest(unittest.IsolatedAsyncioTestCase):
         stale = await self.change("delete", id=show["id"], revision=show["revision"])
         self.assertEqual(stale.status, 409)
 
+    async def test_lamp_scale_is_validated_and_preserved_with_legacy_points(self):
+        other = ['["twinkly","strings"]', [12, 55, 24]]
+        layout = await self.change("layout", revision=None, photo=self.image(), points=[POINT, other])
+        self.assertEqual(layout.status, 200)
+        before = (await layout.json())["layout"]
+        self.assertEqual(before["points"], [POINT, other])
+        invalid = await self.change("layout", revision=before["revision"], points=[[other[0], [12, 55, 41]]])
+        self.assertEqual(invalid.status, 400)
+        status = await self.client.get("/lighting/projects")
+        self.assertEqual((await status.json())["layout"], before)
+
     async def test_import_deduplicates_shows_and_preserves_existing_photo(self):
         data = {"shows": [SHOW], "photo": self.image(), "points": [POINT]}
         first = await self.change("import", **data)
