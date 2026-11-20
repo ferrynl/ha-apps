@@ -133,3 +133,8 @@
 .house-guide ol { padding-inline-start: 1.35rem; margin-block: .65rem; }
 .house-guide li + li { margin-block-start: .35rem; }
 .house-guide p { margin-block: .65rem 0; }
+
+.house-wall-picker { display: grid; gap: .5rem; margin-block: 1rem; }
+.house-wall-picker form { flex-wrap: wrap; align-items: end; }
+.house-wall-picker select,.house-wall-picker input { max-width: 100%; }
+.house-wall-picker p:empty { display: none; }

@@ -17,6 +17,9 @@ LOG = logging.getLogger(__name__)
 MAX_PHOTO = 470_000
 MAX_SHOWS = 20
 MAX_STEPS = 20
+MAX_WALLS = 8
+PROJECT_LIMIT = 8 * 1024 * 1024
+DEFAULT_WALL = "default"
 DIRECTIONS = {"right": (0, 1), "left": (0, -1), "down": (1, 1), "up": (1, -1)}
 HEADERS = {
     "Cache-Control": "private, no-store",
@@ -222,6 +225,24 @@ class Playback:
             await self.task
 
 
+def wall_layout(data, wall_id):
+    return data["layout"] if wall_id == DEFAULT_WALL else data["walls"][wall_id]
+
+
+def wall_name(data):
+    name = data["name"]
+    if not isinstance(name, str) or not 1 <= len(name.strip()) <= 60:
+        raise ValueError("Invalid wall name")
+    return name.strip()
+
+
+def update_wall_layout(data, wall_id, layout):
+    if wall_id == DEFAULT_WALL:
+        data["layout"] = layout
+    else:
+        data["walls"][wall_id] = {**data["walls"][wall_id], **layout}
+
+
 def install(app, lighting):
     store = lighting.store
     path = store.path.parent / "lighting-projects.json"
@@ -233,7 +254,10 @@ def install(app, lighting):
     async def load():
         nonlocal state
         if state is None:
-            state = await asyncio.to_thread(store.read, path, {"shows": {}, "layout": empty_layout()})
+            state = await asyncio.to_thread(
+                store.read, path, {"shows": {}, "layout": empty_layout()}, PROJECT_LIMIT
+            )
+            state.setdefault("walls", {})
         return state
 
     async def current():
@@ -242,10 +266,13 @@ def install(app, lighting):
         async with lock:
             return await load()
 
-    def response(data, **extra):
-        layout = data["layout"]
+    def response(data, wall_id, **extra):
+        layout = wall_layout(data, wall_id)
+        walls = [{"id": DEFAULT_WALL, "name": data["layout"].get("name", "")}]
+        walls.extend({"id": key, "name": wall["name"]} for key, wall in data["walls"].items())
         return web.json_response({
             "shows": list(data["shows"].values()),
+            "walls": walls, "wall_id": wall_id,
             "layout": {"revision": layout["revision"], "photo_version": layout["photo_version"],
                        "points": layout["points"]},
             "playback": playback.status, **extra,
@@ -253,17 +280,23 @@ def install(app, lighting):
 
     async def get(request):
         try:
-            return response(await current())
+            data = await current()
+            wall_id = request.query.get("wall", DEFAULT_WALL)
+            if wall_id not in data["walls"]:
+                wall_id = DEFAULT_WALL
+            return response(data, wall_id)
         except (ValueError, OSError):
             raise web.HTTPServiceUnavailable()
 
     async def photo(request):
         try:
-            layout = (await current())["layout"]
+            layout = wall_layout(await current(), request.query.get("wall", DEFAULT_WALL))
             if layout["photo"] is None:
                 raise web.HTTPNotFound()
             return web.Response(body=base64.b64decode(layout["photo"], validate=True),
                                 content_type="image/jpeg", headers=HEADERS)
+        except KeyError:
+            raise web.HTTPNotFound()
         except (ValueError, OSError):
             raise web.HTTPServiceUnavailable()
 
@@ -273,11 +306,31 @@ def install(app, lighting):
             body = await request.json()
             action = body["action"]
             encoded = body.get("photo")
+            wall_id = request.query.get("wall", DEFAULT_WALL)
             async with lock:
                 latest = await load()
-                shows, layout = latest["shows"].copy(), latest["layout"]
-                data = {"shows": shows, "layout": layout}
-                if action == "save":
+                walls = latest["walls"].copy()
+                if wall_id != DEFAULT_WALL and wall_id not in walls:
+                    raise web.HTTPConflict()
+                shows = latest["shows"].copy()
+                layout = wall_layout(latest, wall_id)
+                data = {"shows": shows, "layout": latest["layout"], "walls": walls}
+                if action == "add_wall":
+                    if len(walls) >= MAX_WALLS - 1:
+                        raise web.HTTPConflict()
+                    wall_id = uuid.uuid4().hex
+                    walls[wall_id] = {**empty_layout(), "name": wall_name(body), "revision": uuid.uuid4().hex}
+                elif action in ("rename_wall", "delete_wall"):
+                    if body["revision"] != layout["revision"]:
+                        raise web.HTTPConflict()
+                    if action == "rename_wall":
+                        update_wall_layout(data, wall_id, {**layout, "name": wall_name(body), "revision": uuid.uuid4().hex})
+                    elif wall_id != DEFAULT_WALL:
+                        del walls[wall_id]
+                        wall_id = DEFAULT_WALL
+                    else:
+                        raise ValueError("Cannot delete primary wall")
+                elif action == "save":
                     show_id = body.get("id")
                     show = show_settings(body)
                     if not lighting.valid_show(show):
@@ -305,8 +358,8 @@ def install(app, lighting):
                     points = positions(body["points"])
                     if points and current_photo is None:
                         raise ValueError("Positions require a photo")
-                    data["layout"] = {"revision": uuid.uuid4().hex, "photo_version": photo_version,
-                                      "photo": current_photo, "points": points}
+                    update_wall_layout(data, wall_id, {**layout, "revision": uuid.uuid4().hex,
+                                      "photo_version": photo_version, "photo": current_photo, "points": points})
                 elif action == "import":
                     entries = body["shows"]
                     if not isinstance(entries, list) or len(entries) > MAX_SHOWS:
@@ -320,12 +373,13 @@ def install(app, lighting):
                         show_id = uuid.uuid4().hex
                         shows[show_id] = {**show, "id": show_id, "revision": uuid.uuid4().hex}
                     if encoded is not None and layout["photo"] is None:
-                        data["layout"] = {"revision": uuid.uuid4().hex, "photo_version": uuid.uuid4().hex,
+                        update_wall_layout(data, wall_id, {**layout, "revision": uuid.uuid4().hex,
+                                          "photo_version": uuid.uuid4().hex,
                                           "photo": await asyncio.to_thread(photo_jpeg, encoded),
-                                          "points": positions(body["points"])}
+                                          "points": positions(body["points"])})
                 elif action == "play":
                     playback.start(shows[identifier(body["id"])])
-                    return response(data)
+                    return response(data, wall_id)
                 elif action == "spatial":
                     direction, color, delay = body["direction"], rgb(body["color"]), body["delay"]
                     if (direction not in DIRECTIONS or not any(color) or type(delay) is not int
@@ -337,15 +391,15 @@ def install(app, lighting):
                     if end_color is not None and not any(end_color):
                         raise ValueError("Invalid end color")
                     playback.start_spatial(layout["points"], direction, color, delay, end_color)
-                    return response(data)
+                    return response(data, wall_id)
                 elif action == "stop":
                     playback.request_stop()
-                    return response(data)
+                    return response(data, wall_id)
                 else:
                     raise ValueError("Invalid action")
-                await asyncio.to_thread(store.write, path, data)
+                await asyncio.to_thread(store.write, path, data, PROJECT_LIMIT)
                 state = data
-                return response(data, imported_photo=action == "import" and data["layout"] is not layout)
+                return response(data, wall_id, imported_photo=action == "import" and wall_layout(data, wall_id) is not layout)
         except invalid:
             return web.json_response({"error": "invalid_project"}, status=400, headers=HEADERS)
         except OSError:

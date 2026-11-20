@@ -1,3 +1,8 @@
+## 2.0.0-beta.27
+
+- Bewaar in **Mijn Huis** tot acht muren met elk een eigen foto, lampplaatsingen en timingcorrecties. Schakel tussen muren om ze apart in te richten of een effect af te spelen.
+- Een bestaande foto en lampplaatsingen verschijnen automatisch onder **Muur 1**. Je kunt alle muren een eigen naam geven en extra muren verwijderen.
+
 ## 2.0.0-beta.26
 
 - Lees in **Mijn Huis** hoe je per muur één foto maakt, de lampen plaatst en een effect vooraf bekijkt. De handleiding legt uit wat er gebeurt als je de foto vervangt.

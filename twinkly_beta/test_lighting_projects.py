@@ -43,11 +43,11 @@ class LightingProjectsTest(unittest.IsolatedAsyncioTestCase):
         return await self.client.post("/lighting/projects", json={"action": action, **body})
 
     @staticmethod
-    def image():
+    def image(color="red"):
         out = BytesIO()
         exif = Image.Exif()
         exif[270] = "Private photo metadata"
-        Image.new("RGB", (20, 10), "red").save(out, "JPEG", exif=exif)
+        Image.new("RGB", (20, 10), color).save(out, "JPEG", exif=exif)
         return base64.b64encode(out.getvalue()).decode("ascii")
 
     async def test_photo_and_shows_persist_with_private_permissions(self):
@@ -193,3 +193,39 @@ class LightingProjectsTest(unittest.IsolatedAsyncioTestCase):
         sweep = spatial_steps(points, lights, 0, 1, [255, 0, 0], 250, None)
         self.assertEqual([step["lamp"] for step in sweep], ["left", "right", "middle"])
         self.assertEqual([step["due"] for step in sweep], [0, 0, 0.2])
+
+    async def test_saved_walls_keep_independent_photos_and_positions(self):
+        self.store.write(self.store.path.parent / "lighting-projects.json", {
+            "shows": {}, "layout": {"revision": "legacy", "photo_version": "legacy",
+                                    "photo": self.image(), "points": [POINT]}
+        })
+        added = await self.change("add_wall", name="Woonkamer")
+        self.assertEqual(added.status, 200)
+        selected = await added.json()
+        wall = selected["wall_id"]
+        second_point = [POINT[0], [20, 35, 12, 120]]
+        latest = await self.client.post("/lighting/projects", params={"wall": wall}, json={
+            "action": "layout", "revision": selected["layout"]["revision"],
+            "photo": self.image("blue"), "points": [second_point]
+        })
+        self.assertEqual(latest.status, 200)
+        revision = (await latest.json())["layout"]["revision"]
+        stale = await self.client.post("/lighting/projects", params={"wall": wall}, json={
+            "action": "layout", "revision": "legacy", "points": []
+        })
+        self.assertEqual(stale.status, 409)
+
+        restarted = await self.connect()
+        primary = await (await restarted.get("/lighting/projects")).json()
+        self.assertEqual(primary["layout"]["points"], [POINT])
+        other = await (await restarted.get("/lighting/projects", params={"wall": wall})).json()
+        self.assertEqual(other["walls"][1]["name"], "Woonkamer")
+        self.assertEqual(other["layout"]["points"], [second_point])
+        first_photo = await (await restarted.get("/lighting/projects/photo")).read()
+        second_photo = await (await restarted.get("/lighting/projects/photo", params={"wall": wall})).read()
+        self.assertNotEqual(first_photo, second_photo)
+        removed = await restarted.post("/lighting/projects", params={"wall": wall}, json={
+            "action": "delete_wall", "revision": revision
+        })
+        self.assertEqual((await removed.json())["layout"]["points"], [POINT])
+        self.assertEqual((await restarted.get("/lighting/projects/photo", params={"wall": wall})).status, 404)
