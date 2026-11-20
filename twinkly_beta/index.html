@@ -127,6 +127,7 @@ button:hover,.mixdesk button:hover{background:#2a313c;filter:none}.mixdesk butto
 <p id="message" role="status"></p>
 <p id="lighting-feedback" role="status"></p>
 <section id="lighting-panel" class="lighting-surface" hidden></section>
+<section id="hue-collections" class="lighting-surface" aria-labelledby="hue-collections-title" hidden></section>
 <div id="control-page"><section id="twinkly-lighting" class="lighting-surface"></section>
 <section class="mixdesk"><div class="desk-brand"><span class="desk-lamp"></span><strong>CHRISTMAS / STUDIO</strong><span class="desk-model">LX · 01</span></div>
 <div class="desk-grid">
@@ -207,10 +208,24 @@ button:hover,.mixdesk button:hover{background:#2a313c;filter:none}.mixdesk butto
 <form class="controls gap" id="scene-form"><input id="scene-name" maxlength="60" required><select id="scene-group"></select><select id="scene-mode"></select><select id="scene-style"></select><input id="scene-level" type="number" min="0" max="100" value="100" required><button id="scene-save" type="submit"></button></form>
 <div class="settings-list" id="scene-management"></div></section>
 <section><h2 id="device-settings-title"></h2><div id="device-settings-list" class="settings-list"></div></section><section><h2 id="settings-effects"></h2><div class="settings-list" id="effect-management"></div></section></div></div>
+<section id="project-page" class="project-content" aria-labelledby="project-title" hidden>
+  <nav class="project-nav" aria-label="Project">
+    <a href="#changelog" data-project-view="changelog" data-project-label="changelog">Changelog</a>
+    <a href="#roadmap" data-project-view="roadmap" data-project-label="roadmap">Roadmap</a>
+  </nav>
+  <h2 id="project-title"></h2>
+  <p class="project-intro" id="project-intro"></p>
+  <label class="project-search" id="project-search" hidden>
+    <span data-project-label="search">Zoek op versie of wijziging</span>
+    <input id="project-query" type="search">
+  </label>
+  <p id="project-status" role="status"></p>
+  <div id="project-entries"></div>
+</section>
 </main>
 <footer class="project-footer" id="project-footer">
-  <a href="project.html" data-project-version>Changelog</a>
-  <a href="project.html?view=roadmap" data-project-label="roadmap">Roadmap</a>
+  <a href="#changelog" data-project-version>Changelog</a>
+  <a href="#roadmap" data-project-label="roadmap">Roadmap</a>
 </footer>
 <script>
 const strings = {
@@ -1816,8 +1831,10 @@ byId('network-refresh').onclick = refreshNetwork;
 document.addEventListener('visibilitychange',() => { if (!document.hidden) refreshNetwork(); });
 
 function showPage() {
-  const page = isNetworkPage() ? 'network' :
+  const projectPage = /^(#roadmap|#changelog|#release-[\w.-]+)$/.test(location.hash);
+  const page = projectPage ? 'project' : isNetworkPage() ? 'network' :
     {'#instellingen':'settings','#testcontrole':'tests','#hue':'hue','#govee':'govee','#bediening':'control','#twinkly':'control'}[location.hash] || 'home';
+  byId('project-page').hidden = page !== 'project';
   for (const name of ['control','settings','network','tests']) {
     byId(name + '-page').hidden = page !== name;
     byId('nav-' + name).setAttribute('aria-current',page === name ? 'page' : 'false');

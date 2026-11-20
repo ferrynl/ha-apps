@@ -1,28 +1,35 @@
 (() => {
+  if (!document.getElementById("project-page")) {
+    const roadmap = new URLSearchParams(location.search).get("view") === "roadmap";
+    const release = /^#release-[\w.-]+$/.test(location.hash) ? location.hash : "#changelog";
+    location.replace("./" + (roadmap ? "#roadmap" : release));
+    return;
+  }
+
   const translations = {
     nl: {
-      back: "Naar Home", changelog: "Changelog", roadmap: "Roadmap", version: "Versie",
+      changelog: "Changelog", roadmap: "Roadmap", version: "Versie",
       search: "Zoek op versie of wijziging", empty: "Geen versies gevonden.",
       failed: "Deze informatie kon niet worden geladen. Probeer de pagina opnieuw te openen.",
       changelogIntro: "Bekijk wat er is toegevoegd, verbeterd of opgelost in elke versie.",
       roadmapIntro: "Bekijk wat al in de bèta zit en wat op de planning staat.",
     },
     en: {
-      back: "Back to Home", changelog: "Changelog", roadmap: "Roadmap", version: "Version",
+      changelog: "Changelog", roadmap: "Roadmap", version: "Version",
       search: "Search by version or change", empty: "No versions found.",
       failed: "This information could not be loaded. Try reopening the page.",
       changelogIntro: "See the features, improvements and fixes in each version.",
       roadmapIntro: "See what is available in beta and what is planned.",
     },
     de: {
-      back: "Zur Startseite", changelog: "Änderungsprotokoll", roadmap: "Roadmap", version: "Version",
+      changelog: "Änderungsprotokoll", roadmap: "Roadmap", version: "Version",
       search: "Nach Version oder Änderung suchen", empty: "Keine Versionen gefunden.",
       failed: "Diese Informationen konnten nicht geladen werden. Öffne die Seite erneut.",
       changelogIntro: "Hier findest du die Neuerungen, Verbesserungen und Korrekturen jeder Version.",
       roadmapIntro: "Hier siehst du, was in der Beta verfügbar und was geplant ist.",
     },
     es: {
-      back: "Volver a Inicio", changelog: "Registro de cambios", roadmap: "Hoja de ruta", version: "Versión",
+      changelog: "Registro de cambios", roadmap: "Hoja de ruta", version: "Versión",
       search: "Buscar por versión o cambio", empty: "No se encontraron versiones.",
       failed: "No se pudo cargar esta información. Vuelve a abrir la página.",
       changelogIntro: "Consulta las novedades, mejoras y correcciones de cada versión.",
@@ -35,6 +42,8 @@
   const content = document.getElementById("project-entries");
   const languageControl = document.getElementById("language");
   let currentVersion = "";
+  let currentView;
+  let renderId = 0;
 
   function language() {
     const selected = languageControl?.value || localStorage.getItem("twinkly-language");
@@ -91,7 +100,7 @@
   async function showVersion() {
     const releases = parseReleases(await readMarkdown("CHANGELOG.md"));
     currentVersion = releases[0].version;
-    footerVersion.href = "project.html#release-" + currentVersion;
+    footerVersion.href = "#release-" + currentVersion;
     translateLabels();
     return releases;
   }
@@ -121,12 +130,13 @@
     return card;
   }
 
-  function showChangelog(releases, labels, status) {
+  function showChangelog(releases, status) {
     const cards = releases.map(releaseCard);
     content.append(...cards);
     const search = document.getElementById("project-query");
     document.getElementById("project-search").hidden = false;
-    search.addEventListener("input", () => {
+    search.value = "";
+    search.oninput = () => {
       const query = search.value.trim().toLowerCase();
       let matches = 0;
       cards.forEach((card, index) => {
@@ -134,8 +144,8 @@
         card.open = !card.hidden && (query !== "" || index === 0);
         if (!card.hidden) matches += 1;
       });
-      status.textContent = matches ? "" : labels.empty;
-    });
+      status.textContent = matches ? "" : translations[language()].empty;
+    };
     function revealRelease() {
       const selected = cards.find(card => "#" + card.id === location.hash);
       if (selected) {
@@ -146,11 +156,9 @@
       }
     }
     revealRelease();
-    window.addEventListener("hashchange", revealRelease);
   }
 
-  async function showRoadmap() {
-    const lines = await readMarkdown("ROADMAP.md");
+  function showRoadmap(lines) {
     content.lang = "nl";
     let grid;
     let list;
@@ -175,28 +183,55 @@
     if (!content.childElementCount) throw new Error("Roadmap has no sections");
   }
 
-  translateLabels();
-  languageControl?.addEventListener("change", translateLabels);
   const releases = showVersion();
-  if (!content) {
-    releases.catch(() => {}); // Keep the changelog link usable when the version can't be read.
-    return;
+  releases.catch(() => {});
+  let roadmapLines;
+  const status = document.getElementById("project-status");
+  const title = document.getElementById("project-title");
+  const searchLabel = document.getElementById("project-search");
+
+  async function showProject(event) {
+    translateLabels();
+    if (event.detail !== "project") {
+      currentView = undefined;
+      renderId += 1;
+      document.title = "Christmas Control Center";
+      return;
+    }
+    const view = location.hash === "#roadmap" ? "roadmap" : "changelog";
+    const labels = translations[language()];
+    document.title = labels[view] + " · Christmas Control Center";
+    title.textContent = labels[view];
+    document.getElementById("project-intro").textContent = labels[view + "Intro"];
+    document.querySelectorAll("[data-project-view]").forEach(link => {
+      if (link.dataset.projectView === view) link.setAttribute("aria-current", "page");
+      else link.removeAttribute("aria-current");
+    });
+    const viewKey = location.hash + "/" + language();
+    if (currentView === viewKey) return;
+    currentView = viewKey;
+    const id = ++renderId;
+    content.replaceChildren();
+    content.removeAttribute("lang");
+    searchLabel.hidden = true;
+    status.textContent = "";
+    try {
+      if (view === "roadmap") {
+        roadmapLines ||= readMarkdown("ROADMAP.md").catch(error => {
+          roadmapLines = undefined;
+          throw error;
+        });
+        const lines = await roadmapLines;
+        if (id === renderId) showRoadmap(lines);
+      } else {
+        const entries = await releases;
+        if (id === renderId) showChangelog(entries, status);
+      }
+    } catch {
+      if (id === renderId) status.textContent = labels.failed;
+    }
   }
 
-  const labels = translations[language()];
-  const roadmap = new URLSearchParams(location.search).get("view") === "roadmap";
-  const view = roadmap ? "roadmap" : "changelog";
-  document.documentElement.lang = language();
-  document.title = labels[view] + " · Christmas Control Center";
-  document.getElementById("project-title").textContent = labels[view];
-  document.getElementById("project-intro").textContent = labels[view + "Intro"];
-  document.querySelector('[data-project-view="' + view + '"]').setAttribute("aria-current", "page");
-  const status = document.getElementById("project-status");
-  if (roadmap) {
-    releases.catch(() => {});
-    showRoadmap().catch(() => { status.textContent = labels.failed; });
-  } else {
-    releases.then(entries => showChangelog(entries, labels, status))
-      .catch(() => { status.textContent = labels.failed; });
-  }
+  window.addEventListener("lighting-page", showProject);
+  showPage();
 })();

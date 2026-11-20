@@ -6,7 +6,7 @@ Bedien je Twinkly RGB- en RGBW-verlichting lokaal in Home Assistant. Groepeer la
 
 | App in de Appwinkel | Geschikt voor |
 | --- | --- |
-| **Twinkly Control Center** | Dagelijks gebruik met de stabiele versie. |
+| **Christmas Control Center** | Dagelijks gebruik met de stabiele versie. |
 | **Christmas Control Center Beta** | Nieuwe functies eerder proberen. Verschijnt zodra er een bètarelease beschikbaar is. |
 
 Beide staan in [Ferry’s Home Assistant-apps](https://github.com/ferrynl/ha-apps). De bèta heeft eigen appgegevens. Stop de stabiele app als je dezelfde lampen met de bèta test. Terug naar stabiel? Stop de bèta en start de stabiele app opnieuw. Voor de bèta gebruikt Home Assistant ingresspoort **18491** en gebruikt LedFX DDP-poort **18492**. De automatische LedFX-koppeling kiest zelf de DDP-poort.
@@ -14,26 +14,26 @@ Beide staan in [Ferry’s Home Assistant-apps](https://github.com/ferrynl/ha-app
 ## Installeren
 
 1. Open in Home Assistant **Instellingen → Apps → Appwinkel → ⋮ → Repositories**.
-2. Voeg `https://github.com/ferrynl/ha-apps` toe. Zoek **Twinkly Control Center**, installeer de app en start hem.
+2. Voeg `https://github.com/ferrynl/ha-apps` toe. Kies **Christmas Control Center Beta** voor de bèta of **Christmas Control Center** voor stabiel. Installeer en start de gekozen app.
 3. Open de webinterface en kies **Zoeken op netwerk**. Broadcast werkt binnen hetzelfde subnet. Gebruik **IP toevoegen** bij gemiste apparaten en reserveer de adressen in DHCP.
 4. Test aan/uit, kleur en dimmen per apparaat. **Aan** herstelt de laatst gebruikte modus als die bekend is. Anders probeert de app een warme vaste kleur en daarna alternatieve apparaatmodi. Gebruik **Kleur** voor een vaste RGB-kleur. Kies **Effecten laden** op een apparaatkaart om de opgeslagen Twinkly-films en ingebouwde effecten van dat apparaat te zien. Gebruik **Afspelen op lamp** om het echte effect te zien. Je kunt per lamp herkenbare namen bewaren in je browser. Cloud- en galerie-effecten zijn beschikbaar zodra de officiële app ze als lokaal effect naar de controller heeft geschreven.
 
 ## Offline lampen en logboeken
 
-Een onbereikbare lamp krijgt **Offline** op de apparaatkaart. Twinkly Control Center blijft de verbinding controleren. Met **Lamp verwijderen** haal je de offline lamp uit het dashboard. Voeg je dezelfde lamp later opnieuw toe via **Zoeken op netwerk** of **IP toevoegen**, dan komen de bestaande groepskoppelingen terug.
+Een onbereikbare lamp krijgt **Offline** op de apparaatkaart. Christmas Control Center blijft de verbinding controleren. Met **Lamp verwijderen** haal je de offline lamp uit het dashboard. Voeg je dezelfde lamp later opnieuw toe via **Zoeken op netwerk** of **IP toevoegen**, dan komen de bestaande groepskoppelingen terug.
 
-Open in Home Assistant **Instellingen → Apps → Twinkly Control Center → Logboeken**. Daar staan verbindingsfouten met tijdstip, lampnaam, IP-adres, actie en technische oorzaak. Het logboek meldt ook wanneer een lamp weer online is of is verwijderd. Voor de bèta open je het logboek van **Christmas Control Center Beta**.
+Open in Home Assistant **Instellingen → Apps → Christmas Control Center → Logboeken**. Daar staan verbindingsfouten met tijdstip, lampnaam, IP-adres, actie en technische oorzaak. Het logboek meldt ook wanneer een lamp weer online is of is verwijderd. Voor de bèta open je het logboek van **Christmas Control Center Beta**.
 
 ## Music Assistant en LedFx
 
 Gebruik **LedFX controleren** in de muziekinstellingen. Twinkly vraagt lokaal `/api/info` op en controleert Sendspin. Bij een onbereikbare API kan de controle een gestopte installatie en een ontbrekende installatie niet onderscheiden. Open dan **LedFX installeren en starten** voor de stappen en de link naar de [LedFX-repository met Sendspin](https://github.com/Switch123456789/Home-Assistant-Apps).
 
-Draait LedFX met Sendspin op dezelfde Home Assistant-host? Klik in Twinkly Control Center op **Music Assistant koppelen**. De app zoekt de Sendspin-server, kiest die als actieve audiobron in LedFX en maakt zo nodig één DDP-uitgang met een starteffect aan. Voeg daarna **LedFx Twinkly** toe aan de afspeelgroep in Music Assistant. Onder **Muziekstijl** kies je een LedFX-effect voor de gedeelde uitgang. Kies **Stijl toepassen** om het effect te wisselen. De stappen hieronder zijn ook handmatig uitvoerbaar.
+Draait LedFX met Sendspin op dezelfde Home Assistant-host? Klik in Christmas Control Center op **Music Assistant koppelen**. De app zoekt de Sendspin-server, kiest die als actieve audiobron in LedFX en maakt zo nodig één DDP-uitgang met een starteffect aan. Voeg daarna **LedFx Twinkly** toe aan de afspeelgroep in Music Assistant. Onder **Muziekstijl** kies je een LedFX-effect voor de gedeelde uitgang. Kies **Stijl toepassen** om het effect te wisselen. De stappen hieronder zijn ook handmatig uitvoerbaar.
 
 1. Installeer LedFx met Sendspin-ondersteuning die past bij je Music Assistant-versie. Zie de [Sendspin-handleiding van LedFx](https://docs.ledfx.app/en/latest/settings/sendspin.html).
 2. Voeg in LedFx onder **Settings → Features** een Sendspin-server toe. Selecteer die onder **Settings → Audio**. Zet de LedFx-speler aan in Music Assistant en voeg hem toe aan een afspeelgroep met een compatibele speaker.
-3. Maak in LedFx één **DDP**-apparaat met **120 pixels**, **RGB**, poort **18490** voor stabiel of **18492** voor bèta en als doel **127.0.0.1** als LedFx en Twinkly Control Center dezelfde host-netwerkruimte gebruiken. Stel een audio-effect in op dat DDP-apparaat.
-4. Draait LedFx op een andere host, stel dan als DDP-doel het LAN-IP van Home Assistant in. Zet in de configuratie van Twinkly Control Center `ddp_source` op het IPv4-bronadres van LedFx zoals Home Assistant het ontvangt, en herstart de app.
+3. Maak in LedFx één **DDP**-apparaat met **120 pixels**, **RGB**, poort **18490** voor stabiel of **18492** voor bèta en als doel **127.0.0.1** als LedFx en Christmas Control Center dezelfde host-netwerkruimte gebruiken. Stel een audio-effect in op dat DDP-apparaat.
+4. Draait LedFx op een andere host, stel dan als DDP-doel het LAN-IP van Home Assistant in. Zet in de configuratie van Christmas Control Center `ddp_source` op het IPv4-bronadres van LedFx zoals Home Assistant het ontvangt, en herstart de app.
 5. Start muziek in Music Assistant en kies **Muziek** bij één lamp of bij **Alle lampen**. De status bovenaan toont of er DDP-frames binnenkomen. **Stop muziek** probeert de voorgaande modus te herstellen. Bij wegvallende frames gebeurt dit ook. Bij stilte kan LedFx zwarte frames blijven sturen.
 
 DDP is UDP zonder authenticatie. Laat de poort binnen het lokale netwerk en gebruik een vertrouwde LedFx-bron. De webinterface loopt via Home Assistant Ingress. Gebruik bij voorkeur één app tegelijk om de modus van een lamp te wijzigen.
@@ -46,7 +46,7 @@ DDP is UDP zonder authenticatie. Laat de poort binnen het lokale netwerk en gebr
 - Tot acht gelijktijdige apparaatoperaties. Bij een netwerkfout wacht de lamp vijf seconden voordat ze weer frames probeert te verwerken. De overige lampen houden hun eigen uitzendlus.
 - Gedeelde animatie over maximaal 40 geregistreerde controllers, met 20 als beoogde opstelling. Praktische framerate hangt af van wifi, firmware en de lengte van de strings.
 
-De app verdeelt hetzelfde effect over de ledvolgorde per controller. Via **Ledkaart laden** bekijk je de door de controller opgeslagen 2D- of 3D-ledposities. Een 3D-kaart kan worden gedraaid. De kaart is alleen-lezen. De groepen die je hier maakt, worden in Twinkly Control Center opgeslagen.
+De app verdeelt hetzelfde effect over de ledvolgorde per controller. Via **Ledkaart laden** bekijk je de door de controller opgeslagen 2D- of 3D-ledposities. Een 3D-kaart kan worden gedraaid. De kaart is alleen-lezen. De groepen die je hier maakt, worden in Christmas Control Center opgeslagen.
 
 ## Als zoeken of bedienen niet werkt
 
@@ -82,7 +82,7 @@ Het tv-scherm kan ook de afbeelding uit Home Assistant tonen. De app zoekt een a
 
 Gebruik **Tv-bron** bij het scherm om rechtstreeks een Home Assistant-mediaspeler te kiezen. **Automatisch** blijft de optie om de track op basis van LedFX te koppelen. De keuze wordt centraal bewaard. De instelling `media_player` dient als beginwaarde zolang je nog geen keuze in het mengpaneel hebt opgeslagen.
 
-Op de pagina **Twinkly** vind je het mengpaneel met licht, muziek, tv, scènepads en Twinkly-groepen. Het **Test Center** bevat de Twinkly-diagnostiek. Het **Security Center** bevat de netwerkkaart met Twinkly-apparaten, Hue Bridges en de lampen per Bridge. In **Instellingen** beheer je verbindingen, taal, Music Assistant, de tv-bron, Twinkly-groepen, scènes en effectafbeeldingen.
+Op de pagina **Twinkly** vind je het mengpaneel met licht, muziek, tv, scènepads en Twinkly-groepen. Het **Test Center** bevat de Twinkly-ledmapping en tests voor Philips Hue en Govee. Het **Security Center** bevat de netwerkkaart met Twinkly-apparaten, Hue Bridges en de lampen per Bridge. In **Instellingen** beheer je verbindingen, taal, Music Assistant, de tv-bron, Twinkly-groepen, scènes en effectafbeeldingen.
 
 Het Twinkly-beeldmerk is lokaal opgenomen als transparant SVG, gebaseerd op [Simple Icons](https://github.com/simple-icons/simple-icons/blob/develop/icons/twinkly.svg). Het merk is van Twinkly.
 
@@ -101,6 +101,10 @@ Met **Showbouwer** maak je een reeks van maximaal 30 stappen met een patroon, la
 ## Philips Hue en Govee
 
 Je koppelt Philips Hue en Govee via **Instellingen → Verbindingen**. Controleer voor Hue de SHA256-vingerafdruk via een vertrouwde bron en druk vlak voor het koppelen op de fysieke Bridge-knop. Activeer voor Govee eerst LAN-bediening in de Govee-app.
+
+Op **Philips Hue** zie je de kamers en zones die op elke gekoppelde Bridge staan. Zet een kamer of zone aan of uit en pas de helderheid aan als de Bridge die functie meldt. De opgeslagen Hue-scènes staan bij de kamer of zone. Klik op een scène om die op de Bridge te activeren.
+
+Onderaan de app opent het versienummer de bijbehorende changelog. De roadmap ernaast toont de stand van de bèta en wat op de planning staat.
 
 **Home** toont de lampen van alle drie merken. In een gemengde groep kun je aan/uit, helderheid en kleur bedienen voor lampen die die functie aanbieden. Het resultaat vermeldt afzonderlijk welke lampen de opdracht hebben aangenomen, welke zijn overgeslagen of mislukt en welke Govee-opdrachten onbevestigd zijn. De bestaande Twinkly-groepen blijven beschikbaar voor effecten, lichtshows, muziek en LED-mapping.
 
