@@ -36,7 +36,8 @@ def hue_profile(light, device=None):
     effects=effect.get("effect_values",[]) if isinstance(effect,dict) else []
     return {
         "provider":"hue","id":light["id"],"name":metadata.get("name") or light["id"],
-        "model":product.get("model_id"),"firmware":product.get("software_version"),
+        "model":product.get("model_id"),"product_name":product.get("product_name"),
+        "archetype":(device.get("metadata") or {}).get("archetype") or metadata.get("archetype"),"firmware":product.get("software_version"),
         "capabilities":{"power":isinstance(light.get("on"),dict),
             "brightness":isinstance(light.get("dimming"),dict),
             "rgb":isinstance(light.get("color"),dict),
@@ -74,7 +75,7 @@ def govee_profile(scan,status=None):
     level=status.get("brightness")
     temp=status.get("colorTemInKelvin")
     power=status.get("onOff")
-    return {"provider":"govee","id":scan["device"],"name":scan["sku"],"model":scan["sku"],
+    return {"provider":"govee","id":scan["device"],"name":scan["sku"] or scan["device"],"model":scan["sku"],
         "firmware":scan.get("wifiSoftVersion"),
         "capabilities":{"power":type(power) is int and power in (0,1),
             "brightness":type(level) is int and 0<=level<=100,"rgb":rgb,

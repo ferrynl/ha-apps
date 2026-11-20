@@ -138,3 +138,17 @@
 .house-wall-picker form { flex-wrap: wrap; align-items: end; }
 .house-wall-picker select,.house-wall-picker input { max-width: 100%; }
 .house-wall-picker p:empty { display: none; }
+
+.house-art-pixels > span,.house-art-group > span,.house-art-panel > span,
+.house-art-strip > span,.house-art-spot > span,.house-art-device > span { transform: none; }
+.house-art-pixels > span::after,.house-art-group > span::after,.house-art-panel > span::after,
+.house-art-strip > span::after,.house-art-spot > span::after,.house-art-device > span::after { content: none; }
+.house-art-pixels > span { width: 78%; height: 65%; border-radius: 8%; border: 1px solid currentColor;
+  background: radial-gradient(circle,#ffe6a5 25%,transparent 30%) 0 0 / 20% 25%,#26364a; }
+.house-art-strip > span { width: 82%; height: 20%; border-radius: 6px;
+  background: repeating-linear-gradient(90deg,#ffe6a5 0 12%,#435063 12% 19%); }
+.house-art-panel > span { width: 78%; height: 26%; border-radius: 15%; background: #ffe6a5; }
+.house-art-spot > span { width: 65%; height: 40%; border-radius: 50%; border: 2px solid #c5d0df; }
+.house-art-group > span { width: 52%; height: 40%; border-radius: 8%; background: #e8c981;
+  box-shadow: -.24em -.24em 0 #53657b,.24em .24em 0 #64798c; }
+.house-art-device > span { width: 55%; height: 45%; border-radius: 12%; background: #8da2b8; box-shadow: none; }

@@ -16,9 +16,12 @@ def validate(data):
             if not re.fullmatch(r"[A-Za-z0-9:_-]{1,128}",identifier) or not isinstance(record,dict):
                 raise ValueError("Invalid provider record")
             lan_ip(record.get("address"))
-            allowed={"address","application_key","client_key","certificate_sha256"} if provider=="hue" else {"address"}
+            allowed={"address","application_key","client_key","certificate_sha256"} if provider=="hue" else {"address", "sku"}
             if set(record)-allowed:
                 raise ValueError("Unexpected provider fields")
+            if provider == "govee" and "sku" in record and (not isinstance(record["sku"], str)
+                    or not 1 <= len(record["sku"]) <= 64):
+                raise ValueError("Invalid Govee model")
             if provider=="hue":
                 for key,pattern in (("application_key",r"[A-Za-z0-9_-]{10,128}"),("certificate_sha256",r"[a-fA-F0-9]{64}")):
                     if not isinstance(record.get(key),str) or not re.fullmatch(pattern,record[key]):

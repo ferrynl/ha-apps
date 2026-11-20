@@ -1,4 +1,4 @@
-window.createLightingTools = ({mount, house, nav, api, node, field, language, productPhoto}) => {
+window.createLightingTools = ({mount, house, nav, api, node, field, language}) => {
   const labels = {
     nl: ["Showbouwer", "Shownaam", "Scène", "Wachttijd (sec.)", "Stap toevoegen", "Omhoog", "Omlaag", "Verwijderen", "Opslaan", "Afspelen", "Stoppen", "Maak eerst een scène voor een gemengde groep op Home.", "Stap", "Show klaar", "Show gestopt", "Show onderbroken", "Geen bevestiging", "Spatial Light Studio", "Kies een foto", "Kies een lamp", "Plaats in het midden", "Verwijder plaatsing", "Klik op de foto om de gekozen lamp te plaatsen. Verplaats een markering met de pijltjestoetsen.", "Foto wissen", "Kies een geldige JPG, PNG of WebP van maximaal 15 MB.", "Opslaan op de server is mislukt.", "Shows en foto-indeling staan op je Home Assistant-server. Een show loopt door als je de pagina sluit.", "Groep", "Nieuwe show", "Bewerken", "Definieer minimaal één geldige stap.", "Onbekende lamp", "Locatie", "Foto van de ruimte", "Scène of groep ontbreekt", "Opdrachten gedeeltelijk uitgevoerd"],
     en: ["Show builder", "Show name", "Scene", "Hold (sec.)", "Add step", "Move up", "Move down", "Remove", "Save", "Play", "Stop", "First create a scene for a mixed group on Home.", "Step", "Show complete", "Show stopped", "Show interrupted", "Unconfirmed", "Spatial Light Studio", "Choose a photo", "Choose a light", "Place in the centre", "Remove placement", "Click the photo to place the selected light. Move a marker with the arrow keys.", "Clear photo", "Choose a valid JPG, PNG or WebP up to 15 MB.", "Could not save to the server.", "Shows and photo layouts are saved on your Home Assistant server. Playback continues when you close this page.", "Group", "New show", "Edit", "Add at least one valid step.", "Unknown light", "Position", "Photo of the space", "Scene or group missing", "Some commands did not complete"],
@@ -223,6 +223,7 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, pr
     showStatus.textContent = spatial && isPlaying() ? effectName + " · " + status : spatial ? "" : status;
     effectStatus.textContent = spatial ? status : isPlaying() ? t(0) + " · " + status : "";
     const names = new Map((inventory?.lights || []).map(light => [light.id, light.name]));
+    for (const [id, group] of Object.entries(inventory?.spatial_groups || {})) names.set(id, group.name);
     for (const [index, details] of reports.entries()) {
       const last = playback.last;
       details.hidden = !last || spatial !== Boolean(index);
@@ -454,29 +455,54 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, pr
   const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 
   function setPosition(id, x, y, size = defaultSize, focusId = id) {
-    const points = new Map(layout.points);
     const point = [clamp(x, 0, 100), clamp(y, 0, 100), clamp(size, 4, 40)];
-    const advance = points.get(id)?.[3];
+    const advance = wallPoints().get(id)?.[3];
     if (advance) point.push(advance);
-    points.set(id, point);
+    return saveWallPoint(id, point, focusId);
+  }
+
+  function wallGroupOwners() {
+    const owners = new Map();
+    for (const [id, group] of Object.entries(inventory.spatial_groups || {})) {
+      for (const member of group.members) if (!owners.has(member)) owners.set(member, id);
+    }
+    return owners;
+  }
+
+  function wallPoints() {
+    const owners = wallGroupOwners();
+    const points = new Map(layout.points);
+    for (const [id, point] of layout.points) {
+      const group = owners.get(id);
+      if (!group) continue;
+      if (!points.has(group)) points.set(group, point);
+      points.delete(id);
+    }
+    return points;
+  }
+
+  function saveWallPoint(id, point, focusId) {
+    const points = new Map(layout.points);
+    const owners = wallGroupOwners();
+    for (const key of points.keys()) if (owners.get(key) === id) points.delete(key);
+    if (point) points.set(id, point);
+    else points.delete(id);
     return updateLayout(points, {}, focusId);
   }
 
   function lampImage(light) {
-    const fallback = () => {
-      const illustration = node("span", "", "house-lamp-art");
-      illustration.setAttribute("aria-hidden", "true");
-      illustration.append(node("span"));
-      return illustration;
-    };
-    const key = productPhoto(light);
-    if (!key) return fallback();
-    const image = node("img", "", "house-lamp-image");
-    image.src = "product-photo/" + encodeURIComponent(key) + "?v=2";
-    image.alt = "";
-    image.draggable = false;
-    image.onerror = () => image.replaceWith(fallback());
-    return image;
+    const archetype = typeof light.archetype === "string" ? light.archetype : "";
+    let shape = "device";
+    if (light.provider === "twinkly") shape = "pixels";
+    else if (light.members) shape = "group";
+    else if (/strip|tube/.test(archetype)) shape = "strip";
+    else if (/spot/.test(archetype)) shape = "spot";
+    else if (/bulb|candle/.test(archetype)) shape = "bulb";
+    else if (/ceiling|panel|pendant/.test(archetype)) shape = "panel";
+    const illustration = node("span", "", "house-lamp-art house-art-" + shape);
+    illustration.setAttribute("aria-hidden", "true");
+    illustration.append(node("span"));
+    return illustration;
   }
 
   function lampMarker(photo, light, point) {
@@ -608,8 +634,14 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, pr
       const available = new Set((inventory.lights || []).filter(light => light.status !== "unavailable"
         && light.capabilities?.rgb && light.state?.on === true).map(light => light.id));
       const [axis, sign] = directions[sweep.direction];
-      const ordered = [...layout.points].filter(([id]) => available.has(id))
-        .sort((a, b) => sign * (a[1][axis] - b[1][axis]));
+      const points = wallPoints();
+      const groups = inventory.spatial_groups || {};
+      const claimed = new Set();
+      const ordered = [...points].sort((a, b) => sign * (a[1][axis] - b[1][axis])).filter(([id]) => {
+        const eligible = (groups[id]?.members || [id]).filter(key => available.has(key) && !claimed.has(key));
+        eligible.forEach(key => claimed.add(key));
+        return eligible.length > 0;
+      });
       const gradient = sweep.mode === "gradient";
       endField.hidden = gradientHelp.hidden = !gradient;
       speedField.hidden = gradient;
@@ -628,7 +660,7 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, pr
         if (gradient && sweep.preview && entry) marker.style.setProperty("--gradient-preview", entry.color);
         else marker.style.removeProperty("--gradient-preview");
       }
-      summary.textContent = e(8) + " · " + ordered.length + " / " + layout.points.size;
+      summary.textContent = e(8) + " · " + ordered.length + " / " + points.size;
       play.disabled = isPlaying() || !ordered.length;
       stop.hidden = !isPlaying();
       stop.disabled = playback.state === "stopping";
@@ -647,8 +679,11 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, pr
   }
 
   function renderSpatial(focusId) {
-    const lights = new Map((inventory.lights || []).map(light => [light.id, light]));
-    for (const id of layout.points.keys()) {
+    const owners = wallGroupOwners();
+    const placements = wallPoints();
+    const lights = new Map(Object.entries(inventory.spatial_groups || {}).map(([id, group]) => [id, {...group, id}]));
+    for (const light of inventory.lights || []) if (!owners.has(light.id)) lights.set(light.id, light);
+    for (const id of placements.keys()) {
       if (!lights.has(id)) lights.set(id, {id, name: t(31) + " · " + id});
     }
     const upload = node("input");
@@ -690,12 +725,12 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, pr
     photo.onclick = event => {
       const rect = photo.getBoundingClientRect();
       if (selected && lights.has(selected)) setPosition(selected, 100 * (event.clientX - rect.left) / rect.width,
-        100 * (event.clientY - rect.top) / rect.height, layout.points.get(selected)?.[2]);
+        100 * (event.clientY - rect.top) / rect.height, placements.get(selected)?.[2]);
     };
     const cards = node("div", "", "house-lamp-list");
     let focus;
     for (const light of lights.values()) {
-      const point = layout.points.get(light.id);
+      const point = placements.get(light.id);
       const choose = action("", () => {
         selected = light.id;
         renderSpatial("list");
@@ -703,6 +738,8 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, pr
       choose.className = "house-lamp-choice";
       choose.setAttribute("aria-pressed", String(light.id === selected));
       choose.append(lampImage(light), node("span", light.name));
+      const model = [light.product_name, light.product_code || light.model].filter(value => value && value !== light.name);
+      if (model.length) choose.append(node("small", model.join(" · ")));
       if (point) choose.append(node("small", h(5)));
       cards.append(choose);
       if (focusId === "list" && light.id === selected) focus = choose;
@@ -719,15 +756,13 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, pr
       if (window.confirm(t(23) + "?")) return updateLayout(new Map(), {photo: null});
     }));
     const settings = node("div", "", "lighting-controls");
-    const selectedPoint = layout.points.get(selected);
+    const selectedPoint = placements.get(selected);
     if (selectedPoint) {
       const range = node("input");
       Object.assign(range, {type: "range", min: 4, max: 40, value: selectedPoint[2] ?? defaultSize});
       range.onchange = () => setPosition(selected, selectedPoint[0], selectedPoint[1], Number(range.value), "range");
       settings.append(field(h(2), range), action(t(21), () => {
-        const points = new Map(layout.points);
-        points.delete(selected);
-        return updateLayout(points);
+        return saveWallPoint(selected, null);
       }));
       const advance = node("input");
       Object.assign(advance, {type: "number", min: 0, max: 1000, step: 1, required: true,
@@ -735,10 +770,9 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, pr
       const lampId = selected;
       advance.onchange = () => {
         if (!advance.reportValidity()) return;
-        const points = new Map(layout.points);
-        const [x, y, size = defaultSize] = points.get(lampId);
-        points.set(lampId, advance.valueAsNumber ? [x, y, size, advance.valueAsNumber] : [x, y, size]);
-        return updateLayout(points, {}, "advance");
+        const [x, y, size = defaultSize] = placements.get(lampId);
+        const point = advance.valueAsNumber ? [x, y, size, advance.valueAsNumber] : [x, y, size];
+        return saveWallPoint(lampId, point, "advance");
       };
       settings.append(field(g(3), advance), node("small", g(4)));
       if (focusId === "range") focus = range;
@@ -779,8 +813,8 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, pr
     }
     if (!data || gesture) return;
     inventory = data;
-    const nextSignature = JSON.stringify([language(), data.groups, data.scenes,
-      (data.lights || []).map(light => [light.id, light.name, light.product_code])]);
+    const nextSignature = JSON.stringify([language(), data.groups, data.scenes, data.spatial_groups,
+      (data.lights || []).map(light => [light.id, light.name, light.product_code, light.model, light.product_name, light.archetype])]);
     if (initialized && signature !== nextSignature) {
       signature = nextSignature;
       renderShows();
