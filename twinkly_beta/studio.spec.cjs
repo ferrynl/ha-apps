@@ -122,6 +122,15 @@ test('Home combines providers and keeps pairing in Settings', async ({page}) => 
  await page.route('**/lighting/scenes/christmas/apply', route => route.fulfill({json:{results:{
   t:{power:'accepted',brightness:'accepted'}, h:{power:'accepted',brightness:'skipped'},
  }}}));
+ let hueTest={result:null};
+ await page.route('**/lighting/hue-test', route => {
+  if (route.request().method()==='POST') {
+   const {test,id}=route.request().postDataJSON();
+   expect(id).toBe('h');
+   hueTest={result:test==='stop'?'restored':'running'};
+  }
+  return route.fulfill({json:hueTest});
+ });
  const fingerprint = 'ab'.repeat(32);
  await page.route('**/providers/hue/certificate', route => {
   expect(route.request().postDataJSON()).toEqual({address:'192.168.1.2'});
@@ -173,6 +182,14 @@ test('Home combines providers and keeps pairing in Settings', async ({page}) => 
  await expect(home.getByRole('slider',{name:'Wittemperatuur'})).toBeVisible();
  await expect(home.locator('.lighting-brand-mark img')).toHaveAttribute('src','hue-app-icon.webp');
  await expect(home.getByText('Tree')).toHaveCount(0);
+ await page.locator('#nav-tests').click();
+ const hueTests=page.locator('#tests-page .lighting-surface');
+ await hueTests.getByLabel('Kies een Hue-lamp').selectOption('h');
+ await expect(hueTests.getByRole('button',{name:'RGB-test'})).toBeDisabled();
+ await hueTests.getByRole('button',{name:'Warm/koel wit'}).click();
+ await expect(hueTests.getByRole('status')).toHaveText('Hue-test loopt');
+ await hueTests.getByRole('button',{name:'Hue-test stoppen'}).click();
+ await expect(hueTests.getByRole('status')).toHaveText('Vorige stand hersteld');
  await page.locator('#nav-govee').click();
  await expect(home.getByText('Strip')).toBeVisible();
  await page.locator('#nav-control').click();

@@ -210,3 +210,36 @@ class LightingTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.controller.music, set())
         self.assertEqual(self.control.await_count, 3)
         self.assertEqual(self.color.await_args.args, ([255, 1, 2],))
+
+    async def test_hue_test_center_starts_and_restores_a_single_lamp(self):
+        light = {
+            "id": self.hue_id, "on": {"on": False},
+            "dimming": {"brightness": 43.25},
+            "color": {"xy": {"x": .4, "y": .35}},
+            "color_temperature": {"mirek": 300, "mirek_valid": True,
+                                  "mirek_schema": {"mirek_minimum": 153, "mirek_maximum": 500}},
+        }
+        sent = asyncio.Event()
+
+        async def hue_request(method, path, body=None):
+            self.assertEqual(path, "light/" + self.hue_id)
+            if method == "GET":
+                return [light]
+            sent.set()
+
+        with patch("modules.provider_routes.Hue.request", new=AsyncMock(side_effect=hue_request)) as request:
+            response = await self.client.post("/lighting/hue-test", json={"test": "rgb", "id": self.twinkly})
+            self.assertEqual(response.status, 400)
+            response = await self.client.post("/lighting/hue-test", json={"test": "rgb", "id": self.hue})
+            self.assertEqual(response.status, 200, await response.text())
+            self.assertEqual((await response.json())["result"], "running")
+            await asyncio.wait_for(sent.wait(), 1)
+            response = await self.client.post("/lighting/hue-test", json={"test": "stop"})
+            self.assertEqual((await response.json())["result"], "restored")
+            self.assertEqual(request.await_args.args[2], {
+                "on": {"on": False}, "color_temperature": {"mirek": 300},
+            })
+            self.assertEqual(request.await_count, 3)
+            light["effects"] = {"status": "candle"}
+            response = await self.client.post("/lighting/hue-test", json={"test": "power", "id": self.hue})
+            self.assertEqual(response.status, 409)
