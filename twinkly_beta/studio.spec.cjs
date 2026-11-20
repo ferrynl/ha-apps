@@ -467,12 +467,13 @@ test('Mijn Huis previews the sweep order and displays the last command result', 
   body:'<svg xmlns="http://www.w3.org/2000/svg" width="480" height="240"></svg>'}));
  let playback = {state:'idle'};
  let started = false;
+ let useGradient = false;
  await page.route('**/lighting/projects', route => {
   if (route.request().method() === 'POST') {
    expect(route.request().postDataJSON()).toEqual({action:'spatial',revision:'layout',direction:'left',
-    color:[255,189,99],delay:550});
+    color:[255,189,99],delay:550,...(useGradient ? {end_color:[75,144,255]} : {})});
    started = true;
-   playback = {state:'complete',kind:'spatial',last:{step:2,milliseconds:24,results:{[ids[0]]:{color:'accepted'}}}};
+   playback = {state:'complete',kind:'spatial',effect:useGradient?'gradient':'sweep',last:{step:2,milliseconds:24,results:{[ids[0]]:{color:'accepted'}}}};
   }
   return route.fulfill({json:{layout,shows:[],playback}});
  });
@@ -490,4 +491,10 @@ test('Mijn Huis previews the sweep order and displays the last command result', 
  await expect(effect.getByText('Kleurveeg klaar')).toBeVisible();
  await effect.getByText('Laatste uitgevoerde stap 2 · Opdrachttijd in de app 24 ms').click();
  await expect(effect.getByText('Links · Geaccepteerd')).toBeVisible();
+ useGradient = true;
+ await effect.getByLabel('Effect', {exact:true}).selectOption('gradient');
+ await expect(effect.getByLabel('Eindkleur')).toBeVisible();
+ await expect(markers.nth(0)).toHaveCSS('--gradient-preview','rgb(75,144,255)');
+ await effect.getByRole('button',{name:'Afspelen'}).click();
+ await expect(effect.getByText('Kleurverloop klaar')).toBeVisible();
 });

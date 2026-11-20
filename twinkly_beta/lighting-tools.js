@@ -24,7 +24,13 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, pr
     es: ["Barrido de color", "Dirección", "Izquierda a derecha", "Derecha a izquierda", "Arriba abajo", "Abajo arriba", "Tiempo entre luces (ms)", "Mostrar orden", "Luces participantes", "Participan las luces RGB cuyo estado encendido es conocido. El color elegido permanece al terminar.", "Último paso ejecutado", "Tiempo de comando en la aplicación", "Barrido terminado", "Barrido detenido", "Barrido fallido", "Preparando barrido…", "Aceptado", "Omitido", "Fallido"],
   };
   const directions = {right: [0, 1], left: [0, -1], down: [1, 1], up: [1, -1]};
-  const sweep = {direction: "right", color: "#ffbd63", delay: 550, preview: false};
+  const timingLabels = {
+    nl: ["Effect", "Kleurverloop", "Eindkleur", "Timingcorrectie (ms)", "Stuur de opdracht voor deze lamp eerder als hij trager reageert.", "Kleurverloop klaar", "Kleurverloop gestopt", "Kleurverloop mislukt", "Kleurverloop wordt voorbereid…", "Het verloop verdeelt de kleuren over de lampposities in de gekozen richting."],
+    en: ["Effect", "Colour gradient", "End colour", "Timing correction (ms)", "Send the command earlier for this light if it responds more slowly.", "Gradient complete", "Gradient stopped", "Gradient failed", "Preparing gradient…", "The gradient distributes colours over the light positions in the selected direction."],
+    de: ["Effekt", "Farbgradient", "Endfarbe", "Zeitkorrektur (ms)", "Sende den Befehl für diese Lampe früher, wenn sie langsamer reagiert.", "Gradient abgeschlossen", "Gradient gestoppt", "Gradient fehlgeschlagen", "Gradient wird vorbereitet…", "Der Gradient verteilt die Farben in der gewählten Richtung auf die Lampenpositionen."],
+    es: ["Efecto", "Degradado", "Color final", "Corrección de tiempo (ms)", "Envía la orden antes para esta luz si tarda más en responder.", "Degradado terminado", "Degradado detenido", "Degradado fallido", "Preparando degradado…", "El degradado distribuye los colores por la posición de las luces en la dirección elegida."],
+  };
+  const sweep = {mode: "sweep", end: "#4b90ff", direction: "right", color: "#ffbd63", delay: 550, preview: false};
   const showKey = "christmas-mixed-shows-v1";
   const spatialKey = "christmas-spatial-layout-v1";
   const maxSteps = 20;
@@ -73,6 +79,7 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, pr
   syncStatus.setAttribute("role", "status");
   mount.prepend(syncStatus);
   const t = index => (labels[language()] || labels.nl)[index];
+  const g = index => (timingLabels[language()] || timingLabels.nl)[index];
   const e = index => (effectLabels[language()] || effectLabels.nl)[index];
   const h = index => (houseLabels[language()] || houseLabels.nl)[index];
   const msg = index => (serverLabels[language()] || serverLabels.nl)[index];
@@ -109,13 +116,15 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, pr
       return;
     }
     const spatial = playback.kind === "spatial";
-    const headline = state === "playing" ? (spatial && playback.step === 0 ? e(15)
+    const gradient = playback.effect === "gradient";
+    const effectName = gradient ? g(1) : e(0);
+    const headline = state === "playing" ? (spatial && playback.step === 0 ? (gradient ? g(8) : e(15))
       : t(12) + " " + playback.step + " / " + playback.total)
-      : state === "stopping" ? (spatial ? e(0) + " · " + t(10) + "…" : msg(6))
-      : spatial ? e({complete: 12, stopped: 13, failed: 14}[state])
+      : state === "stopping" ? (spatial ? effectName + " · " + t(10) + "…" : msg(6))
+      : spatial ? (gradient ? g({complete: 5, stopped: 6, failed: 7}[state]) : e({complete: 12, stopped: 13, failed: 14}[state]))
       : t({complete: 13, stopped: 14, failed: 15}[state]);
     const status = [headline, playback.uncertain && t(16), playback.partial && t(35)].filter(Boolean).join(" · ");
-    showStatus.textContent = spatial && isPlaying() ? e(0) + " · " + status : spatial ? "" : status;
+    showStatus.textContent = spatial && isPlaying() ? effectName + " · " + status : spatial ? "" : status;
     effectStatus.textContent = spatial ? status : isPlaying() ? t(0) + " · " + status : "";
     const names = new Map((inventory?.lights || []).map(light => [light.id, light.name]));
     for (const [index, details] of reports.entries()) {
@@ -348,7 +357,10 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, pr
 
   function setPosition(id, x, y, size = defaultSize, focusId = id) {
     const points = new Map(layout.points);
-    points.set(id, [clamp(x, 0, 100), clamp(y, 0, 100), clamp(size, 4, 40)]);
+    const point = [clamp(x, 0, 100), clamp(y, 0, 100), clamp(size, 4, 40)];
+    const advance = points.get(id)?.[3];
+    if (advance) point.push(advance);
+    points.set(id, point);
     return updateLayout(points, {}, focusId);
   }
 
@@ -456,28 +468,41 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, pr
     return {item, marker, handle};
   }
 
+  const rgbFromHex = hex => hex.slice(1).match(/../g).map(value => parseInt(value, 16));
+
   function effectControls(stage) {
     const section = node("section", "", "house-effects");
     const controls = node("div", "", "lighting-controls");
+    const mode = dropdown([["sweep", e(0)], ["gradient", g(1)]], sweep.mode);
     const direction = dropdown(Object.keys(directions).map((key, index) => [key, e(index + 2)]), sweep.direction);
     const speed = node("input");
     Object.assign(speed, {type: "number", min: 250, max: 2000, step: 50, required: true, value: sweep.delay});
     speed.onchange = () => { sweep.delay = Number(speed.value); };
     const color = node("input");
     Object.assign(color, {type: "color", value: sweep.color, title: e(0)});
-    color.oninput = () => { sweep.color = color.value; };
+    color.oninput = () => { sweep.color = color.value; drawOrder(); };
+    const end = node("input");
+    Object.assign(end, {type: "color", value: sweep.end});
+    end.oninput = () => { sweep.end = end.value; drawOrder(); };
+    const endField = field(g(2), end);
+    const speedField = field(e(6), speed);
+    const gradientHelp = node("p", g(9));
     const preview = node("input");
     Object.assign(preview, {type: "checkbox", checked: sweep.preview});
     const summary = node("p");
     const play = action(t(9), () => {
-      if (!speed.reportValidity()) return;
-      const rgb = sweep.color.slice(1).match(/../g).map(value => parseInt(value, 16));
-      if (rgb.every(value => value === 0)) {
-        effectStatus.textContent = e(14);
+      const gradient = sweep.mode === "gradient";
+      if (!gradient && !speed.reportValidity()) return;
+      const rgb = rgbFromHex(sweep.color);
+      const endRgb = rgbFromHex(sweep.end);
+      if (!rgb.some(Boolean) || (gradient && !endRgb.some(Boolean))) {
+        effectStatus.textContent = gradient ? g(7) : e(14);
         return;
       }
-      return change({action: "spatial", revision: layout.revision, direction: sweep.direction,
-        color: rgb, delay: Number(speed.value)}, effectStatus);
+      const command = {action: "spatial", revision: layout.revision, direction: sweep.direction,
+        color: rgb, delay: gradient ? 550 : Number(speed.value)};
+      if (gradient) command.end_color = endRgb;
+      return change(command, effectStatus);
     });
     const stop = action(t(10), () => change({action: "stop"}, effectStatus));
     function drawOrder() {
@@ -486,11 +511,23 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, pr
       const [axis, sign] = directions[sweep.direction];
       const ordered = [...layout.points].filter(([id]) => available.has(id))
         .sort((a, b) => sign * (a[1][axis] - b[1][axis]));
-      const numbers = new Map(ordered.map(([id], index) => [id, index + 1]));
+      const gradient = sweep.mode === "gradient";
+      endField.hidden = gradientHelp.hidden = !gradient;
+      speedField.hidden = gradient;
+      const first = ordered[0]?.[1][axis];
+      const span = ordered.at(-1)?.[1][axis] - first;
+      const startRgb = rgbFromHex(sweep.color), endRgb = rgbFromHex(sweep.end);
+      const numbers = new Map(ordered.map(([id, point], index) => {
+        const ratio = span ? (point[axis] - first) / span : 0;
+        const previewColor = startRgb.map((channel, i) => Math.round(channel + (endRgb[i] - channel) * ratio));
+        return [id, {number: index + 1, color: "rgb(" + previewColor.join(",") + ")"}];
+      }));
       for (const marker of stage.querySelectorAll(".house-marker")) {
-        const number = numbers.get(marker.dataset.lamp);
-        if (sweep.preview && number) marker.dataset.order = number;
+        const entry = numbers.get(marker.dataset.lamp);
+        if (sweep.preview && entry) marker.dataset.order = entry.number;
         else delete marker.dataset.order;
+        if (gradient && sweep.preview && entry) marker.style.setProperty("--gradient-preview", entry.color);
+        else marker.style.removeProperty("--gradient-preview");
       }
       summary.textContent = e(8) + " · " + ordered.length + " / " + layout.points.size;
       play.disabled = isPlaying() || !ordered.length;
@@ -498,12 +535,13 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, pr
       stop.disabled = playback.state === "stopping";
     }
     refreshEffectButtons = drawOrder;
+    mode.onchange = () => { sweep.mode = mode.value; drawOrder(); };
     direction.onchange = () => { sweep.direction = direction.value; drawOrder(); };
     preview.onchange = () => { sweep.preview = preview.checked; drawOrder(); };
     const colorLabel = {nl: "Kleur", en: "Colour", de: "Farbe", es: "Color"}[language()] || "Colour";
-    controls.append(field(e(1), direction), field(colorLabel, color), field(e(6), speed),
+    controls.append(field(g(0), mode), field(e(1), direction), field(colorLabel, color), endField, speedField,
       field(e(7), preview), play, stop);
-    section.append(node("h3", e(0)), node("p", e(9)), controls, summary, effectStatus, reports[1]);
+    section.append(node("h3", g(0)), node("p", e(9)), gradientHelp, controls, summary, effectStatus, reports[1]);
     drawOrder();
     updatePlaybackStatus();
     return section;
@@ -591,7 +629,20 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, pr
         points.delete(selected);
         return updateLayout(points);
       }));
+      const advance = node("input");
+      Object.assign(advance, {type: "number", min: 0, max: 1000, step: 1, required: true,
+        value: selectedPoint[3] || 0, title: g(4)});
+      const lampId = selected;
+      advance.onchange = () => {
+        if (!advance.reportValidity()) return;
+        const points = new Map(layout.points);
+        const [x, y, size = defaultSize] = points.get(lampId);
+        points.set(lampId, advance.valueAsNumber ? [x, y, size, advance.valueAsNumber] : [x, y, size]);
+        return updateLayout(points, {}, "advance");
+      };
+      settings.append(field(g(3), advance), node("small", g(4)));
       if (focusId === "range") focus = range;
+      if (focusId === "advance") focus = advance;
     } else if (lights.has(selected)) {
       settings.append(action(t(20), () => setPosition(selected, 50, 50)));
     }

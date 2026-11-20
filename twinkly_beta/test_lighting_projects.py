@@ -11,7 +11,7 @@ from aiohttp import ClientSession, web
 from aiohttp.test_utils import TestClient, TestServer
 from PIL import Image
 
-from modules.lighting_projects import install
+from modules.lighting_projects import install, spatial_steps
 from modules.provider_store import ProviderStore
 
 GROUP = "1" * 32
@@ -170,3 +170,26 @@ class LightingProjectsTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(state["last"]["results"], {left: {"color": "accepted"}})
         self.assertGreaterEqual(state["last"]["milliseconds"], 0)
         self.assertEqual([call.args[0] for call in self.lighting.send_spatial_color.await_args_list], [right, left])
+
+    async def test_timing_offset_is_persisted_and_bounded(self):
+        key = '["twinkly","tree"]'
+        point = [42, 51, 12, 650]
+        saved = await self.change("layout", revision=None, photo=self.image(), points=[[key, point]])
+        self.assertEqual(saved.status, 200)
+        layout = (await saved.json())["layout"]
+        self.assertEqual(layout["points"], [[key, point]])
+        invalid = await self.change("layout", revision=layout["revision"], points=[[key, [42, 51, 12, 1001]]])
+        self.assertEqual(invalid.status, 400)
+        restarted = await self.connect()
+        self.assertEqual((await (await restarted.get("/lighting/projects")).json())["layout"]["points"], [[key, point]])
+
+    def test_gradient_colors_and_correction_use_geometry_and_planned_dispatch(self):
+        points = [("left", [10, 0]), ("middle", [30, 0, 12, 50]), ("right", [90, 0, 12, 500])]
+        lights = {key: {} for key, _ in points}
+        steps = spatial_steps(points, lights, 0, 1, [255, 0, 0], 250, [0, 0, 255])
+        self.assertEqual([step["lamp"] for step in steps], ["right", "middle", "left"])
+        self.assertEqual([step["color"] for step in steps], [[0, 0, 255], [191, 0, 64], [255, 0, 0]])
+        self.assertEqual([step["due"] for step in steps], [0, 0.45, 0.5])
+        sweep = spatial_steps(points, lights, 0, 1, [255, 0, 0], 250, None)
+        self.assertEqual([step["lamp"] for step in sweep], ["left", "right", "middle"])
+        self.assertEqual([step["due"] for step in sweep], [0, 0, 0.2])
