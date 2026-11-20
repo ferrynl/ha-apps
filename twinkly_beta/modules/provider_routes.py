@@ -165,4 +165,6 @@ def install(app, store=None, controller=None):
         async def unified_inventory(provider):
             return await read_inventory(provider, reports=True)
 
-        Lighting(controller, store, unified_inventory, send).install(app.router)
+        lighting = Lighting(controller, store, unified_inventory, send)
+        lighting.install(app.router)
+        app.cleanup_ctx.append(lighting.music_cleanup)

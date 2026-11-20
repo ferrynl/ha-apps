@@ -2332,6 +2332,7 @@ class Controller:
         self.network_devices = []
         app = web.Application(middlewares=[ingress_only], client_max_size=720_000)
         from modules.provider_routes import install
+        app.cleanup_ctx.append(self.stream)
         install(app, controller=self)
         async def legacy_provider_page(request):
             raise web.HTTPFound("./#instellingen")
@@ -2340,7 +2341,6 @@ class Controller:
         for asset in ("lighting.js", "lighting.css", "twinkly-nav-logo.svg", "hue-app-icon.webp", "govee-logo.png"):
             app.router.add_get("/" + asset, lambda _, filename=asset: web.FileResponse(
                 filename, headers={"Cache-Control": "no-store"}))
-        app.cleanup_ctx.append(self.stream)
         app.router.add_get("/", lambda _: web.FileResponse(
             "index.html", headers={"Cache-Control": "no-store"}))
         app.router.add_get("/twinkly.svg", lambda _: web.FileResponse("twinkly.svg"))

@@ -1,3 +1,4 @@
+import asyncio
 import tempfile
 import unittest
 from types import SimpleNamespace
@@ -25,6 +26,8 @@ class LightingTests(unittest.IsolatedAsyncioTestCase):
         self.controller = SimpleNamespace(
             devices={"tree": SimpleNamespace(row={"name": "Tree"}, offline=False, mode="color",
                                              last_brightness=70, last_color=[255, 10, 0])},
+            edit=asyncio.Lock(), music=set(), patterns={}, physical_tests={},
+            music_frame=lambda: bytes([255, 2, 1, 0, 0, 0]),
             apply_control=AsyncMock(return_value={"failed": []}),
         )
         self.hue_id = "f735a5a7-819a-4bbf-89d4-e48b8c11db8c"
@@ -166,3 +169,27 @@ class LightingTests(unittest.IsolatedAsyncioTestCase):
         reply = await self.client.post(f"/lighting/scenes/{scene}/apply")
         self.assertEqual((await reply.json())["results"], {self.twinkly: {"power": "accepted"}})
         self.controller.apply_control.assert_awaited_once_with({"id": "tree", "action": "off", "value": False})
+
+
+    async def test_mixed_music_mirrors_and_restores_then_releases_twinkly(self):
+        group = "a" * 32
+        self.profiles.return_value[0]["capabilities"]["rgb"] = True
+        self.profiles.return_value[0]["state"]["xy"] = {"x": 0.31, "y": 0.33}
+        self.store.save_groups({group: {"name": "Wall", "members": [self.twinkly, self.hue, self.govee, self.silent]}})
+        response = await self.client.post("/lighting/music", json={"group": group})
+        self.assertEqual(response.status, 200)
+        info = await response.json()
+        self.assertEqual(info["eligible"], [self.twinkly, self.hue, self.govee])
+        self.assertEqual(info["skipped"], [self.silent])
+        self.assertEqual(self.controller.music, {"tree"})
+        for _ in range(50):
+            if self.control.await_count and self.color.await_count:
+                break
+            await asyncio.sleep(.01)
+        self.control.assert_awaited_once_with(self.hue_id, color=[255, 0, 0])
+        self.color.assert_awaited_once_with([255, 0, 0])
+        response = await self.client.post("/lighting/music", json={"stop": True})
+        self.assertEqual(await response.json(), {"group": None, "live": False})
+        self.assertEqual(self.controller.music, set())
+        self.assertEqual(self.control.await_count, 2)
+        self.assertEqual(self.color.await_args.args, ([255, 1, 2],))

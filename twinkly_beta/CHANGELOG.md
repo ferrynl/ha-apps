@@ -1,3 +1,8 @@
+## 2.0.0-beta.11
+
+- Start or stop LedFX music from a mixed group on Home. Twinkly receives the existing pixel effects. Supported, switched-on Philips Hue and Govee lights follow one sampled color from the same stream, with at most one color update per second.
+- Restore previously known colors on silence or stop. The group displays whether LedFX is playing and shows how many lights can participate.
+
 ## 2.0.0-beta.10
 
 - Save named scenes on Home for mixed Twinkly, Hue and Govee groups. Set power and optionally brightness and RGB color.

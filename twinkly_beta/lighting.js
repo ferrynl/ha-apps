@@ -14,6 +14,12 @@
     de: ["Szenen", "Szenenname", "Gruppe", "Anwenden", "Gruppe fehlt", "Erstelle eine gemischte Gruppe, um eine Szene zu speichern."],
     es: ["Escenas", "Nombre de escena", "Grupo", "Aplicar", "Falta el grupo", "Crea un grupo mixto para guardar una escena."],
   };
+  const musicWords = {
+    nl: ["Muziek starten", "Muziek stoppen", "Wacht op LedFX", "LedFX actief", "Deelnemend", "Overgeslagen"],
+    en: ["Start music", "Stop music", "Waiting for LedFX", "LedFX active", "Participating", "Skipped"],
+    de: ["Musik starten", "Musik stoppen", "Warte auf LedFX", "LedFX aktiv", "Teilnehmend", "Übersprungen"],
+    es: ["Iniciar música", "Detener música", "Esperando a LedFX", "LedFX activo", "Participan", "Omitidas"],
+  };
   const brands = {twinkly: "Twinkly", hue: "Philips Hue", govee: "Govee"};
   const wordmarks = {twinkly: "twinkly-nav-logo.svg", hue: "hue-app-icon.webp", govee: "govee-logo.png"};
   const el = id => document.getElementById(id);
@@ -172,10 +178,20 @@
     }
     const lights = new Map(data.lights.map(light => [light.id, light]));
     const grid = node("div", "", "lighting-grid");
+    const [startMusic, stopMusic, waitingMusic, activeMusic, participating, skippedMusic] =
+      musicWords[el("language").value] || musicWords.nl;
     for (const [id, group] of Object.entries(data.groups)) {
       const card = node("article", "", "lighting-card");
       card.append(node("h3", group.name), node("p", group.members.map(key => lights.get(key)?.name || t(37)).join(" · ")));
       controls(card, group.members.map(key => lights.get(key)).filter(Boolean), {group: id});
+      const music = data.music?.group === id;
+      if (music) card.append(node("p", data.music.live ? activeMusic : waitingMusic));
+      card.append(button(music ? stopMusic : startMusic, async () => {
+        const result = await api("lighting/music", music ? {stop: true} : {group: id});
+        feedback.textContent = music ? "" :
+          participating + " · " + result.eligible.length + " / " + skippedMusic + " · " + result.skipped.length;
+        await refresh();
+      }));
       card.append(button(t(26), () => {
         editing = id;
         render();

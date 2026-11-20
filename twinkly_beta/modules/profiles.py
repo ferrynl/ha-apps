@@ -62,5 +62,6 @@ def govee_profile(scan,status=None):
             "temperature":type(temp) is int and 2000<=temp<=9000,"segments":False,"effects":[]},
         "state":{"on":bool(power) if type(power) is int and power in (0,1) else None,
             "brightness":level if type(level) is int and 0<=level<=100 else None,
+            "color_temperature_kelvin":temp if type(temp) is int and temp > 0 else None,
                  "color":[color[c] for c in ("r","g","b")] if rgb else None},
         "verified":False}
