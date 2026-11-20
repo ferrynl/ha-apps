@@ -159,30 +159,42 @@ class Lighting:
         except OSError:
             raise web.HTTPServiceUnavailable()
 
+    def valid_show(self, show):
+        group = show["group"]
+        scenes = self.store.load_scenes()
+        return group in self.store.load_groups() and all(
+            scenes.get(step["scene"], {}).get("group") == group for step in show["steps"]
+        )
+
+    async def run_scene(self, identifier, expected_group=None):
+        async with self.control_lock:
+            scene = self.store.load_scenes().get(identifier)
+            if scene is None:
+                raise web.HTTPNotFound()
+            scene = scene_settings(scene)
+            if expected_group is not None and scene["group"] != expected_group:
+                raise web.HTTPConflict()
+            group = self.store.load_groups().get(scene["group"])
+            if group is None:
+                raise web.HTTPConflict()
+            members = group["members"]
+            if self.lamp_test and self.lamp_test.target in members:
+                await self.lamp_test.stop()
+            if self.music.members.intersection(members):
+                await self.music.stop()
+            lights, _ = await self.lights()
+            commands = [("power", scene["on"])]
+            commands.extend((action, scene[action]) for action in ("color", "brightness") if action in scene)
+            results = {key: {} for key in members}
+            for action, value in commands:
+                outcomes = await asyncio.gather(*(self.send(key, lights.get(key), action, value) for key in members))
+                for key, outcome in zip(members, outcomes):
+                    results[key][action] = outcome
+            return results
+
     async def apply_scene(self, request):
         try:
-            async with self.control_lock:
-                scene = self.store.load_scenes().get(request.match_info["id"])
-                if scene is None:
-                    raise web.HTTPNotFound()
-                scene = scene_settings(scene)
-                group = self.store.load_groups().get(scene["group"])
-                if group is None:
-                    raise web.HTTPConflict()
-                members = group["members"]
-                if self.lamp_test and self.lamp_test.target in members:
-                    await self.lamp_test.stop()
-                if self.music.members.intersection(members):
-                    await self.music.stop()
-                lights, _ = await self.lights()
-                commands = [("power", scene["on"])]
-                commands.extend((action, scene[action]) for action in ("color", "brightness") if action in scene)
-                results = {key: {} for key in members}
-                for action, value in commands:
-                    outcomes = await asyncio.gather(*(self.send(key, lights.get(key), action, value) for key in members))
-                    for key, outcome in zip(members, outcomes):
-                        results[key][action] = outcome
-            return web.json_response({"results": results})
+            return web.json_response({"results": await self.run_scene(request.match_info["id"])})
         except (ValueError, KeyError, TypeError, OSError):
             raise web.HTTPServiceUnavailable()
 

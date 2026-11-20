@@ -1,3 +1,9 @@
+## 2.0.0-beta.21
+
+- Bewaar shows, foto's en lampplaatsingen op je Home Assistant-server en open ze vanaf elk apparaat met toegang tot de app.
+- Zet bestaande shows en de foto-indeling over via **Gegevens uit deze browser overzetten** op Home. Een bestaande serverfoto blijft behouden.
+- Start en stop shows vanaf verschillende apparaten. Een lopende show blijft afspelen wanneer je de app sluit.
+
 ## 2.0.0-beta.20
 
 - Plaats Twinkly-, Hue- en Govee-lampen op een eigen foto in Spatial Light Studio op Home. De foto en plaatsingen worden in je browser bewaard.
