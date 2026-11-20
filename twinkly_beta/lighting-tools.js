@@ -194,7 +194,8 @@ window.createLightingTools = ({mount, api, node, field, language}) => {
           showStatus.textContent = t(30);
           return;
         }
-        const show = {...draft, name, id: draft.id || (Date.now().toString(36) + Math.random().toString(36).slice(2))};
+        const id = draft.id || String(Math.max(0, ...shows.map(show => Number(show.id) || 0)) + 1);
+        const show = {...draft, name, id};
         const updated = draft.id ? shows.map(item => item.id === draft.id ? show : item) : [...shows, show];
         if (!save(showKey, updated, showStatus)) return;
         shows = updated;

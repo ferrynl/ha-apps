@@ -1,8 +1,12 @@
-## 2.0.0-beta.19
+## 2.0.0-beta.20
 
 - Plaats Twinkly-, Hue- en Govee-lampen op een eigen foto in Spatial Light Studio op Home. De foto en plaatsingen worden in je browser bewaard.
 - Bouw op Home een show met opgeslagen scènes van dezelfde gemengde groep. Bepaal de volgorde en wachttijd per stap. Bewaar shows in deze browser en laat Home open tijdens het afspelen.
 - Scan beide bèta-containerarchitecturen op bekende kwetsbaarheden. Elke run toont een samenvatting en bevat downloadbare JSON-rapporten met het bètanummer.
+
+## 2.0.0-beta.19
+
+- Toon automatisch previews voor Hue-scènes met kleur, wittemperatuur of alleen helderheid. Scènes zonder lichtgegevens krijgen een neutrale preview. Als een eigen afbeelding niet laadt, blijft de automatische preview zichtbaar.
 
 ## 2.0.0-beta.18
 
