@@ -110,7 +110,7 @@ test('Home combines providers and keeps pairing in Settings', async ({page}) => 
  });
  await page.route('**/lighting/music', route => {
   const {group,stop}=route.request().postDataJSON();
-  music={group:stop?null:group,live:!stop};
+  music={group:stop?null:group,live:!stop,timings:{hue:{frame_age_ms:40,command_ms:90,failed:0}}};
   return route.fulfill({json:{...music,eligible:['t','h'],skipped:['g']}});
  });
  await page.route('**/lighting/scenes', route => {
@@ -158,6 +158,7 @@ test('Home combines providers and keeps pairing in Settings', async ({page}) => 
  expect(groupControl).toEqual({group:'mixed',action:'power',value:true});
  await group.getByRole('button',{name:'Muziek starten'}).click();
  await expect(group.getByText('LedFX actief')).toBeVisible();
+ await expect(group.getByText(/Frameleeftijd: 40 ms.*Opdrachtduur: 90 ms/)).toBeVisible();
  await group.getByRole('button',{name:'Muziek stoppen'}).click();
  await expect(group.getByRole('button',{name:'Muziek starten'})).toBeVisible();
  const sceneForm=home.locator('.lighting-scene-form');

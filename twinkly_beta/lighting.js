@@ -20,6 +20,12 @@
     de: ["Musik starten", "Musik stoppen", "Warte auf LedFX", "LedFX aktiv", "Teilnehmend", "Übersprungen"],
     es: ["Iniciar música", "Detener música", "Esperando a LedFX", "LedFX activo", "Participan", "Omitidas"],
   };
+  const timingWords = {
+    nl: ["Frameleeftijd", "Opdrachtduur", "Mislukt", "Gemeten in de app, zonder reactietijd van de lamp."],
+    en: ["Frame age", "Command duration", "Failed", "Measured in the app, excluding the light’s reaction time."],
+    de: ["Frame-Alter", "Befehlsdauer", "Fehlgeschlagen", "In der App gemessen, ohne Reaktionszeit der Lampe."],
+    es: ["Antigüedad del fotograma", "Duración del comando", "Fallidos", "Medido en la aplicación, sin el tiempo de reacción de la luz."],
+  };
   const brands = {twinkly: "Twinkly", hue: "Philips Hue", govee: "Govee"};
   const wordmarks = {twinkly: "twinkly-nav-logo.svg", hue: "hue-app-icon.webp", govee: "govee-logo.png"};
   const el = id => document.getElementById(id);
@@ -185,7 +191,20 @@
       card.append(node("h3", group.name), node("p", group.members.map(key => lights.get(key)?.name || t(37)).join(" · ")));
       controls(card, group.members.map(key => lights.get(key)).filter(Boolean), {group: id});
       const music = data.music?.group === id;
-      if (music) card.append(node("p", data.music.live ? activeMusic : waitingMusic));
+      if (music) {
+        card.append(node("p", data.music.live ? activeMusic : waitingMusic));
+        const timings = Object.entries(data.music.timings || {});
+        if (timings.length) {
+          const [frame, command, failed, hint] = timingWords[el("language").value] || timingWords.nl;
+          const measurements = node("ul", "", "lighting-timings");
+          for (const [provider, result] of timings) {
+            const failures = result.failed ? " · " + failed + ": " + result.failed : "";
+            measurements.append(node("li", brands[provider] + " · " + frame + ": " + result.frame_age_ms +
+              " ms · " + command + ": " + result.command_ms + " ms" + failures));
+          }
+          card.append(measurements, node("small", hint));
+        }
+      }
       card.append(button(music ? stopMusic : startMusic, async () => {
         const result = await api("lighting/music", music ? {stop: true} : {group: id});
         feedback.textContent = music ? "" :
