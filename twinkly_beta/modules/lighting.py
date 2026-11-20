@@ -97,7 +97,7 @@ class Lighting:
                     if brand == "hue":
                         state["color"] = color_from_xy(state.pop("xy", None))
                     status = profile.get("status", row["status"]) if row["status"] == "online" else row["status"]
-                    lights[key] = {**profile, "state": state, "id": key, "status": status}
+                    lights[key] = {**profile, "provider": brand, "state": state, "id": key, "status": status}
         return lights, connections
 
     async def inventory(self, request):

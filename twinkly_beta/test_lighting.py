@@ -177,7 +177,7 @@ class LightingTests(unittest.IsolatedAsyncioTestCase):
         self.profiles.return_value[0]["state"]["xy"] = {"x": 0.31, "y": 0.33}
         self.store.save_groups({group: {"name": "Wall", "members": [self.twinkly, self.hue, self.govee, self.silent]}})
         response = await self.client.post("/lighting/music", json={"group": group})
-        self.assertEqual(response.status, 200)
+        self.assertEqual(response.status, 200, await response.text())
         info = await response.json()
         self.assertEqual(info["eligible"], [self.twinkly, self.hue, self.govee])
         self.assertEqual(info["skipped"], [self.silent])
