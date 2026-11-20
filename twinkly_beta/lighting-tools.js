@@ -24,23 +24,29 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, pr
     es: ["Barrido de color", "Dirección", "Izquierda a derecha", "Derecha a izquierda", "Arriba abajo", "Abajo arriba", "Tiempo entre luces (ms)", "Mostrar orden", "Luces participantes", "Participan las luces RGB cuyo estado encendido es conocido. El color elegido permanece al terminar.", "Último paso ejecutado", "Tiempo de comando en la aplicación", "Barrido terminado", "Barrido detenido", "Barrido fallido", "Preparando barrido…", "Aceptado", "Omitido", "Fallido"],
   };
   const directions = {right: [0, 1], left: [0, -1], down: [1, 1], up: [1, -1]};
+  const wallLabels = {
+    nl: ["Muur", "Muur 1", "Naam muur", "Muur toevoegen", "Naam wijzigen", "Muur verwijderen", "Deze muur met foto en lampplaatsingen verwijderen?"],
+    en: ["Wall", "Wall 1", "Wall name", "Add wall", "Rename wall", "Delete wall", "Delete this wall, including its photo and light placements?"],
+    de: ["Wand", "Wand 1", "Name der Wand", "Wand hinzufügen", "Wand umbenennen", "Wand löschen", "Diese Wand samt Foto und Lampenpositionen löschen?"],
+    es: ["Pared", "Pared 1", "Nombre de la pared", "Añadir pared", "Cambiar nombre", "Eliminar pared", "¿Eliminar esta pared con su foto y posiciones de luces?"],
+  };
   const wallGuide = {
     nl: ["Handleiding Mijn Huis", "Maak één foto per muur.", "Fotografeer de muur recht van voren, in goed licht. Zorg dat de hele muur en de plekken voor je lampen zichtbaar zijn.",
-      "Upload de foto van de muur die je wilt inrichten.", "Kies een lamp uit de lijst en tik op de plek waar die hangt. Versleep de markering om de positie aan te passen en gebruik de hoekgreep of schuifregelaar voor de grootte.",
+      "Voeg een muur toe, geef hem een naam en upload de bijbehorende foto.", "Kies een lamp uit de lijst en tik op de plek waar die hangt. Versleep de markering om de positie aan te passen en gebruik de hoekgreep of schuifregelaar voor de grootte.",
       "Kies onder Effect een kleurveeg of kleurverloop. Zet Volgorde tonen aan om het effect vooraf op je foto te bekijken.",
-      "Mijn Huis bewaart één muur tegelijk. Bij een andere foto worden de huidige lampplaatsingen gewist."],
+      "Elke muur bewaart zijn eigen foto en lampplaatsingen. Als je een foto vervangt, wist de app de plaatsingen op die muur."],
     en: ["My Home guide", "Take one photo per wall.", "Photograph the wall straight on in good light. Include the whole wall and the spots where your lights will go.",
-      "Upload the photo of the wall you want to set up.", "Choose a light from the list and tap where it hangs. Drag its marker to reposition it and use the corner handle or slider to resize it.",
+      "Add a wall, name it and upload its photo.", "Choose a light from the list and tap where it hangs. Drag its marker to reposition it and use the corner handle or slider to resize it.",
       "Under Effect, choose a colour sweep or gradient. Turn on Show order to preview it on your photo.",
-      "My Home saves one wall at a time. Replacing the photo clears the current light placements."],
+      "Each wall saves its own photo and light placements. Replacing a photo clears the placements on that wall."],
     de: ["Anleitung für Mein Zuhause", "Mache ein Foto pro Wand.", "Fotografiere die Wand frontal und bei gutem Licht. Die ganze Wand und alle vorgesehenen Lampenpositionen sollten sichtbar sein.",
-      "Lade das Foto der Wand hoch, die du einrichten möchtest.", "Wähle eine Lampe aus der Liste und tippe auf ihre Position. Ziehe die Markierung, um sie zu verschieben. Ändere die Größe mit dem Eckgriff oder Schieberegler.",
+      "Füge eine Wand hinzu, benenne sie und lade ihr Foto hoch.", "Wähle eine Lampe aus der Liste und tippe auf ihre Position. Ziehe die Markierung, um sie zu verschieben. Ändere die Größe mit dem Eckgriff oder Schieberegler.",
       "Wähle unter Effekt einen Farbverlauf oder eine Farbwelle. Aktiviere Reihenfolge anzeigen für die Vorschau auf deinem Foto.",
-      "Mein Zuhause speichert jeweils eine Wand. Ein neues Foto löscht die aktuellen Lampenpositionen."],
+      "Jede Wand speichert ihr eigenes Foto und ihre Lampenpositionen. Beim Ersetzen eines Fotos werden die Positionen dieser Wand gelöscht."],
     es: ["Guía de Mi casa", "Haz una foto por pared.", "Fotografía la pared de frente y con buena luz. Incluye toda la pared y los lugares donde colocarás las luces.",
-      "Sube la foto de la pared que quieras configurar.", "Elige una luz y toca el lugar donde está instalada. Arrastra el marcador para moverlo y usa el tirador o el control deslizante para cambiar su tamaño.",
+      "Añade una pared, ponle un nombre y sube su foto.", "Elige una luz y toca el lugar donde está instalada. Arrastra el marcador para moverlo y usa el tirador o el control deslizante para cambiar su tamaño.",
       "Elige un barrido o un degradado en Efecto. Activa Mostrar orden para ver una vista previa en la foto.",
-      "Mi casa guarda una pared a la vez. Al sustituir la foto se borran las posiciones actuales de las luces."],
+      "Cada pared guarda su propia foto y sus posiciones de luces. Al sustituir una foto se borran las posiciones de esa pared."],
   };
   const timingLabels = {
     nl: ["Effect", "Kleurverloop", "Eindkleur", "Timingcorrectie (ms)", "Stuur de opdracht voor deze lamp eerder als hij trager reageert.", "Kleurverloop klaar", "Kleurverloop gestopt", "Kleurverloop mislukt", "Kleurverloop wordt voorbereid…", "Het verloop verdeelt de kleuren over de lampposities in de gekozen richting."],
@@ -71,7 +77,10 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, pr
   const guide = node("details", "", "house-guide");
   guide.open = true;
   let guideLanguage;
-  house.append(houseTitle, guide, spatialSection);
+  const wallPicker = node("div", "", "house-wall-picker");
+  const wallStatus = node("p");
+  wallStatus.setAttribute("role", "status");
+  house.append(houseTitle, guide, wallPicker, spatialSection);
   function renderWallGuide() {
     const current = language();
     if (guideLanguage === current) return;
@@ -94,6 +103,11 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, pr
   let legacyLayout = read(spatialKey, {});
   let shows = [];
   let layout = {revision: null, photoVersion: null, points: new Map()};
+  let walls = [{id: "default", name: ""}];
+  let wallId = "default";
+  let requestedWall;
+  let pickerSignature;
+  const wallPath = (id, path = "lighting/projects") => id === "default" ? path : path + "?wall=" + encodeURIComponent(id);
   let playback = {state: "idle"};
   let inventory;
   let signature;
@@ -117,17 +131,67 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, pr
   const msg = index => (serverLabels[language()] || serverLabels.nl)[index];
   const isPlaying = () => ["playing", "stopping"].includes(playback.state);
 
+  function renderWallPicker() {
+    const current = language();
+    const signature = JSON.stringify([current, walls, wallId, requestedWall]);
+    if (pickerSignature === signature) return;
+    pickerSignature = signature;
+    const [label, first, nameLabel, add, rename, remove, confirmRemove] = wallLabels[current] || wallLabels.nl;
+    const selector = dropdown(walls.map(wall => [wall.id, wall.name || first]), requestedWall ?? wallId);
+    selector.setAttribute("aria-label", label);
+    selector.onchange = () => {
+      if (busy || gesture) {
+        selector.value = requestedWall ?? wallId;
+        return;
+      }
+      generation++;
+      requestedWall = selector.value;
+      wallStatus.textContent = "";
+      spatialSection.hidden = true;
+      renderWallPicker();
+      wallPicker.querySelector("select").focus();
+      refresh();
+    };
+    const name = node("input");
+    Object.assign(name, {type: "text", maxLength: 60, required: true});
+    const form = node("form", "", "lighting-controls");
+    const addButton = node("button", add);
+    addButton.type = "submit";
+    addButton.disabled = Boolean(requestedWall) || walls.length >= 8;
+    form.onsubmit = event => {
+      event.preventDefault();
+      if (name.value.trim()) change({action: "add_wall", name: name.value}, wallStatus);
+    };
+    form.append(field(nameLabel, name), addButton, action(rename, () => {
+      if (name.reportValidity() && name.value.trim()) {
+        return change({action: "rename_wall", name: name.value, revision: layout.revision}, wallStatus);
+      }
+    }, Boolean(requestedWall)));
+    if (wallId !== "default") form.append(action(remove, () => {
+      if (window.confirm(confirmRemove)) return change({action: "delete_wall", revision: layout.revision}, wallStatus);
+    }, Boolean(requestedWall)));
+    wallPicker.replaceChildren(field(label, selector), form, wallStatus);
+  }
+
   function receive(data, focusId) {
+    const nextWall = data.wall_id || "default";
+    const switched = wallId !== nextWall || Boolean(requestedWall);
+    wallId = nextWall;
+    requestedWall = undefined;
+    walls = data.walls || walls;
+    spatialSection.hidden = false;
+    renderWallPicker();
     const showsChanged = !initialized || JSON.stringify(shows) !== JSON.stringify(data.shows);
-    const layoutChanged = !initialized || layout.revision !== data.layout.revision;
+    const layoutChanged = !initialized || switched || layout.revision !== data.layout.revision;
     const runningChanged = !initialized || isPlaying() !== ["playing", "stopping"].includes(data.playback.state)
       || playback.state !== data.playback.state;
     initialized = true;
     shows = data.shows;
-    if (layout.photoVersion !== data.layout.photo_version) {
+    if (switched || layout.photoVersion !== data.layout.photo_version) {
       photoElement = node("img");
       layout.photoVersion = data.layout.photo_version;
-      if (layout.photoVersion) photoElement.src = "lighting/projects/photo?v=" + encodeURIComponent(layout.photoVersion);
+      if (layout.photoVersion) photoElement.src = wallPath(wallId, "lighting/projects/photo") + (wallId === "default" ? "?" : "&")
+        + "v=" + encodeURIComponent(layout.photoVersion);
     }
     layout.revision = data.layout.revision;
     layout.points = new Map(data.layout.points);
@@ -177,7 +241,7 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, pr
     reading = true;
     const request = generation;
     try {
-      const data = await api("lighting/projects");
+      const data = await api(wallPath(requestedWall ?? wallId));
       if (request !== generation || gesture) return;
       if (!initialized || syncStatus.textContent === msg(1)) syncStatus.textContent = "";
       receive(data);
@@ -189,11 +253,11 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, pr
   }
 
   async function change(body, status, focusId) {
-    if (busy) return;
+    if (busy || requestedWall) return;
     busy = true;
     generation++;
     try {
-      const data = await api("lighting/projects", body);
+      const data = await api(wallPath(wallId), body);
       status.textContent = "";
       receive(data, focusId);
       return data;
@@ -357,6 +421,7 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, pr
   }
 
   async function migrate(status = showStatus) {
+    const targetWall = wallId;
     const body = {action: "import", shows: legacyShows, points: legacyLayout.points || []};
     if (!layout.photoVersion && /^data:image\/jpeg;base64,/.test(legacyLayout.photo || "")) {
       try {
@@ -366,6 +431,7 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, pr
         return;
       }
     }
+    if (targetWall !== wallId || requestedWall) return;
     const data = await change(body, status);
     if (!data) return;
     if (!legacyLayout.photo || data.imported_photo) {
@@ -596,10 +662,11 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, pr
         return;
       }
       const revision = layout.revision;
+      const targetWall = wallId;
       upload.disabled = true;
       try {
         const photo = await importPhoto(file);
-        await updateLayout(new Map(), {photo, revision});
+        if (targetWall === wallId && !requestedWall) await updateLayout(new Map(), {photo, revision});
       } catch {
         spatialStatus.textContent = t(24);
       } finally {
@@ -694,7 +761,10 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, pr
     mount.hidden = page !== "home";
     house.hidden = page !== "house";
     nav.textContent = houseTitle.textContent = h(0);
-    if (page === "house") renderWallGuide();
+    if (page === "house") {
+      renderWallGuide();
+      if (initialized) renderWallPicker();
+    }
     nav.setAttribute("aria-current", page === "house" ? "page" : "false");
     if (!visible) {
       clearInterval(timer);

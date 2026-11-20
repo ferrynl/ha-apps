@@ -31,7 +31,7 @@ for(const viewport of [{width:1440,height:900},{width:390,height:844}]){
   }
   const guide = page.locator('.house-guide');
   await expect(guide.getByText('Maak één foto per muur.', {exact:true})).toBeVisible();
-  await expect(guide.getByText(/Mijn Huis bewaart één muur tegelijk/)).toBeVisible();
+  await expect(guide.getByText(/Elke muur bewaart zijn eigen foto en lampplaatsingen/)).toBeVisible();
   await guide.locator('summary').click();
   await expect(guide.locator('ol')).toBeHidden();
   await page.locator('#nav-settings').click();
@@ -502,4 +502,35 @@ test('Mijn Huis previews the sweep order and displays the last command result', 
  await expect.poll(() => markers.nth(0).evaluate(marker => marker.style.getPropertyValue('--gradient-preview').replaceAll(' ', ''))).toBe('rgb(75,144,255)');
  await effect.getByRole('button',{name:'Afspelen'}).click();
  await expect(effect.getByText('Kleurverloop klaar')).toBeVisible();
+});
+
+test('Mijn Huis adds walls and switches to the matching photo', async ({page}) => {
+ const first = {revision:'first',photo_version:'photo-one',points:[]};
+ const second = {revision:'second',photo_version:null,points:[]};
+ const walls = [{id:'default',name:''}];
+ await page.route('**/lighting', route => route.fulfill({json:{lights:[],groups:{},scenes:{},connections:{}}}));
+ await page.route('**/lighting/projects/photo?*', route => route.fulfill({contentType:'image/svg+xml',
+  body:'<svg xmlns="http://www.w3.org/2000/svg" width="480" height="240"></svg>'}));
+ await page.route(/\/lighting\/projects(?:\?[^/]*)?$/, route => {
+  let wall = new URL(route.request().url()).searchParams.get('wall') ?? 'default';
+  if (route.request().method() === 'POST') {
+   expect(route.request().postDataJSON()).toEqual({action:'add_wall',name:'Woonkamer'});
+   walls.push({id:'second',name:'Woonkamer'});
+   wall = 'second';
+  }
+  return route.fulfill({json:{wall_id:wall,walls,shows:[],layout:wall === 'default' ? first : second,
+   playback:{state:'idle'}}});
+ });
+ await page.goto('http://127.0.0.1:8765/index.html#mijn-huis');
+ const picker = page.getByRole('combobox',{name:'Muur',exact:true});
+ const photo = page.locator('.house-room-photo');
+ await expect(photo).toBeVisible();
+ await page.getByRole('textbox',{name:'Naam muur'}).fill('Woonkamer');
+ await page.getByRole('button',{name:'Muur toevoegen'}).click();
+ await expect(picker).toHaveValue('second');
+ await expect(photo).toHaveCount(0);
+ await picker.selectOption('default');
+ await expect(photo).toHaveAttribute('src','lighting/projects/photo?v=photo-one');
+ await picker.selectOption('second');
+ await expect(photo).toHaveCount(0);
 });

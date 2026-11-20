@@ -35,7 +35,7 @@ class ProviderStore:
         self.scenes_path=Path(directory)/"lighting-scenes.json"
 
     @staticmethod
-    def read(path, default):
+    def read(path, default, max_size=1_048_576):
         try:
             fd=os.open(path,os.O_RDONLY|os.O_NOFOLLOW)
         except FileNotFoundError:
@@ -43,8 +43,8 @@ class ProviderStore:
         with os.fdopen(fd,"r",encoding="utf-8") as stream:
             if os.fstat(stream.fileno()).st_mode & 0o077:
                 raise PermissionError("Provider configuration permissions too broad")
-            raw=stream.read(1048577)
-            if len(raw)>1048576:
+            raw=stream.read(max_size + 1)
+            if len(raw)>max_size:
                 raise ValueError("Provider configuration too large")
             return json.loads(raw)
 
@@ -87,9 +87,9 @@ class ProviderStore:
         self.write(self.path, validate(data))
 
     @staticmethod
-    def write(path, data):
+    def write(path, data, max_size=1_048_576):
         raw=json.dumps(data,separators=(",",":"))
-        if len(raw)>1048576:
+        if len(raw)>max_size:
             raise ValueError("Provider configuration too large")
         path.parent.mkdir(mode=0o700,parents=True,exist_ok=True)
         fd,tmp=tempfile.mkstemp(dir=path.parent,prefix=".providers-")
