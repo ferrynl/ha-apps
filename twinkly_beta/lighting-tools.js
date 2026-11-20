@@ -1,4 +1,4 @@
-window.createLightingTools = ({mount, api, node, field, language}) => {
+window.createLightingTools = ({mount, house, nav, api, node, field, language, productPhoto}) => {
   const labels = {
     nl: ["Showbouwer", "Shownaam", "Scène", "Wachttijd (sec.)", "Stap toevoegen", "Omhoog", "Omlaag", "Verwijderen", "Opslaan", "Afspelen", "Stoppen", "Maak eerst een scène voor een gemengde groep op Home.", "Stap", "Show klaar", "Show gestopt", "Show onderbroken", "Geen bevestiging", "Spatial Light Studio", "Kies een foto", "Kies een lamp", "Plaats in het midden", "Verwijder plaatsing", "Klik op de foto om de gekozen lamp te plaatsen. Verplaats een markering met de pijltjestoetsen.", "Foto wissen", "Kies een geldige JPG, PNG of WebP van maximaal 15 MB.", "Opslaan op de server is mislukt.", "Shows en foto-indeling staan op je Home Assistant-server. Een show loopt door als je de pagina sluit.", "Groep", "Nieuwe show", "Bewerken", "Definieer minimaal één geldige stap.", "Onbekende lamp", "Locatie", "Foto van de ruimte", "Scène of groep ontbreekt", "Opdrachten gedeeltelijk uitgevoerd"],
     en: ["Show builder", "Show name", "Scene", "Hold (sec.)", "Add step", "Move up", "Move down", "Remove", "Save", "Play", "Stop", "First create a scene for a mixed group on Home.", "Step", "Show complete", "Show stopped", "Show interrupted", "Unconfirmed", "Spatial Light Studio", "Choose a photo", "Choose a light", "Place in the centre", "Remove placement", "Click the photo to place the selected light. Move a marker with the arrow keys.", "Clear photo", "Choose a valid JPG, PNG or WebP up to 15 MB.", "Could not save to the server.", "Shows and photo layouts are saved on your Home Assistant server. Playback continues when you close this page.", "Group", "New show", "Edit", "Add at least one valid step.", "Unknown light", "Position", "Photo of the space", "Scene or group missing", "Some commands did not complete"],
@@ -10,6 +10,12 @@ window.createLightingTools = ({mount, api, node, field, language}) => {
     en: ["Loading projects…", "Could not load projects.", "Import from this browser", "Projects imported.", "The server already has a photo. Your original photo remains in this browser.", "There is a conflict. Reload the edit and try again.", "Stopping show…", "Replace photo? Current light placements will be cleared."],
     de: ["Projekte werden geladen…", "Projekte konnten nicht geladen werden.", "Daten aus diesem Browser importieren", "Projekte importiert.", "Auf dem Server liegt bereits ein Foto. Das alte Foto bleibt in diesem Browser.", "Es gibt einen Konflikt. Lade die Bearbeitung neu und versuche es erneut.", "Show wird gestoppt…", "Foto ersetzen? Die aktuellen Lampenpositionen werden gelöscht."],
     es: ["Cargando proyectos…", "No se pudieron cargar los proyectos.", "Importar desde este navegador", "Proyectos importados.", "Ya hay una foto en el servidor. La foto anterior permanece en este navegador.", "Hay un conflicto. Vuelve a abrir la edición e inténtalo de nuevo.", "Deteniendo el espectáculo…", "¿Sustituir la foto? Se borrarán las posiciones de luces actuales."],
+  };
+  const houseLabels = {
+    nl: ["Mijn Huis", "Lampen", "Grootte", "Nog geen lampen gevonden", "Kies een lamp en tik op de foto om hem te plaatsen. Versleep de lamp om hem te verplaatsen en sleep aan de ronde hoekgreep voor de grootte.", "Geplaatst"],
+    en: ["My Home", "Lights", "Size", "No lights found", "Choose a light and tap the photo to place it. Drag the light to move it and drag its round corner handle to resize it.", "Placed"],
+    de: ["Mein Zuhause", "Lampen", "Größe", "Keine Lampen gefunden", "Wähle eine Lampe und tippe auf das Foto. Ziehe die Lampe zum Verschieben und den runden Eckgriff zum Skalieren.", "Platziert"],
+    es: ["Mi casa", "Luces", "Tamaño", "No hay luces", "Elige una luz y toca la foto para colocarla. Arrastra la luz para moverla y el tirador redondo para cambiar su tamaño.", "Colocada"],
   };
   const showKey = "christmas-mixed-shows-v1";
   const spatialKey = "christmas-spatial-layout-v1";
@@ -23,7 +29,10 @@ window.createLightingTools = ({mount, api, node, field, language}) => {
   spatialStatus.setAttribute("role", "status");
   showSection.append(showStatus);
   spatialSection.append(spatialStatus);
-  mount.append(showSection, spatialSection);
+  const houseTitle = node("h2");
+  houseTitle.id = "house-title";
+  mount.append(showSection);
+  house.append(houseTitle, spatialSection);
 
   function read(key, fallback) {
     try { return JSON.parse(localStorage.getItem(key)) ?? fallback; }
@@ -45,11 +54,14 @@ window.createLightingTools = ({mount, api, node, field, language}) => {
   let reading = false;
   let generation = 0;
   let timer;
+  let activePage;
+  let gesture;
   let photoElement = node("img");
   const syncStatus = node("p");
   syncStatus.setAttribute("role", "status");
   mount.prepend(syncStatus);
   const t = index => (labels[language()] || labels.nl)[index];
+  const h = index => (houseLabels[language()] || houseLabels.nl)[index];
   const msg = index => (serverLabels[language()] || serverLabels.nl)[index];
   const isPlaying = () => ["playing", "stopping"].includes(playback.state);
 
@@ -85,12 +97,12 @@ window.createLightingTools = ({mount, api, node, field, language}) => {
   }
 
   async function refresh() {
-    if (busy || reading || mount.hidden) return;
+    if (busy || reading || gesture || (mount.hidden && house.hidden)) return;
     reading = true;
     const request = generation;
     try {
       const data = await api("lighting/projects");
-      if (request !== generation) return;
+      if (request !== generation || gesture) return;
       if (!initialized || syncStatus.textContent === msg(1)) syncStatus.textContent = "";
       receive(data);
     } catch {
@@ -238,7 +250,7 @@ window.createLightingTools = ({mount, api, node, field, language}) => {
     header.append(node("h3", t(0)));
     if (isPlaying()) header.append(action(t(10), () => change({action: "stop"}, showStatus), playback.state === "stopping"));
     showSection.replaceChildren(header, node("p", t(26)), showStatus, list, form);
-    if (legacyShows.length || legacyLayout.photo) showSection.append(action(msg(2), migrate));
+    if (legacyShows.length || legacyLayout.photo) showSection.append(action(msg(2), () => migrate()));
   }
 
   async function importPhoto(file) {
@@ -268,17 +280,17 @@ window.createLightingTools = ({mount, api, node, field, language}) => {
     }
   }
 
-  async function migrate() {
+  async function migrate(status = showStatus) {
     const body = {action: "import", shows: legacyShows, points: legacyLayout.points || []};
     if (!layout.photoVersion && /^data:image\/jpeg;base64,/.test(legacyLayout.photo || "")) {
       try {
         body.photo = await importPhoto(await (await fetch(legacyLayout.photo)).blob());
       } catch {
-        showStatus.textContent = t(24);
+        status.textContent = t(24);
         return;
       }
     }
-    const data = await change(body, showStatus);
+    const data = await change(body, status);
     if (!data) return;
     if (!legacyLayout.photo || data.imported_photo) {
       legacyLayout = {};
@@ -286,8 +298,9 @@ window.createLightingTools = ({mount, api, node, field, language}) => {
     }
     legacyShows = [];
     try { localStorage.removeItem(showKey); } catch {}
-    showStatus.textContent = legacyLayout.photo ? msg(4) : msg(3);
+    status.textContent = legacyLayout.photo ? msg(4) : msg(3);
     renderShows();
+    renderSpatial();
   }
 
   function updateLayout(points, options = {}, focusId) {
@@ -295,22 +308,122 @@ window.createLightingTools = ({mount, api, node, field, language}) => {
       spatialStatus, focusId);
   }
 
-  function setPosition(id, x, y) {
+  const defaultSize = 12;
+  const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
+
+  function setPosition(id, x, y, size = defaultSize, focusId = id) {
     const points = new Map(layout.points);
-    const clamp = value => Math.max(0, Math.min(100, value));
-    points.set(id, [clamp(x), clamp(y)]);
-    return updateLayout(points, {}, id);
+    points.set(id, [clamp(x, 0, 100), clamp(y, 0, 100), clamp(size, 4, 40)]);
+    return updateLayout(points, {}, focusId);
+  }
+
+  function lampImage(light) {
+    const fallback = () => {
+      const illustration = node("span", "", "house-lamp-art");
+      illustration.setAttribute("aria-hidden", "true");
+      illustration.append(node("span"));
+      return illustration;
+    };
+    const key = productPhoto(light);
+    if (!key) return fallback();
+    const image = node("img", "", "house-lamp-image");
+    image.src = "product-photo/" + encodeURIComponent(key) + "?v=2";
+    image.alt = "";
+    image.draggable = false;
+    image.onerror = () => image.replaceWith(fallback());
+    return image;
+  }
+
+  function lampMarker(photo, light, point) {
+    const [x, y, size = defaultSize] = point;
+    const item = node("div", "", "house-marker");
+    const marker = action("", () => {
+      selected = light.id;
+      renderSpatial(light.id);
+    });
+    marker.className = "house-marker-lamp";
+    marker.append(lampImage(light));
+    marker.setAttribute("aria-label", light.name + " · " + t(32) + " " + Math.round(x) + "%, " + Math.round(y) + "%");
+    marker.setAttribute("aria-pressed", String(light.id === selected));
+    item.classList.toggle("is-selected", light.id === selected);
+    const handle = action("", () => {});
+    handle.type = "button";
+    handle.className = "house-resize-handle";
+    handle.setAttribute("aria-label", h(2) + " · " + light.name);
+    handle.title = h(2);
+    handle.hidden = light.id !== selected;
+    item.classList.toggle("handle-left", x >= 50);
+    item.classList.toggle("handle-top", y >= 50);
+
+    function display(left, top, width) {
+      item.style.left = left + "%";
+      item.style.top = top + "%";
+      item.style.width = width + "%";
+    }
+    display(x, y, size);
+
+    function wire(control, resize) {
+      let moved = false;
+      control.onpointerdown = event => {
+        if (!event.isPrimary || event.button !== 0 || gesture || busy) return;
+        const rect = photo.getBoundingClientRect();
+        if (!rect.width || !rect.height) return;
+        moved = false;
+        const startX = event.clientX, startY = event.clientY;
+        let values = [x, y, size];
+        selected = light.id;
+        gesture = control;
+        control.setPointerCapture(event.pointerId);
+        control.onpointermove = move => {
+          if (gesture !== control || move.pointerId !== event.pointerId) return;
+          const deltaX = move.clientX - startX, deltaY = move.clientY - startY;
+          moved ||= Math.hypot(deltaX, deltaY) > 3;
+          if (!moved) return;
+          values = resize
+            ? [x, y, clamp(size + (x >= 50 ? -2 : 2) * 100 * deltaX / rect.width, 4, 40)]
+            : [clamp(x + 100 * deltaX / rect.width, 0, 100), clamp(y + 100 * deltaY / rect.height, 0, 100), size];
+          display(...values);
+        };
+        const finish = async end => {
+          if (gesture !== control || end.pointerId !== event.pointerId) return;
+          gesture = undefined;
+          if (end.type === "pointerup" && moved) {
+            if (!await setPosition(light.id, ...values)) renderSpatial(light.id);
+          } else if (end.type !== "pointerup") {
+            renderSpatial(light.id);
+          }
+        };
+        control.onpointerup = finish;
+        control.onpointercancel = finish;
+        control.onlostpointercapture = finish;
+      };
+      control.addEventListener("click", event => {
+        if (moved && event.detail) event.stopImmediatePropagation();
+      }, true);
+    }
+    wire(marker, false);
+    wire(handle, true);
+    marker.onkeydown = event => {
+      const nudge = {ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1]}[event.key];
+      if (!nudge) return;
+      event.preventDefault();
+      selected = light.id;
+      setPosition(light.id, x + nudge[0], y + nudge[1], size);
+    };
+    handle.onkeydown = event => {
+      const delta = {ArrowLeft: -1, ArrowDown: -1, ArrowRight: 1, ArrowUp: 1}[event.key];
+      if (!delta) return;
+      event.preventDefault();
+      setPosition(light.id, x, y, size + delta, "resize");
+    };
+    item.append(marker, handle);
+    return {item, marker, handle};
   }
 
   function renderSpatial(focusId) {
-    const lights = (inventory.lights || []).map(light => [light.id, light.name]);
-    const names = new Map(lights);
+    const lights = new Map((inventory.lights || []).map(light => [light.id, light]));
     for (const id of layout.points.keys()) {
-      if (!names.has(id)) {
-        const name = t(31) + " · " + id;
-        lights.push([id, name]);
-        names.set(id, name);
-      }
+      if (!lights.has(id)) lights.set(id, {id, name: t(31) + " · " + id});
     }
     const upload = node("input");
     upload.type = "file";
@@ -336,72 +449,93 @@ window.createLightingTools = ({mount, api, node, field, language}) => {
     };
     const toolbar = node("div", "", "lighting-controls");
     toolbar.append(field(t(18), upload));
+    if (legacyLayout.photo) toolbar.append(action(msg(2), () => migrate(spatialStatus)));
     if (!layout.photoVersion) {
-      spatialSection.replaceChildren(node("h3", t(17)), spatialStatus, toolbar);
+      spatialSection.replaceChildren(spatialStatus, toolbar);
       return;
     }
-    const select = dropdown(lights, selected, t(19));
-    select.onchange = () => { selected = select.value; renderSpatial(); };
     const photo = photoElement;
+    photo.className = "house-room-photo";
     photo.alt = t(33);
     const stage = node("div", "", "lighting-spatial-stage");
     stage.append(photo);
     photo.onclick = event => {
       const rect = photo.getBoundingClientRect();
-      if (selected && names.has(selected)) setPosition(selected,
-        100 * (event.clientX - rect.left) / rect.width, 100 * (event.clientY - rect.top) / rect.height);
+      if (selected && lights.has(selected)) setPosition(selected, 100 * (event.clientX - rect.left) / rect.width,
+        100 * (event.clientY - rect.top) / rect.height, layout.points.get(selected)?.[2]);
     };
-    const markerKeys = {ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1]};
+    const cards = node("div", "", "house-lamp-list");
     let focus;
-    for (const [id, [x, y]] of layout.points) {
-      const name = names.get(id) || t(31);
-      const marker = action(name, () => { selected = id; renderSpatial(id); });
-      marker.className = "lighting-spatial-marker";
-      marker.style.left = x + "%";
-      marker.style.top = y + "%";
-      marker.setAttribute("aria-label", name + " · " + t(32) + " " + Math.round(x) + "%, " + Math.round(y) + "%");
-      marker.setAttribute("aria-pressed", String(id === selected));
-      marker.onkeydown = event => {
-        const offset = markerKeys[event.key];
-        if (!offset) return;
-        event.preventDefault();
-        setPosition(id, x + offset[0], y + offset[1]);
-      };
-      stage.append(marker);
-      if (id === focusId) focus = marker;
+    for (const light of lights.values()) {
+      const point = layout.points.get(light.id);
+      const choose = action("", () => {
+        selected = light.id;
+        renderSpatial("list");
+      });
+      choose.className = "house-lamp-choice";
+      choose.setAttribute("aria-pressed", String(light.id === selected));
+      choose.append(lampImage(light), node("span", light.name));
+      if (point) choose.append(node("small", h(5)));
+      cards.append(choose);
+      if (focusId === "list" && light.id === selected) focus = choose;
+      if (!point) continue;
+      const {item, marker, handle} = lampMarker(photo, light, point);
+      stage.append(item);
+      if (light.id === selected && focusId === "resize") focus = handle;
+      if (light.id === focusId) focus = marker;
     }
-    toolbar.append(field(t(19), select),
-      action(t(20), () => setPosition(selected, 50, 50), !names.has(selected)),
-      action(t(21), () => {
+    if (!lights.size) cards.append(node("p", h(3)));
+    const panel = node("aside", "", "house-lamp-panel");
+    panel.append(node("h3", h(1)), cards);
+    toolbar.append(action(t(23), () => {
+      if (window.confirm(t(23) + "?")) return updateLayout(new Map(), {photo: null});
+    }));
+    const settings = node("div", "", "lighting-controls");
+    const selectedPoint = layout.points.get(selected);
+    if (selectedPoint) {
+      const range = node("input");
+      Object.assign(range, {type: "range", min: 4, max: 40, value: selectedPoint[2] ?? defaultSize});
+      range.onchange = () => setPosition(selected, selectedPoint[0], selectedPoint[1], Number(range.value), "range");
+      settings.append(field(h(2), range), action(t(21), () => {
         const points = new Map(layout.points);
         points.delete(selected);
         return updateLayout(points);
-      }, !layout.points.has(selected)),
-      action(t(23), () => {
-        if (!window.confirm(t(23) + "?")) return;
-        return updateLayout(new Map(), {photo: null});
       }));
-    spatialSection.replaceChildren(node("h3", t(17)), spatialStatus, toolbar, node("p", t(22)), stage);
+      if (focusId === "range") focus = range;
+    } else if (lights.has(selected)) {
+      settings.append(action(t(20), () => setPosition(selected, 50, 50)));
+    }
+    const editor = node("div", "", "house-editor");
+    const canvas = node("div", "", "house-canvas");
+    canvas.append(stage, settings);
+    editor.append(canvas, panel);
+    spatialSection.replaceChildren(toolbar, spatialStatus, node("p", h(4)), editor);
     focus?.focus();
   }
 
-  return (visible, data) => {
-    const opening = mount.hidden && visible;
-    mount.hidden = !visible;
+  return (page, data) => {
+    const visible = page === "home" || page === "house";
+    const opening = visible && page !== activePage;
+    activePage = page;
+    mount.hidden = page !== "home";
+    house.hidden = page !== "house";
+    nav.textContent = houseTitle.textContent = h(0);
+    nav.setAttribute("aria-current", page === "house" ? "page" : "false");
     if (!visible) {
       clearInterval(timer);
       timer = undefined;
       return;
     }
     if (opening) {
+      (page === "house" ? house : mount).append(syncStatus);
       if (!initialized) syncStatus.textContent = msg(0);
       refresh();
-      timer = setInterval(refresh, 1500);
+      timer ??= setInterval(refresh, 1500);
     }
-    if (!data) return;
+    if (!data || gesture) return;
     inventory = data;
     const nextSignature = JSON.stringify([language(), data.groups, data.scenes,
-      (data.lights || []).map(light => [light.id, light.name])]);
+      (data.lights || []).map(light => [light.id, light.name, light.product_code])]);
     if (initialized && signature !== nextSignature) {
       signature = nextSignature;
       renderShows();

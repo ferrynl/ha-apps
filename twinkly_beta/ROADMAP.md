@@ -8,7 +8,7 @@
 - **Testcentrum.** Twinkly-ledmapping, Hue-tests en Govee-LAN-tests. De app leest bij Hue en Govee na afloop de stand opnieuw uit om het herstel te controleren.
 - **Govee-wittemperatuur.** Warm en koel wit bij lampen met een geldige LAN-terugmelding.
 - **Showbouwer.** Maak op Home een reeks opgeslagen scènes voor één gemengde groep, met een wachttijd per stap. Shows worden op de Home Assistant-server bewaard en spelen onafhankelijk van de browser af. Stop een actieve show vanuit elke sessie.
-- **Spatial Light Studio.** Plaats lampen op een eigen 2D-foto. De foto en plaatsingen worden op de Home Assistant-server bewaard en zijn beschikbaar via de app.
+- **Spatial Light Studio.** Open Mijn Huis om lampen op een 2D-foto te plaatsen, te verslepen en groter of kleiner te maken. De foto en plaatsingen worden op de Home Assistant-server bewaard.
 - **Beveiliging.** Netwerkkaart in het Security Center, een Python-lockfile, bijgewerkte afhankelijkheden en een SBOM per bèta-containerarchitectuur. GitHub scant beide containerarchitecturen en maakt per bètaversie een beveiligingsrapport.
 
 ## Open voor stabiel

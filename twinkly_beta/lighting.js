@@ -747,11 +747,14 @@
   }
 
   const renderTools = window.createLightingTools({
-    mount: el("lighting-tools"), api, node, field, language: () => el("language").value,
+    mount: el("lighting-tools"), house: el("house-page"), nav: el("nav-house"), api, node, field,
+    language: () => el("language").value,
+    productPhoto: light => light.provider === "twinkly" && light.product_code
+      ? modelInfo(light.product_code, {}).photo : null,
   });
 
   function render() {
-    renderTools(context === "home", data);
+    renderTools(context, data);
     panel.hidden = !["home", "hue", "govee"].includes(context);
     if (context === "tests") {
       hueTestPanel.render();
@@ -794,7 +797,7 @@
     try {
       await pending;
     } finally {
-      renderTools(context === "home", data);
+      renderTools(context, data);
       const settingsInUse = context === "settings" && settings.querySelector("details[open]");
       const groupInUse = context === "home" && (groupBusy || panel.querySelector(".lighting-group-form:focus-within, .lighting-scene-form:focus-within"));
       if (force || (!settingsInUse && !groupInUse && JSON.stringify(previous) !== JSON.stringify(data))) {
@@ -818,7 +821,7 @@
       loadCollections();
     }
     renderCollections();
-    if (previous !== context && ["home", "hue", "govee", "control", "settings", "tests"].includes(context)) {
+    if (previous !== context && ["home", "house", "hue", "govee", "control", "settings", "tests"].includes(context)) {
       refresh(false).catch(() => { feedback.textContent = t(32); });
     }
   });
@@ -826,7 +829,7 @@
   // The existing studio's first synchronous page event may have fired before this script loaded.
   if (el("nav-home")) showPage();
   setInterval(() => {
-    if (document.hidden || pending || groupBusy || !["home", "hue", "govee", "control"].includes(context)) return;
+    if (document.hidden || pending || groupBusy || !["home", "house", "hue", "govee", "control"].includes(context)) return;
     const mount = context === "control" ? studio : panel;
     if (!mount.contains(document.activeElement) && !mount.querySelector(".lighting-group-form input:checked") &&
         !mount.querySelector("button[data-running]")) refresh(false).catch(() => {});

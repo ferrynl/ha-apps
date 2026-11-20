@@ -67,16 +67,48 @@
 .lighting-show-form > label { display: grid; gap: 4px; }
 .lighting-show-step { grid-template-columns: auto minmax(0, 1fr) minmax(90px, auto) repeat(3, auto); }
 .lighting-show-step input { width: 100%; }
-.lighting-spatial-stage { position: relative; width: fit-content; max-width: 100%; }
-.lighting-spatial-stage img { display: block; max-width: 100%; max-height: 70vh; cursor: crosshair; }
-.lighting-spatial-stage .lighting-spatial-marker {
-  position: absolute; transform: translate(-50%, -50%);
-  min-height: 32px; max-width: min(190px, 42vw); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  background: #202832; border: 2px solid #ffcd82; color: #fff;
-}
-.lighting-spatial-marker[aria-pressed=true] { outline: 2px solid #fff; outline-offset: 1px; }
 @media (max-width: 650px) {
   .lighting-show-step { display: flex; }
   .lighting-show-step label { flex: 1 1 130px; }
 }
-.lighting-spatial-stage { overflow: hidden; }
+
+.house-editor { display: grid; gap: 16px; grid-template-columns: minmax(0, 1fr) minmax(180px, 255px); }
+.house-canvas, .house-lamp-panel { min-width: 0; }
+.house-canvas > .lighting-controls { margin-top: 10px; }
+.lighting-spatial-stage { position: relative; width: fit-content; max-width: 100%; overflow: hidden;
+  background: var(--studio-inset); border-radius: 8px; isolation: isolate; }
+.house-room-photo { display: block; max-width: 100%; max-height: 72vh; cursor: crosshair; }
+.house-lamp-panel { background: var(--studio-inset); border-radius: 8px; padding: 12px; }
+.house-lamp-panel h3 { margin-block: 0 8px; }
+.house-lamp-list { display: grid; gap: 6px; max-height: 64vh; overflow: auto; }
+.house-lamp-choice { display: grid; grid-template-columns: 34px minmax(0, 1fr); align-items: center; gap: 3px 8px;
+  min-width: 0; padding: 5px 8px; text-align: left; overflow-wrap: anywhere; }
+.house-lamp-choice small { grid-column: 2; color: var(--studio-gold); }
+.house-lamp-choice[aria-pressed=true], .house-marker.is-selected .house-marker-lamp { border-color: var(--studio-gold); }
+.house-lamp-image { display: block; width: 100%; height: 100%; object-fit: contain; pointer-events: none; }
+.house-lamp-choice .house-lamp-image { height: 32px; }
+.house-lamp-art { display: grid; place-items: center; width: 100%; aspect-ratio: 1; pointer-events: none; }
+.house-lamp-art > span { position: relative; width: 47%; height: 55%; border-radius: 50% 50% 44% 44%;
+  transform: translateY(-11%); background: radial-gradient(circle at 36% 31%, #fffadb, #ffd17b 70%, #8f672d);
+  box-shadow: 0 0 6px #ffc85b88; }
+.house-lamp-art > span::after { position: absolute; top: 88%; left: 27%; width: 46%; height: 48%;
+  content: ""; border-radius: 0 0 30% 30%; background: repeating-linear-gradient(#aebac2 0 20%, #4a555f 20% 35%); }
+.house-marker { position: absolute; transform: translate(-50%, -50%); aspect-ratio: 1; z-index: 1; }
+.house-marker.is-selected, .house-marker:focus-within { z-index: 2; }
+.house-marker .house-marker-lamp { display: grid; place-items: center; width: 100%; height: 100%;
+  padding: 0; min-height: 0; border: 2px solid #ffffff86; background: #12182187; border-radius: 12%;
+  cursor: grab; touch-action: none; }
+.house-marker-lamp:active { cursor: grabbing; }
+.house-marker .house-resize-handle { position: absolute; right: 0; bottom: 0; width: 32px; min-height: 0;
+  height: 32px; padding: 0; border: 2px solid #1c242e; border-radius: 50%; background: var(--studio-gold);
+  transform: translate(32%, 32%); touch-action: none; cursor: ew-resize; }
+.house-marker .house-resize-handle[hidden] { display: none; }
+.house-resize-handle::after { content: "↔"; font-weight: 700; color: #1c242e; }
+.house-marker.handle-left .house-resize-handle { right: auto; left: 0; transform: translate(-32%, 32%); }
+.house-marker.handle-top .house-resize-handle { bottom: auto; top: 0; transform: translate(32%, -32%); }
+.house-marker.handle-left.handle-top .house-resize-handle { transform: translate(-32%, -32%); }
+@media (max-width: 720px) {
+  .house-editor { grid-template-columns: minmax(0, 1fr); }
+  .house-lamp-panel { grid-row: 1; }
+  .house-lamp-list { grid-template-columns: repeat(2, minmax(0, 1fr)); max-height: 8rem; }
+}

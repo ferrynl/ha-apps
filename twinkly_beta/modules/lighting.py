@@ -52,6 +52,7 @@ class Lighting:
             key = light_key("twinkly", identifier)
             lights[key] = {
                 "id": key, "provider": "twinkly", "name": device.row["name"],
+                "product_code": getattr(device, "product_code", None),
                 "status": "unavailable" if device.offline else ("unknown" if device.mode is None else "online"),
                 "capabilities": {"power": True, "brightness": True, "rgb": True},
                 "state": {"on": None if device.mode is None or device.offline else device.mode != "off",
