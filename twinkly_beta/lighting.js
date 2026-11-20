@@ -749,8 +749,6 @@
   const renderTools = window.createLightingTools({
     mount: el("lighting-tools"), house: el("house-page"), nav: el("nav-house"), api, node, field,
     language: () => el("language").value,
-    productPhoto: light => light.provider === "twinkly" && light.product_code
-      ? modelInfo(light.product_code, {}).photo : null,
   });
 
   function render() {

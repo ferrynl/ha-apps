@@ -72,7 +72,7 @@ class Lighting:
             connections[brand] = [{field: row[field] for field in ("id", "address", "status")} for row in records]
             for row in records:
                 if brand == "govee":
-                    profile = govee_profile({"device": row["id"], "sku": row["id"]}, row.get("report"))
+                    profile = govee_profile({"device": row["id"], "sku": row.get("sku")}, row.get("report"))
                     profiles = [profile]
                 else:
                     profiles = row["lights"]
@@ -85,6 +85,28 @@ class Lighting:
                     lights[key] = {**profile, "provider": brand, "state": state, "id": key, "status": status}
         return lights, connections
 
+    def spatial_groups(self, groups=None):
+        if groups is None:
+            groups = self.store.load_groups()
+        targets = {}
+        display_groups = getattr(self.controller, "display_groups", lambda: {})()
+        ordered = sorted(display_groups.items(), key=lambda item: not (
+            item[0].startswith("native:") or item[1].get("native")
+        ))
+        memberships = set()
+        for key, group in ordered:
+            members = [light_key("twinkly", member) for member in group["members"]]
+            if members:
+                targets[light_key("group", "twinkly:" + key)] = {
+                    "name": group["name"], "members": members, "provider": "twinkly",
+                }
+                memberships.add(frozenset(members))
+        for key, group in (groups or {}).items():
+            members = group["members"]
+            if members and frozenset(members) not in memberships:
+                targets[light_key("group", key)] = {"name": group["name"], "members": members}
+        return targets
+
     async def inventory(self, request):
         lights, connections = await self.lights()
         try:
@@ -96,7 +118,8 @@ class Lighting:
         except ERRORS:
             scenes = None
         return web.json_response({"lights": list(lights.values()), "connections": connections,
-                                  "groups": groups, "scenes": scenes, "music": self.music.status()})
+                                  "groups": groups, "scenes": scenes, "spatial_groups": self.spatial_groups(groups or {}),
+                                  "music": self.music.status()})
 
     async def save_group(self, request):
         try:
@@ -241,6 +264,17 @@ class Lighting:
             if stop.is_set() or key in self.music.members or (self.lamp_test and self.lamp_test.target == key):
                 return "skipped"
             return await self.send(key, light, "color", color)
+
+    async def send_spatial_group_color(self, lights, color, stop):
+        async with self.control_lock:
+            if stop.is_set():
+                return {}
+            async def apply(key, light):
+                if key in self.music.members or (self.lamp_test and self.lamp_test.target == key):
+                    return "skipped"
+                return await self.send(key, light, "color", color)
+            outcomes = await asyncio.gather(*(apply(key, light) for key, light in lights.items()))
+            return dict(zip(lights, outcomes))
 
     async def send(self, key, light, action, value):
         if (not light or not light["capabilities"].get(CAPABILITY[action])

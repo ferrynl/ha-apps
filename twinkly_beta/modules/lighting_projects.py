@@ -59,8 +59,8 @@ def positions(value):
     points = {}
     for key, coordinate in value:
         parts = json.loads(key)
-        if (not isinstance(parts, list) or not parts or parts[0] not in ("twinkly", "hue", "govee")
-                or len(parts) != (2 if parts[0] == "twinkly" else 3)
+        if (not isinstance(parts, list) or not parts or parts[0] not in ("twinkly", "hue", "govee", "group")
+                or len(parts) != (2 if parts[0] in ("twinkly", "group") else 3)
                 or any(not isinstance(part, str) or not 1 <= len(part) <= 128 for part in parts)):
             raise ValueError("Invalid light")
         if (not isinstance(coordinate, list) or len(coordinate) not in (2, 3, 4)
@@ -138,20 +138,41 @@ class Playback:
 
     def start_spatial(self, points, direction, color, delay, end_color=None):
         axis, sign = DIRECTIONS[direction]
-        ordered = sorted(points, key=lambda item: sign * item[1][axis])
-
         async def plan():
             lights, _ = await self.lighting.lights()
+            groups = getattr(self.lighting, "spatial_groups", lambda: {})()
+            owners = {}
+            for group, row in groups.items():
+                for member in row["members"]:
+                    owners.setdefault(member, group)
+            placements = dict(points)
+            for key, point in points:
+                group = owners.get(key)
+                if group is not None:
+                    placements.setdefault(group, point)
+                    placements.pop(key, None)
+
             eligible = []
-            for key, point in ordered:
-                light = lights.get(key)
-                if (light and light["status"] != "unavailable" and light["capabilities"].get("rgb")
-                        and light["state"].get("on") is True):
+            targets = {}
+            claimed = set()
+            for key, point in sorted(placements.items(), key=lambda item: sign * item[1][axis]):
+                members = groups.get(key, {}).get("members", [key])
+                active = {}
+                for member in members:
+                    light = lights.get(member)
+                    if (member not in claimed and light and light["status"] != "unavailable"
+                            and light["capabilities"].get("rgb") and light["state"].get("on") is True):
+                        active[member] = light
+                if active:
+                    claimed.update(active)
                     eligible.append((key, point))
-            return spatial_steps(eligible, lights, axis, sign, color, delay, end_color)
+                    targets[key] = active if key in groups else active[key]
+            return spatial_steps(eligible, targets, axis, sign, color, delay, end_color)
 
         async def apply(step):
             key = step["lamp"]
+            if json.loads(key)[0] == "group":
+                return {key: await self.lighting.send_spatial_group_color(step["light"], step["color"], self.stop)}
             result = await self.lighting.send_spatial_color(key, step["light"], step["color"], self.stop)
             return {key: {"color": result}}
 

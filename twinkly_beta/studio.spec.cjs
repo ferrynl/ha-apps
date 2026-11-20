@@ -396,7 +396,8 @@ test('Mijn Huis saves lamp moves and sizes across browser sessions', async ({bro
   name:'kamer.png', mimeType:'image/png', buffer:Buffer.from(photo,'base64'),
  });
  await house.locator('.house-lamp-choice').filter({hasText:'Twinkly Strings'}).click();
- await expect(house.locator('.house-lamp-choice img')).toHaveAttribute('src',/product-photo\//);
+ await expect(house.locator('.house-lamp-choice .house-art-pixels')).toBeVisible();
+ await expect(house.getByText('TWS500SPP1',{exact:true})).toBeVisible();
  await house.getByRole('button',{name:'Plaats in het midden'}).click();
  const marker = house.locator('.house-marker-lamp');
  const stage = house.locator('.lighting-spatial-stage');
@@ -533,4 +534,28 @@ test('Mijn Huis adds walls and switches to the matching photo', async ({page}) =
  await expect(photo).toHaveAttribute('src','lighting/projects/photo?v=photo-one');
  await picker.selectOption('second');
  await expect(photo).toHaveCount(0);
+});
+
+test('Mijn Huis shows an existing Twinkly group as a single panel and identifies a Hue strip', async ({page}) => {
+ const group = '["group","twinkly:native:wall"]';
+ const members = ['["twinkly","a"]','["twinkly","b"]'];
+ const hue = {id:'["hue","bridge","strip"]',name:'Bureau',product_name:'Hue lightstrip',model:'LST002',archetype:'hue_lightstrip',
+  provider:'hue',status:'online',capabilities:{rgb:true},state:{on:true}};
+ const lights = [hue,...members.map((id,i)=>({id,name:'Losse set '+i,provider:'twinkly',status:'online',
+  capabilities:{rgb:true},state:{on:true}}))];
+ await page.route('**/lighting', route => route.fulfill({json:{lights,groups:{},scenes:{},connections:{},
+  spatial_groups:{[group]:{name:'Kerstmuur',provider:'twinkly',members}}}}));
+ await page.route('**/lighting/projects', route => route.fulfill({json:{
+  shows:[],layout:{revision:'legacy',photo_version:'photo',points:members.map((key,i)=>[key,[20+i*30,60]])},
+  playback:{state:'idle'}
+ }}));
+ await page.route('**/lighting/projects/photo?*', route => route.fulfill({contentType:'image/svg+xml',
+  body:'<svg xmlns="http://www.w3.org/2000/svg" width="480" height="240"></svg>'}));
+ await page.goto('http://127.0.0.1:8765/index.html#mijn-huis');
+ await expect(page.locator('.house-lamp-choice').filter({hasText:'Kerstmuur'}).locator('.house-art-pixels')).toBeVisible();
+ await expect(page.getByText(/Losse set/)).toHaveCount(0);
+ await expect(page.locator('.house-marker')).toHaveCount(1);
+ const strip = page.locator('.house-lamp-choice').filter({hasText:'Bureau'});
+ await expect(strip.getByText('Hue lightstrip · LST002')).toBeVisible();
+ await expect(strip.locator('.house-art-strip')).toBeVisible();
 });

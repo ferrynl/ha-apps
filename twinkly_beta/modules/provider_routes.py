@@ -23,6 +23,7 @@ def install(app, store=None, controller=None):
     store = store or ProviderStore()
     scanners = {"hue": hue_discover, "govee": govee_discover}
     scan_lock = asyncio.Lock()
+    govee_models = {}
     mutation_lock = asyncio.Lock()
     clients = {}
     lighting = None
@@ -57,6 +58,9 @@ def install(app, store=None, controller=None):
         async with scan_lock:
             try:
                 found = await scanners[provider]()
+                if provider == "govee":
+                    govee_models.clear()
+                    govee_models.update({(row["device"], row["ip"]): row["sku"] for row in found})
                 return web.json_response({"devices": found, "verified": False})
             except (OSError, ValueError, TimeoutError):
                 return web.json_response({"error": "discovery_failed"}, status=503)
@@ -74,7 +78,8 @@ def install(app, store=None, controller=None):
             results = []
             for identifier, record in records.items():
                 address = record["address"]
-                row = {"id": identifier, "address": address, "status": "unknown"}
+                row = {"id": identifier, "address": address, "status": "unknown",
+                       "sku": govee_models.get((identifier, address)) or record.get("sku")}
                 if address in found:
                     row["report"] = found[address]
                     row["status"] = "reported"
@@ -121,6 +126,10 @@ def install(app, store=None, controller=None):
                     pin = body["certificate_sha256"]
                     record.update(await pair(address, pin))
                     record["certificate_sha256"] = pin
+                else:
+                    sku = govee_models.get((identifier, address)) or data[provider].get(identifier, {}).get("sku")
+                    if sku:
+                        record["sku"] = sku
                 data[provider][identifier] = record
                 store.save(data)
                 clients.pop((provider, identifier), None)

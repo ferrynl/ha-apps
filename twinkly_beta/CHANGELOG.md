@@ -1,3 +1,8 @@
+## 2.0.0-beta.28
+
+- Mijn Huis toont Twinkly als ledpaneel en gebruikt voor Hue de vorm en het model die de Bridge doorgeeft. Govee toont het model zodra het via LAN is gevonden.
+- Bestaande Twinkly-groepen en gemengde groepen verschijnen op de muurfoto en in de lampenlijst als één object. Kleurvegen en kleurverlopen behandelen de groep als één stap.
+
 ## 2.0.0-beta.27
 
 - Bewaar in **Mijn Huis** tot acht muren met elk een eigen foto, lampplaatsingen en timingcorrecties. Schakel tussen muren om ze apart in te richten of een effect af te spelen.

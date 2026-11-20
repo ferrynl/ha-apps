@@ -229,3 +229,27 @@ class LightingProjectsTest(unittest.IsolatedAsyncioTestCase):
         })
         self.assertEqual((await removed.json())["layout"]["points"], [POINT])
         self.assertEqual((await restarted.get("/lighting/projects/photo", params={"wall": wall})).status, 404)
+
+    async def test_spatial_groups_play_once_with_individual_results_inside_the_group(self):
+        group = '["group","twinkly:native:wall"]'
+        members = ['["twinkly","a"]', '["twinkly","b"]']
+        self.lighting.spatial_groups = lambda: {group: {"name": "Wall", "members": members}}
+        lights = {key: {"status": "online", "capabilities": {"rgb": True}, "state": {"on": True}}
+                  for key in members}
+        self.lighting.lights = AsyncMock(return_value=(lights, {}))
+        self.lighting.send_spatial_group_color = AsyncMock(return_value={key: "accepted" for key in members})
+        initial = await self.change("layout", revision=None, photo=self.image(),
+                                    points=[[members[0], [20, 20]], [members[1], [30, 30]], [group, [40, 40]]])
+        self.assertEqual(initial.status, 200)
+        revision = (await initial.json())["layout"]["revision"]
+        await self.change("spatial", revision=revision, direction="right", color=[255, 0, 0], delay=250)
+        for _ in range(50):
+            status = (await (await self.client.get("/lighting/projects")).json())["playback"]
+            if status["state"] == "complete":
+                break
+            await asyncio.sleep(0.01)
+        self.assertEqual(status["state"], "complete")
+        self.assertEqual(status["total"], 1)
+        self.assertEqual(status["last"]["results"], {group: {key: "accepted" for key in members}})
+        self.lighting.send_spatial_group_color.assert_awaited_once()
+        self.assertEqual(self.lighting.send_spatial_group_color.await_args.args[0], lights)
