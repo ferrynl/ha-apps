@@ -1,3 +1,8 @@
+## 2.0.0-beta.29
+
+- Mijn Huis tekent Twinkly-leds op basis van de echte Twinkly-mapping van de set of groep. Zonder fysieke mapping verschijnt een melding.
+- Open **3D-weergave** om de opgeslagen muurfoto’s en ledposities in kamers te bekijken. Sleep of gebruik de draaiknoppen om rond te kijken en gebruik de schuifregelaar om te zoomen.
+
 ## 2.0.0-beta.28
 
 - Mijn Huis toont Twinkly als ledpaneel en gebruikt voor Hue de vorm en het model die de Bridge doorgeeft. Govee toont het model zodra het via LAN is gevonden.

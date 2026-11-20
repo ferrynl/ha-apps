@@ -1838,6 +1838,7 @@ class Controller:
             raise web.HTTPNotFound()
         ok = await device.run(device.load_layout)
         return web.json_response({"layout": device.layout if ok else None,
+                                  "settings": device.row.get("mapping_override", {}),
                                   "error": None if ok else device.error})
 
     @staticmethod
