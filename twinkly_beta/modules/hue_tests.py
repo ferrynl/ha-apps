@@ -1,6 +1,7 @@
 """Short, reversible Hue tests for the Test Center."""
 import asyncio
 import logging
+import math
 
 from aiohttp import ClientError, web
 
@@ -61,6 +62,40 @@ def test_plan(light, test):
     return [{"on": {"on": True}, **change} for change in changes], restore
 
 
+def matches_snapshot(light, snapshot):
+    if (light.get("on") or {}).get("on") is not snapshot["on"]["on"]:
+        return False
+    if "dimming" in snapshot:
+        actual = (light.get("dimming") or {}).get("brightness")
+        return type(actual) in (int, float) and math.isclose(
+            actual, snapshot["dimming"]["brightness"], rel_tol=0, abs_tol=.5)
+    if "color_temperature" in snapshot:
+        temperature = light.get("color_temperature") or {}
+        actual = temperature.get("mirek")
+        return (temperature.get("mirek_valid") is True and type(actual) is int
+                and abs(actual - snapshot["color_temperature"]["mirek"]) <= 1)
+    if "color" in snapshot:
+        if (light.get("color_temperature") or {}).get("mirek_valid") is True:
+            return False
+        actual = (light.get("color") or {}).get("xy") or {}
+        expected = snapshot["color"]["xy"]
+        return all(type(actual.get(axis)) in (int, float) and math.isclose(
+            actual[axis], expected[axis], rel_tol=0, abs_tol=.005) for axis in ("x", "y"))
+    return True
+
+
+async def confirm_restore(read, snapshot):
+    try:
+        async with asyncio.timeout(3):
+            for _ in range(3):
+                await asyncio.sleep(.3)
+                if matches_snapshot(await read(), snapshot):
+                    return True
+    except ERRORS:
+        pass
+    return False
+
+
 class HueTests:
     def __init__(self):
         self.task = None
@@ -72,12 +107,12 @@ class HueTests:
     def status(self):
         return {"id": self.target, "test": self.test, "result": self.result}
 
-    def start(self, target, test, send, changes, restore):
+    def start(self, target, test, send, read, changes, restore):
         self.target, self.test, self.result = target, test, "running"
         self.wakeup = asyncio.Event()
-        self.task = asyncio.create_task(self.run(send, changes, restore))
+        self.task = asyncio.create_task(self.run(send, read, changes, restore))
 
-    async def run(self, send, changes, restore):
+    async def run(self, send, read, changes, restore):
         result = "restored"
         try:
             async with asyncio.timeout(15):
@@ -98,6 +133,10 @@ class HueTests:
             except ERRORS:
                 LOG.warning("Failed to restore Hue light after test", exc_info=True)
                 result = "restore_failed"
+            else:
+                if not await confirm_restore(read, restore):
+                    LOG.warning("Hue bridge did not confirm the restored state for %s", self.target)
+                    result = "restore_unverified"
             self.result = result
 
     async def stop(self):

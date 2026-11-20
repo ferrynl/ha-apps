@@ -127,7 +127,7 @@ test('Home combines providers and keeps pairing in Settings', async ({page}) => 
   if (route.request().method()==='POST') {
    const {test,id}=route.request().postDataJSON();
    expect(id).toBe('h');
-   hueTest={result:test==='stop'?'restored':'running'};
+   hueTest={result:test==='stop'?'restore_unverified':'running'};
   }
   return route.fulfill({json:hueTest});
  });
@@ -189,7 +189,7 @@ test('Home combines providers and keeps pairing in Settings', async ({page}) => 
  await hueTests.getByRole('button',{name:'Warm/koel wit'}).click();
  await expect(hueTests.getByRole('status')).toHaveText('Hue-test loopt');
  await hueTests.getByRole('button',{name:'Hue-test stoppen'}).click();
- await expect(hueTests.getByRole('status')).toHaveText('Vorige stand hersteld');
+ await expect(hueTests.getByRole('status')).toHaveText('De bridge heeft het herstel van de vorige stand nog niet bevestigd.');
  await page.locator('#nav-govee').click();
  await expect(home.getByText('Strip')).toBeVisible();
  await page.locator('#nav-control').click();

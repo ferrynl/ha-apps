@@ -195,15 +195,19 @@ def install(app, store=None, controller=None):
                     record = store.load()["hue"][bridge]
                     client = adapter("hue", bridge, record)
                     path = "light/" + light_id
-                    resources = await client.request("GET", path)
-                    if not resources or resources[0].get("id") != light_id:
+                    async def read():
+                        resources = await client.request("GET", path)
+                        return resources[0] if resources and resources[0].get("id") == light_id else {}
+
+                    light = await read()
+                    if not light:
                         raise web.HTTPNotFound()
-                    changes, restore = test_plan(resources[0], test)
+                    changes, restore = test_plan(light, test)
 
                     async def apply(change):
                         await client.request("PUT", path, change)
 
-                    hue_tests.start(key, test, apply, changes, restore)
+                    hue_tests.start(key, test, apply, read, changes, restore)
                 return web.json_response(hue_tests.status())
             except (KeyError, TypeError, ValueError):
                 raise web.HTTPBadRequest()

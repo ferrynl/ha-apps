@@ -220,10 +220,15 @@ class LightingTests(unittest.IsolatedAsyncioTestCase):
                                   "mirek_schema": {"mirek_minimum": 153, "mirek_maximum": 500}},
         }
         sent = asyncio.Event()
+        reads = 0
 
         async def hue_request(method, path, body=None):
             self.assertEqual(path, "light/" + self.hue_id)
+            nonlocal reads
             if method == "GET":
+                reads += 1
+                if reads == 2:
+                    return [{**light, "on": {"on": True}}]
                 return [light]
             sent.set()
 
@@ -236,10 +241,18 @@ class LightingTests(unittest.IsolatedAsyncioTestCase):
             await asyncio.wait_for(sent.wait(), 1)
             response = await self.client.post("/lighting/hue-test", json={"test": "stop"})
             self.assertEqual((await response.json())["result"], "restored")
-            self.assertEqual(request.await_args.args[2], {
+            self.assertEqual(request.await_args_list[2].args[2], {
                 "on": {"on": False}, "color_temperature": {"mirek": 300},
             })
-            self.assertEqual(request.await_count, 3)
+            self.assertEqual(request.await_count, 5)
             light["effects"] = {"status": "candle"}
             response = await self.client.post("/lighting/hue-test", json={"test": "power", "id": self.hue})
             self.assertEqual(response.status, 409)
+
+
+    async def test_hue_restore_is_unverified_when_bridge_keeps_reporting_test_state(self):
+        from modules.hue_tests import confirm_restore
+
+        read = AsyncMock(return_value={"on": {"on": True}})
+        self.assertFalse(await confirm_restore(read, {"on": {"on": False}}))
+        self.assertEqual(read.await_count, 3)
