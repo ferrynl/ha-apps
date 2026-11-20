@@ -60,10 +60,11 @@ def positions(value):
                 or len(parts) != (2 if parts[0] == "twinkly" else 3)
                 or any(not isinstance(part, str) or not 1 <= len(part) <= 128 for part in parts)):
             raise ValueError("Invalid light")
-        if (not isinstance(coordinate, list) or len(coordinate) not in (2, 3)
+        if (not isinstance(coordinate, list) or len(coordinate) not in (2, 3, 4)
                 or any(type(n) not in (int, float) or not 0 <= n <= 100 for n in coordinate[:2])
-                or (len(coordinate) == 3 and (type(coordinate[2]) not in (int, float)
-                                             or not 4 <= coordinate[2] <= 40))):
+                or (len(coordinate) >= 3 and (type(coordinate[2]) not in (int, float)
+                                             or not 4 <= coordinate[2] <= 40))
+                or (len(coordinate) == 4 and (type(coordinate[3]) is not int or not 0 <= coordinate[3] <= 1000))):
             raise ValueError("Invalid position")
         points[json.dumps(parts, separators=(",", ":"))] = coordinate
     return list(points.items())
@@ -89,6 +90,33 @@ def show_settings(data):
     return {"name": name.strip(), "group": group, "steps": normalized}
 
 
+def spatial_steps(eligible, lights, axis, sign, color, delay, end_color):
+    if not eligible:
+        return []
+    first = sign * eligible[0][1][axis]
+    distance = sign * eligible[-1][1][axis] - first
+    advances = [point[3] if len(point) == 4 else 0 for _, point in eligible]
+    calibrated = any(advances) or end_color is not None
+    steps = []
+    for index, ((key, point), advance) in enumerate(zip(eligible, advances)):
+        channels = color
+        if end_color is not None and distance:
+            ratio = (sign * point[axis] - first) / distance
+            channels = [int(start + (end - start) * ratio + 0.5) for start, end in zip(color, end_color)]
+            if not any(channels):
+                channels[channels.index(max(channels))] = 1
+        step = {"lamp": key, "light": lights[key], "color": channels, "seconds": delay / 1000}
+        if calibrated:
+            step["due"] = (0 if end_color is not None else index * delay) - advance
+        steps.append(step)
+    if calibrated:
+        steps.sort(key=lambda step: step["due"])
+        earliest = steps[0]["due"]
+        for step in steps:
+            step["due"] = (step["due"] - earliest) / 1000
+    return steps
+
+
 class Playback:
     def __init__(self, lighting):
         self.lighting = lighting
@@ -105,24 +133,27 @@ class Playback:
 
         self.schedule("show", show["steps"], apply, show["id"])
 
-    def start_spatial(self, points, direction, color, delay):
+    def start_spatial(self, points, direction, color, delay, end_color=None):
         axis, sign = DIRECTIONS[direction]
         ordered = sorted(points, key=lambda item: sign * item[1][axis])
 
         async def plan():
             lights, _ = await self.lighting.lights()
-            for key, _ in ordered:
+            eligible = []
+            for key, point in ordered:
                 light = lights.get(key)
                 if (light and light["status"] != "unavailable" and light["capabilities"].get("rgb")
                         and light["state"].get("on") is True):
-                    yield {"lamp": key, "light": light, "seconds": delay / 1000}
+                    eligible.append((key, point))
+            return spatial_steps(eligible, lights, axis, sign, color, delay, end_color)
 
         async def apply(step):
             key = step["lamp"]
-            result = await self.lighting.send_spatial_color(key, step["light"], color, self.stop)
+            result = await self.lighting.send_spatial_color(key, step["light"], step["color"], self.stop)
             return {key: {"color": result}}
 
         self.schedule("spatial", [], apply, prepare=plan)
+        self.status["effect"] = "gradient" if end_color is not None else "sweep"
 
     def schedule(self, kind, steps, apply, identifier=None, prepare=None):
         if self.task is not None:
@@ -136,11 +167,14 @@ class Playback:
         outcome = "complete"
         try:
             if prepare:
-                steps = [step async for step in prepare()]
+                steps = await prepare()
                 self.status["total"] = len(steps)
             succeeded = False
             loop = asyncio.get_running_loop()
+            timeline_start = loop.time()
             for number, step in enumerate(steps, 1):
+                if "due" in step:
+                    await self.wait_until_stopped(timeline_start + step["due"] - loop.time())
                 if self.stop.is_set():
                     break
                 self.status["step"] = number
@@ -158,10 +192,8 @@ class Playback:
                     break
                 if prepare and number == len(steps):
                     break
-                try:
-                    await asyncio.wait_for(self.stop.wait(), step["seconds"])
-                except TimeoutError:
-                    pass
+                if "due" not in step:
+                    await self.wait_until_stopped(step["seconds"])
             if not succeeded:
                 outcome = "failed"
         except (*ERRORS, KeyError, TypeError):
@@ -170,6 +202,13 @@ class Playback:
         finally:
             self.status["state"] = "stopped" if self.stop.is_set() else outcome
             self.task = None
+
+    async def wait_until_stopped(self, seconds):
+        if seconds > 0:
+            try:
+                await asyncio.wait_for(self.stop.wait(), seconds)
+            except TimeoutError:
+                pass
 
     def request_stop(self):
         if self.task is not None:
@@ -294,7 +333,10 @@ def install(app, lighting):
                         raise ValueError("Invalid spatial effect")
                     if body["revision"] != layout["revision"]:
                         raise web.HTTPConflict()
-                    playback.start_spatial(layout["points"], direction, color, delay)
+                    end_color = rgb(body["end_color"]) if "end_color" in body else None
+                    if end_color is not None and not any(end_color):
+                        raise ValueError("Invalid end color")
+                    playback.start_spatial(layout["points"], direction, color, delay, end_color)
                     return response(data)
                 elif action == "stop":
                     playback.request_stop()

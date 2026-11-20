@@ -1,3 +1,8 @@
+## 2.0.0-beta.25
+
+- Kies in **Mijn Huis** een kleurverloop met een begin- en eindkleur. De lampposities bepalen de tussenkleuren. Bekijk ze vooraf op de foto.
+- Stel per geplaatste lamp een timingcorrectie van 0 tot 1000 ms in. De app bewaart die op de server en stuurt bij kleurvegen en kleurverlopen de opdracht voor die lamp eerder.
+
 ## 2.0.0-beta.24
 
 - Speel in **Mijn Huis** een kleurveeg af op basis van de lampposities. Kies een richting, kleur en pauze. RGB-lampen met een bekende aan-stand doen mee en behouden de gekozen kleur.

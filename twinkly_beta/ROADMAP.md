@@ -8,13 +8,13 @@
 - **Testcentrum.** Twinkly-ledmapping, Hue-tests en Govee-LAN-tests. De app leest bij Hue en Govee na afloop de stand opnieuw uit om het herstel te controleren.
 - **Govee-wittemperatuur.** Warm en koel wit bij lampen met een geldige LAN-terugmelding.
 - **Showbouwer.** Maak op Home een reeks opgeslagen scènes voor één gemengde groep, met een wachttijd per stap. Shows worden op de Home Assistant-server bewaard en spelen onafhankelijk van de browser af. Stop een actieve show vanuit elke sessie.
-- **Spatial Light Studio.** Open Mijn Huis om lampen op een 2D-foto te plaatsen, te verslepen en groter of kleiner te maken. De foto en plaatsingen worden op de Home Assistant-server bewaard. Speel een kleurveeg in vier richtingen en toon vooraf de lampvolgorde.
+- **Spatial Light Studio.** Open Mijn Huis om lampen op een 2D-foto te plaatsen, te verslepen en groter of kleiner te maken. De foto en plaatsingen worden op de Home Assistant-server bewaard. Speel een kleurveeg of kleurverloop in vier richtingen en bekijk het effect vooraf op de foto. Geef trager reagerende lampen per lamp een handmatige timingcorrectie.
 - **Beveiliging.** Netwerkkaart in het Security Center, een Python-lockfile, bijgewerkte afhankelijkheden en een SBOM per bèta-containerarchitectuur. GitHub scant beide containerarchitecturen en maakt per bètaversie een beveiligingsrapport.
 
 ## Open voor stabiel
 - **Philips Hue.** Realtime effecten via Hue Entertainment.
 - **Govee.** Ondersteuning per model verder uitwerken, inclusief scènes, segmenten en de optionele officiële cloud-API.
-- **Spatial Light Studio.** Meer effecten op basis van gedeelde coördinaten en vertragingskalibratie. Een 3D-weergave is optioneel.
+- **Spatial Light Studio.** Meer effecten op basis van gedeelde coördinaten en praktijktests voor de timingcorrectie. Een 3D-weergave is optioneel.
 - **Security Center.** Aikido-audit voor stabiel.
 - **Praktijktests.** Hue-tests zijn in de praktijk bevestigd. De Twinkly-muur, Govee en werking, timing en herstel van gemengde groepen staan nog op de testlijst.
 

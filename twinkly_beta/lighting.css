@@ -123,3 +123,7 @@
   background: #272016; color: #fff2d7; border: 1px solid #f7cd84; border-radius: 20px;
   font-size: 12px; font-weight: 700; pointer-events: none;
 }
+
+.house-marker[data-order]::before { box-shadow: 0 0 0 3px var(--gradient-preview, transparent); }
+.house-effects label[hidden] { display: none; }
+.house-canvas input[type=number] { width: 6rem; }
