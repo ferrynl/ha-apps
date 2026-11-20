@@ -171,7 +171,8 @@ def install(app, store=None, controller=None):
             identifier = body["bridge"]
             async with (lighting.control_lock if lighting else collection_lock):
                 if lighting:
-                    active = lighting.music.members | {lamp_test.target}
+                    testing = lamp_test.task is not None and not lamp_test.task.done()
+                    active = lighting.music.members | ({lamp_test.target} if testing else set())
                     if any(key and json.loads(key)[:2] == ["hue", identifier] for key in active):
                         return web.json_response({"error": "hue_bridge_busy"}, status=409)
                 async with mutation_lock:
