@@ -13,6 +13,7 @@ from .common import lan_ip
 from .hue_discovery import discover as hue_discover
 from .govee_discovery import discover as govee_discover, statuses as govee_statuses
 from .lighting import Lighting
+from .lighting_projects import install as install_projects
 from .hue_scene_images import install as install_hue_scene_images, scene_image_path
 from .hue_tests import LampTest, TESTS as HUE_TESTS, test_plan as hue_test_plan
 from . import govee_tests
@@ -308,3 +309,4 @@ def install(app, store=None, controller=None):
         app.router.add_get("/lighting/{brand:hue|govee}-test", lamp_test_status)
         app.router.add_post("/lighting/{brand:hue|govee}-test", lamp_test_control)
         app.cleanup_ctx.append(lighting.music_cleanup)
+        install_projects(app, lighting)
