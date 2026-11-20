@@ -1,3 +1,7 @@
+## 2.0.0-beta.26
+
+- Lees in **Mijn Huis** hoe je per muur één foto maakt, de lampen plaatst en een effect vooraf bekijkt. De handleiding legt uit wat er gebeurt als je de foto vervangt.
+
 ## 2.0.0-beta.25
 
 - Kies in **Mijn Huis** een kleurverloop met een begin- en eindkleur. De lampposities bepalen de tussenkleuren. Bekijk ze vooraf op de foto.

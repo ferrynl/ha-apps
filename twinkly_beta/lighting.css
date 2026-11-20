@@ -127,3 +127,9 @@
 .house-marker[data-order]::before { box-shadow: 0 0 0 3px var(--gradient-preview, transparent); }
 .house-effects label[hidden] { display: none; }
 .house-canvas input[type=number] { width: 6rem; }
+
+.house-guide { margin-block: 0 1rem; padding: .75rem 1rem; border: 1px solid var(--studio-line); border-radius: 8px; }
+.house-guide summary { font-weight: 700; cursor: pointer; }
+.house-guide ol { padding-inline-start: 1.35rem; margin-block: .65rem; }
+.house-guide li + li { margin-block-start: .35rem; }
+.house-guide p { margin-block: .65rem 0; }
