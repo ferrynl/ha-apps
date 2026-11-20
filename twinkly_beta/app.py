@@ -4,7 +4,7 @@ import base64
 import bisect
 import hashlib
 import uuid
-import xml.etree.ElementTree as ET
+import tempfile
 import colorsys
 import math
 import os
@@ -55,8 +55,7 @@ MATRIX_ID = re.compile(r"(?:winter|festive|neon|ocean|gold|cosmic|tropical|retro
 GIF_LIMIT = 512 * 1024
 GIF_ID = re.compile(r"[a-f0-9]{12}-[a-zA-Z0-9_-]{1,48}")
 PRODUCT_PHOTOS = Path(__file__).resolve().with_name("product_photos")
-WORDMARK = DATA.with_name("twinkly-wordmark.svg")
-WORDMARK_URL = "https://twinkly.com/cdn/shop/files/Twinkly_Logo_White.svg"
+WORDMARK = Path(__file__).resolve().with_name("twinkly-nav-logo.svg")
 PRODUCT_PHOTO_KEYS = frozenset({
     "c9-bulbs",
     "cluster-gold-silver",
@@ -102,6 +101,38 @@ MAX_SAVED_GROUPS = 40
 MAX_SAVED_SCENES = 40
 MUSIC_STYLES = frozenset(('energy', 'spectrum', 'power', 'wavelength', 'strobe', 'scroll', 'bands', 'blade_power_plus', 'magnitude', 'fire', 'rain', 'melt', 'melt_and_sparkle', 'scan', 'water', 'energy2', 'bar', 'blocks', 'equalizer', 'lava_lamp', 'pitchSpectrum', 'scan_multi', 'scan_and_flare', 'scroll_plus', 'vumeter', 'multiBar'))
 LOG = logging.getLogger("twinkly")
+
+
+def asset_path(directory, filename):
+    """Accept only a direct child of the configured asset directory."""
+    if filename in ("", ".", "..") or Path(filename).name != filename:
+        raise web.HTTPNotFound()
+    path = directory / filename
+    if directory.is_symlink() or path.is_symlink():
+        raise web.HTTPNotFound()
+    return path
+
+
+def gif_asset(directory, identifier, pattern):
+    if not pattern.fullmatch(identifier):
+        raise web.HTTPNotFound()
+    return asset_path(directory, identifier + ".gif")
+
+
+def write_asset(path, data):
+    """Replace the asset atomically without writing through a temporary symlink."""
+    with tempfile.NamedTemporaryFile(dir=path.parent, delete=False) as stream:
+        temporary = Path(stream.name)
+        try:
+            stream.write(data)
+            stream.close()
+            temporary.replace(path)
+        finally:
+            temporary.unlink(missing_ok=True)
+
+
+async def health(request):
+    return web.Response(text="OK", headers={"Cache-Control": "no-store"})
 
 
 def local_ip(value):
@@ -720,7 +751,6 @@ class Controller:
         self.active_style = (json.loads(MUSIC_STATE.read_text(encoding='utf-8')).get('style')
                              if MUSIC_STATE.is_file() else None)
         self.gif_capture = asyncio.Lock()
-        self.photo_lock = asyncio.Lock()
         self.track_lock = asyncio.Lock()
         self.media_player = (json.loads(TV_STATE.read_text(encoding='utf-8')).get('player', '')
                              if TV_STATE.exists() else options.get('media_player', '').strip())
@@ -1511,13 +1541,13 @@ class Controller:
     @staticmethod
     def image_path(key, kind, index):
         fingerprint = hashlib.sha256(f"{key}/{kind}/{index}".encode()).hexdigest()
-        return IMAGES / (fingerprint + ".jpg")
+        return asset_path(IMAGES, fingerprint + ".jpg")
 
     @staticmethod
     def effect_gif_path(key, entry):
         identity = entry.get("unique_id") or (entry["id"], entry["name"])
         fingerprint = hashlib.sha256(json.dumps([key, entry["kind"], identity]).encode()).hexdigest()
-        return IMAGES / (fingerprint + ".gif")
+        return asset_path(IMAGES, fingerprint + ".gif")
 
     @staticmethod
     def bundled_effect_image(entry):
@@ -1527,30 +1557,10 @@ class Controller:
         filename = BUNDLED_EFFECT_PREVIEWS.get(" ".join(name.casefold().split()))
         if filename is None:
             return None
-        path = EFFECT_PREVIEWS / filename
+        path = asset_path(EFFECT_PREVIEWS, filename)
         return path if path.is_file() else None
 
     async def twinkly_wordmark(self, request):
-        if not WORDMARK.is_file():
-            async with self.photo_lock:
-                if not WORDMARK.is_file():
-                    try:
-                        async with ClientSession(timeout=ClientTimeout(total=8)) as session:
-                            async with session.get(WORDMARK_URL, allow_redirects=False) as response:
-                                response.raise_for_status()
-                                raw = bytearray()
-                                async for chunk in response.content.iter_chunked(8192):
-                                    raw.extend(chunk)
-                                    if len(raw) > 256_000:
-                                        raise ValueError("Twinkly SVG too large")
-                        if b"<!DOCTYPE" in raw.upper() or ET.fromstring(raw).tag != "{http://www.w3.org/2000/svg}svg":
-                            raise ValueError("Invalid Twinkly SVG")
-                        temp = WORDMARK.with_suffix(".tmp")
-                        temp.write_bytes(raw)
-                        temp.replace(WORDMARK)
-                    except (ClientError, TimeoutError, ValueError, OSError, ET.ParseError) as exc:
-                        LOG.warning("Twinkly wordmark: %s", exc)
-                        raise web.HTTPBadGateway() from exc
         return web.FileResponse(WORDMARK, headers={
             "Content-Type": "image/svg+xml",
             "Cache-Control": "private, max-age=86400",
@@ -1562,7 +1572,7 @@ class Controller:
         key = request.match_info["key"]
         if key not in PRODUCT_PHOTO_KEYS:
             raise web.HTTPNotFound()
-        path = PRODUCT_PHOTOS / (key + ".png")
+        path = asset_path(PRODUCT_PHOTOS, key + ".png")
         if not path.is_file():
             raise web.HTTPNotFound()
         return web.FileResponse(path, headers={"Cache-Control": "private, max-age=86400",
@@ -1610,9 +1620,7 @@ class Controller:
         except (ValueError, TypeError, OSError, SyntaxError, Image.DecompressionBombError) as exc:
             raise web.HTTPBadRequest() from exc
         IMAGES.mkdir(exist_ok=True)
-        temp = path.with_suffix(".tmp")
-        temp.write_bytes(raw)
-        temp.replace(path)
+        write_asset(path, raw)
         previous.unlink(missing_ok=True)
         return web.json_response({"ok": True})
 
@@ -1679,11 +1687,11 @@ class Controller:
             if action == "pattern":
                 if value.startswith(("gif:", "matrix:")) and value not in self.gif_patterns:
                     kind, gif_id = value.split(":", 1)
-                    root = MATRIX_GIFS if kind == "matrix" else GIF_LIBRARY
+                    root, pattern = (MATRIX_GIFS, MATRIX_ID) if kind == "matrix" else (GIF_LIBRARY, GIF_ID)
                     try:
                         self.gif_patterns[value] = await asyncio.to_thread(
-                            self.decode_gif, (root / (gif_id + ".gif")).read_bytes(), kind == "matrix")
-                    except (OSError, ValueError) as exc:
+                            self.decode_gif, gif_asset(root, gif_id, pattern).read_bytes(), kind == "matrix")
+                    except (OSError, ValueError, web.HTTPNotFound) as exc:
                         raise web.HTTPBadRequest(text="GIF unavailable") from exc
                 self.music.difference_update(keys)
                 self.patterns.update(dict.fromkeys(keys, value))
@@ -2091,15 +2099,17 @@ class Controller:
 
     async def matrix_gif(self, request):
         key = request.match_info["id"]
-        if not MATRIX_ID.fullmatch(key):
-            raise web.HTTPNotFound()
-        return web.FileResponse(MATRIX_GIFS / (key + ".gif"), headers={
+        path = gif_asset(MATRIX_GIFS, key, MATRIX_ID)
+        return web.FileResponse(path, headers={
             "Content-Type": "image/gif", "X-Content-Type-Options": "nosniff",
         })
 
     async def list_gifs(self, request):
+        if GIF_LIBRARY.is_symlink():
+            raise web.HTTPNotFound()
         entries = [{"id": path.stem, "name": path.stem.split("-", 1)[1].replace("_", " ")}
-                   for path in sorted(GIF_LIBRARY.glob("*.gif")) if GIF_ID.fullmatch(path.stem)]
+                   for path in sorted(GIF_LIBRARY.glob("*.gif"))
+                   if GIF_ID.fullmatch(path.stem) and not path.is_symlink() and path.is_file()]
         return web.json_response({"gifs": entries}, headers={"Cache-Control": "no-store"})
 
     async def download_giphy(self, gif_id):
@@ -2134,7 +2144,7 @@ class Controller:
             async with self.edit, self.gif_library_lock:
                 if "gif:" + gif_id in self.patterns.values():
                     raise web.HTTPConflict(text="Stop the GIF before deleting it")
-                (GIF_LIBRARY / (gif_id + ".gif")).unlink(missing_ok=True)
+                gif_asset(GIF_LIBRARY, gif_id, GIF_ID).unlink(missing_ok=True)
                 self.gif_patterns.pop("gif:" + gif_id, None)
             return web.json_response({"ok": True})
         name = data.get("name")
@@ -2156,22 +2166,18 @@ class Controller:
             raise web.HTTPBadRequest(text="Invalid GIF, or limits exceeded") from exc
         gif_id = hashlib.sha256(raw).hexdigest()[:12] + "-" + slug
         async with self.gif_library_lock:
+            path = gif_asset(GIF_LIBRARY, gif_id, GIF_ID)
             GIF_LIBRARY.mkdir(exist_ok=True)
-            path = GIF_LIBRARY / (gif_id + ".gif")
             if not path.is_file():
                 if sum(1 for _ in GIF_LIBRARY.glob("*.gif")) >= 30:
                     raise web.HTTPConflict(text="GIF library is full")
-                temp = path.with_suffix(".tmp")
-                temp.write_bytes(raw)
-                temp.replace(path)
+                write_asset(path, raw)
             self.gif_patterns["gif:" + gif_id] = decoded
         return web.json_response({"id": gif_id})
 
     async def gif_file(self, request):
         gif_id = request.match_info["id"]
-        if not GIF_ID.fullmatch(gif_id):
-            raise web.HTTPNotFound()
-        path = GIF_LIBRARY / (gif_id + ".gif")
+        path = gif_asset(GIF_LIBRARY, gif_id, GIF_ID)
         if not path.is_file():
             raise web.HTTPNotFound()
         return web.FileResponse(path, headers={"Content-Type": "image/gif", "X-Content-Type-Options": "nosniff"})
@@ -2321,8 +2327,8 @@ class Controller:
                 temp.write_text(json.dumps({'style': active_style}), encoding='utf-8')
                 temp.replace(MUSIC_STATE)
             except (ClientError, TimeoutError, ValueError, KeyError, OSError) as exc:
-                LOG.warning("LedFX setup: %s", exc)
-                return web.json_response({"message": f"LedFX koppelen mislukt: {exc or type(exc).__name__}"})
+                LOG.warning("LedFX setup failed: %s", type(exc).__name__)
+                return web.json_response({"ok": False, "message": "LedFX koppelen mislukt. Controleer LedFX en Music Assistant."})
         return web.json_response({
             "ok": True,
             "message": "LedFX ingesteld. Voeg LedFx Twinkly toe aan de afspeelgroep in Music Assistant en start muziek."
@@ -2351,6 +2357,7 @@ class Controller:
             "index.html", headers={"Cache-Control": "no-store"}))
         app.router.add_get("/twinkly.svg", lambda _: web.FileResponse("twinkly.svg"))
         app.router.add_get("/twinkly-wordmark.svg", self.twinkly_wordmark)
+        app.router.add_get("/healthz", health)
         app.router.add_get("/status", self.status)
         app.router.add_get("/network", self.network)
         app.router.add_post("/network/groups/name", self.rename_network_group)
@@ -2411,8 +2418,7 @@ async def configure_ledfx(session, style=None):
         async with session.request(method, "/api" + path, json=body, allow_redirects=False) as response:
             data = await response.json()
             if response.status >= 300 or data.get("status") in ("failed", "error"):
-                reason = data.get("payload", {}).get("reason", f"HTTP {response.status}")
-                raise ValueError(f"{path}: {reason}")
+                raise ValueError(f"LedFX weigerde de opdracht (HTTP {response.status}).")
             return data
 
     server_id = "twinkly-music"
@@ -2456,6 +2462,10 @@ async def configure_ledfx(session, style=None):
 
 @web.middleware
 async def ingress_only(request, handler):
+    if request.path == "/healthz":
+        if request.remote != "127.0.0.1":
+            raise web.HTTPForbidden()
+        return await handler(request)
     if request.remote != "172.30.32.2":
         raise web.HTTPForbidden()
     if request.method == "POST" and request.content_type != "application/json":
