@@ -494,7 +494,7 @@ test('Mijn Huis previews the sweep order and displays the last command result', 
  useGradient = true;
  await effect.getByLabel('Effect', {exact:true}).selectOption('gradient');
  await expect(effect.getByLabel('Eindkleur')).toBeVisible();
- await expect(markers.nth(0)).toHaveCSS('--gradient-preview','rgb(75,144,255)');
+ await expect.poll(() => markers.nth(0).evaluate(marker => marker.style.getPropertyValue('--gradient-preview').replaceAll(' ', ''))).toBe('rgb(75,144,255)');
  await effect.getByRole('button',{name:'Afspelen'}).click();
  await expect(effect.getByText('Kleurverloop klaar')).toBeVisible();
 });

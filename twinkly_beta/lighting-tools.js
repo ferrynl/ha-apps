@@ -474,6 +474,7 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, pr
     const section = node("section", "", "house-effects");
     const controls = node("div", "", "lighting-controls");
     const mode = dropdown([["sweep", e(0)], ["gradient", g(1)]], sweep.mode);
+    mode.setAttribute("aria-label", g(0));
     const direction = dropdown(Object.keys(directions).map((key, index) => [key, e(index + 2)]), sweep.direction);
     const speed = node("input");
     Object.assign(speed, {type: "number", min: 250, max: 2000, step: 50, required: true, value: sweep.delay});
