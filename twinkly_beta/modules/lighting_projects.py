@@ -309,6 +309,18 @@ def install(app, lighting):
         except (ValueError, OSError):
             raise web.HTTPServiceUnavailable()
 
+    async def overview(request):
+        try:
+            data = await current()
+            result = []
+            for wall_id in (DEFAULT_WALL, *data["walls"]):
+                layout = wall_layout(data, wall_id)
+                result.append({"id": wall_id, "name": layout.get("name", ""),
+                               "photo_version": layout["photo_version"], "points": layout["points"]})
+            return web.json_response({"walls": result}, headers=HEADERS)
+        except (ValueError, OSError):
+            raise web.HTTPServiceUnavailable()
+
     async def photo(request):
         try:
             layout = wall_layout(await current(), request.query.get("wall", DEFAULT_WALL))
@@ -431,4 +443,5 @@ def install(app, lighting):
     app.router.add_get("/lighting/projects", get)
     app.router.add_post("/lighting/projects", change)
     app.router.add_get("/lighting/projects/photo", photo)
+    app.router.add_get("/lighting/projects/overview", overview)
     app.cleanup_ctx.append(playback.cleanup)

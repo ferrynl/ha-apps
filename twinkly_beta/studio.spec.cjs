@@ -396,7 +396,7 @@ test('Mijn Huis saves lamp moves and sizes across browser sessions', async ({bro
   name:'kamer.png', mimeType:'image/png', buffer:Buffer.from(photo,'base64'),
  });
  await house.locator('.house-lamp-choice').filter({hasText:'Twinkly Strings'}).click();
- await expect(house.locator('.house-lamp-choice .house-art-pixels')).toBeVisible();
+ await expect(house.locator('.house-lamp-choice .house-led-map canvas')).toBeVisible();
  await expect(house.getByText('TWS500SPP1',{exact:true})).toBeVisible();
  await house.getByRole('button',{name:'Plaats in het midden'}).click();
  const marker = house.locator('.house-marker-lamp');
@@ -551,11 +551,35 @@ test('Mijn Huis shows an existing Twinkly group as a single panel and identifies
  }}));
  await page.route('**/lighting/projects/photo?*', route => route.fulfill({contentType:'image/svg+xml',
   body:'<svg xmlns="http://www.w3.org/2000/svg" width="480" height="240"></svg>'}));
+ await page.route('**/group-layout?id=native%3Awall', route => route.fulfill({json:{
+  members:[{points:[[0,0,0],[0,1,0]]},{points:[[1,1,0]]}]
+ }}));
+ await page.route('**/lighting/projects/overview', route => route.fulfill({json:{walls:[
+  {id:'default',name:'Voorwand',photo_version:'first',points:[[group,[50,50,20]]]},
+  {id:'north',name:'Zijwand',photo_version:'second',points:[]}
+ ]}}));
  await page.goto('http://127.0.0.1:8765/index.html#mijn-huis');
- await expect(page.locator('.house-lamp-choice').filter({hasText:'Kerstmuur'}).locator('.house-art-pixels')).toBeVisible();
+ const mapped = page.locator('.house-lamp-choice').filter({hasText:'Kerstmuur'}).locator('.house-led-map');
+ await expect(mapped).toHaveAttribute('data-led-count','3');
+ const samples = await mapped.locator('canvas').evaluate(canvas => {
+  const ctx = canvas.getContext('2d');
+  return [[8,8],[152,152],[152,8]].map(([x,y])=>ctx.getImageData(x,y,1,1).data[3]);
+ });
+ expect(samples).toEqual([255,255,0]);
  await expect(page.getByText(/Losse set/)).toHaveCount(0);
  await expect(page.locator('.house-marker')).toHaveCount(1);
  const strip = page.locator('.house-lamp-choice').filter({hasText:'Bureau'});
  await expect(strip.getByText('Hue lightstrip · LST002')).toBeVisible();
  await expect(strip.locator('.house-art-strip')).toBeVisible();
+ await page.getByRole('button',{name:'3D-weergave',exact:true}).click();
+ const scene = page.locator('.house-3d-scene');
+ await expect(scene.locator('.house-3d-wall')).toHaveCount(2);
+ await expect(scene.locator('.house-led-map')).toHaveAttribute('data-led-count','3');
+ const world = scene.locator('.house-3d-world');
+ const before = await world.evaluate(element=>element.style.transform);
+ await page.getByRole('button',{name:'Rechts draaien'}).click();
+ await expect.poll(()=>world.evaluate(element=>element.style.transform)).not.toBe(before);
+ await scene.focus();
+ await scene.press('ArrowUp');
+ await expect.poll(()=>world.evaluate(element=>element.style.transform)).toContain('rotateX(-27deg)');
 });
