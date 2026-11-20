@@ -109,7 +109,11 @@ test('Home combines providers and keeps pairing in Settings', async ({page}) => 
   return route.fulfill({json:{results:{t:'accepted',h:'skipped',g:'unconfirmed'}}});
  });
  await page.route('**/lighting/music', route => {
-  const {group,stop}=route.request().postDataJSON();
+  const {group,stop,level}=route.request().postDataJSON();
+  if (level) {
+   music.level=level;
+   return route.fulfill({json:{...music,results:{h:'accepted'}}});
+  }
   music={group:stop?null:group,live:!stop,timings:{hue:{frame_age_ms:40,command_ms:90,failed:0}}};
   return route.fulfill({json:{...music,eligible:['t','h'],skipped:['g']}});
  });
@@ -177,6 +181,9 @@ test('Home combines providers and keeps pairing in Settings', async ({page}) => 
  await group.getByRole('button',{name:'Muziek starten'}).click();
  await expect(group.getByText('LedFX actief')).toBeVisible();
  await expect(group.getByText(/Frameleeftijd: 40 ms.*Opdrachtduur: 90 ms/)).toBeVisible();
+ const master = group.getByRole('slider',{name:'Masterfader muziek'});
+ await master.fill('45');
+ await expect.poll(() => music.level).toBe(45);
  await group.getByRole('button',{name:'Muziek stoppen'}).click();
  await expect(group.getByRole('button',{name:'Muziek starten'})).toBeVisible();
  const sceneForm=home.locator('.lighting-scene-form');
@@ -271,11 +278,19 @@ test('the footer opens the matching release and the Matter roadmap on mobile', a
 
 test('Hue rooms and zones retain their own controls and Bridge scenes', async ({page}) => {
  const requests = [];
+ let cover = null;
+ await page.route('**/providers/hue/scene-image/hue-a/scene-one*', route => {
+  if (route.request().method() === 'POST') {
+   cover = route.request().postDataJSON().image;
+   return route.fulfill({json:{ok:true}});
+  }
+  return route.fulfill({body:Buffer.from(cover,'base64'),contentType:'image/jpeg'});
+ });
  await page.route('**/lighting', route => route.fulfill({json:{lights:[], groups:{}, scenes:{}, bridges:{}}}));
  await page.route('**/providers/hue/collections', route => route.fulfill({json:{bridges:[
   {id:'hue-a', address:'192.168.1.2', status:'online', collections:[
    {kind:'room', name:'Woonkamer', grouped_light:'room-control', on:false, brightness:44,
-    scenes:[{id:'scene-one', name:'Avondlicht'}]},
+    scenes:[{id:'scene-one', name:'Avondlicht', has_image:!!cover, palette:[[255,0,0],[255,100,0]]}]},
    {kind:'zone', name:'Kersthoek', grouped_light:'zone-control', on:true, brightness:null, scenes:[]},
   ]},
   {id:'hue-b', address:'192.168.1.3', status:'unavailable', collections:[]},
@@ -303,5 +318,14 @@ test('Hue rooms and zones retain their own controls and Bridge scenes', async ({
   {bridge:'hue-a', id:'zone-control', action:'power', value:false},
   {bridge:'hue-a', id:'scene-one', action:'recall'},
  ]);
+ const png = await page.evaluate(() => document.createElement('canvas').toDataURL().split(',')[1]);
+ await room.getByLabel('Afbeelding kiezen · Avondlicht').setInputFiles({
+  name:'avondlicht.png', mimeType:'image/png', buffer:Buffer.from(png,'base64'),
+ });
+ const image = room.locator('.hue-scene-cover img');
+ await expect(image).toBeVisible();
+ await expect.poll(() => image.evaluate(img => img.complete && img.naturalWidth > 0)).toBe(true);
+ await room.getByRole('button',{name:'Afbeelding verwijderen · Avondlicht'}).click();
+ await expect(image).toHaveCount(0);
  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBeTruthy();
 });

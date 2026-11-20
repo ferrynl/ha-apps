@@ -700,6 +700,7 @@ class Controller:
         self.native_group_names = (json.loads(self.native_group_names_path.read_text(encoding="utf-8"))
                                    if self.native_group_names_path.exists() else {})
         self.music = set()
+        self.mixed_music_levels = {}
         self.patterns = {}
         self.group_routes = {}
         self.physical_tests = {}
@@ -1026,7 +1027,9 @@ class Controller:
                     await device.run(device.send, self.dim_frame(frame, level), self.group_routes.get(key), automatic=True)
                 elif active:
                     fade_started = None
-                    frame = self.dim_frame(self.ddp.frame, self.show["master"] * self.sequence_devices.get(key, 100) // 100)
+                    level = (self.show["master"] * self.sequence_devices.get(key, 100)
+                             * self.mixed_music_levels.get(key, 100) // 10000)
+                    frame = self.dim_frame(self.ddp.frame, level)
                     if any(frame):
                         last_output = frame
                     await device.run(device.send, frame, self.group_routes.get(key), automatic=True)

@@ -273,3 +273,42 @@ class LightingTests(unittest.IsolatedAsyncioTestCase):
             reply = await self.client.post("/lighting/govee-test", json={"test": "stop"})
             self.assertEqual((await reply.json())["result"], "restored")
             self.assertEqual([call.args for call in send.await_args_list], [(False,), (True,)])
+
+    async def test_govee_white_temperature_requires_reported_support(self):
+        self.govee_statuses.return_value["192.168.1.3"]["colorTemInKelvin"] = 4200
+        with patch("modules.govee.Govee.send", new=AsyncMock()) as send:
+            response = await self.client.post("/lighting/control", json={
+                "id": self.govee, "action": "temperature", "value": 3200,
+            })
+            self.assertEqual((await response.json())["results"], {self.govee: "unconfirmed"})
+            send.assert_awaited_once_with(
+                "colorwc", {"color": {"r": 0, "g": 0, "b": 0}, "colorTemInKelvin": 3200}
+            )
+            send.reset_mock()
+            response = await self.client.post("/lighting/control", json={
+                "id": self.silent, "action": "temperature", "value": 3200,
+            })
+            self.assertEqual((await response.json())["results"], {self.silent: "skipped"})
+            send.assert_not_awaited()
+
+    async def test_music_master_fader_scales_and_restores_the_group(self):
+        group = "a" * 32
+        self.store.save_groups({group: {"name": "Kerst", "members": [self.twinkly, self.hue, self.govee]}})
+        self.profiles.return_value[0].update(
+            capabilities={"brightness": True, "rgb": True},
+            state={"on": True, "brightness": 80, "xy": {"x": .6, "y": .3}},
+        )
+        self.govee_statuses.return_value["192.168.1.3"]["brightness"] = 60
+        with patch("modules.provider_routes.Govee.dim", new=AsyncMock()) as govee:
+            response = await self.client.post("/lighting/music", json={"group": group})
+            self.assertEqual(response.status, 200)
+            response = await self.client.post("/lighting/music", json={"group": group, "level": 50})
+            self.assertEqual((await response.json())["level"], 50)
+            self.assertEqual(self.controller.mixed_music_levels, {"tree": 50})
+            self.control.assert_any_await(self.hue_id, level=40)
+            govee.assert_awaited_once_with(30)
+            response = await self.client.post("/lighting/music", json={"stop": True})
+            self.assertEqual(response.status, 200)
+            self.assertEqual(self.controller.mixed_music_levels, {})
+            self.control.assert_any_await(self.hue_id, level=80)
+            govee.assert_awaited_with(60)

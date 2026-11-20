@@ -102,10 +102,12 @@ Met **Showbouwer** maak je een reeks van maximaal 30 stappen met een patroon, la
 
 Je koppelt Philips Hue en Govee via **Instellingen → Verbindingen**. Controleer voor Hue de SHA256-vingerafdruk via een vertrouwde bron en druk vlak voor het koppelen op de fysieke Bridge-knop. Activeer voor Govee eerst LAN-bediening in de Govee-app.
 
-Op **Philips Hue** zie je de kamers en zones die op elke gekoppelde Bridge staan. Zet een kamer of zone aan of uit en pas de helderheid aan als de Bridge die functie meldt. De opgeslagen Hue-scènes staan bij de kamer of zone. Klik op een scène om die op de Bridge te activeren.
+Op **Philips Hue** zie je de kamers en zones die op elke gekoppelde Bridge staan. Zet een kamer of zone aan of uit en pas de helderheid aan als de Bridge die functie meldt. De opgeslagen Hue-scènes staan bij de kamer of zone. Klik op een scène om die op de Bridge te activeren. Met **Afbeelding kiezen** bewaar je een JPG, PNG of WebP lokaal als eigen scènevoorbeeld. Na verwijderen verschijnt de standaardpreview weer.
 
 Onderaan de app opent het versienummer de bijbehorende changelog. De roadmap ernaast toont de stand van de bèta en wat op de planning staat.
 
 **Home** toont de lampen van alle drie merken. In een gemengde groep kun je aan/uit, helderheid en kleur bedienen voor lampen die die functie aanbieden. Het resultaat vermeldt afzonderlijk welke lampen de opdracht hebben aangenomen, welke zijn overgeslagen of mislukt en welke Govee-opdrachten onbevestigd zijn. De bestaande Twinkly-groepen blijven beschikbaar voor effecten, lichtshows, muziek en LED-mapping.
 
-De app toont Govee-bediening zodra een lokaal statusbericht de benodigde functies aangeeft. Govee bevestigt de uitvoering van opdrachten niet. De directe bediening gebruikt je lokale netwerk.
+Gebruik bij actieve LedFX-muziek op Home de **Masterfader muziek** voor de gemengde groep. Twinkly past de pixelframes aan. Hue en Govee dimmen relatief ten opzichte van de helderheid bij de start als die bekend is en herstellen die bij stoppen.
+
+De app toont Govee-bediening zodra een lokaal statusbericht de benodigde functies aangeeft. Bij een geldige gemelde wittemperatuur verschijnt ook de wittemperatuurregelaar. Govee bevestigt de uitvoering van opdrachten niet. De directe bediening gebruikt je lokale netwerk.

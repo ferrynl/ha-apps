@@ -29,3 +29,8 @@ class Govee:
     async def color(self,value):
         r,g,b = rgb(value)
         await self.send("colorwc",{"color":{"r":r,"g":g,"b":b},"colorTemInKelvin":0})
+
+    async def temperature(self, kelvin):
+        if type(kelvin) is not int or not 2000 <= kelvin <= 9000:
+            raise ValueError("Invalid color temperature")
+        await self.send("colorwc", {"color": {"r": 0, "g": 0, "b": 0}, "colorTemInKelvin": kelvin})

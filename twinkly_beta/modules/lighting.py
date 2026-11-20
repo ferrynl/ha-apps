@@ -1,13 +1,12 @@
 """Common lighting inventory and controls for ingress clients."""
 import asyncio
 import json
-import math
 import uuid
 
 from aiohttp import ClientError, web
 
 from .common import brightness, rgb
-from .profiles import govee_profile
+from .profiles import color_from_xy, govee_profile
 from .mixed_music import MixedMusic
 
 ERRORS = (ClientError, OSError, RuntimeError, TimeoutError, ValueError, web.HTTPException)
@@ -19,22 +18,6 @@ MAX_SCENES = 40
 
 def light_key(*parts):
     return json.dumps(parts, separators=(",", ":"))
-
-
-def color_from_xy(xy):
-    if not isinstance(xy, dict):
-        return None
-    x, y = xy.get("x"), xy.get("y")
-    if not all(type(v) in (float, int) and math.isfinite(v) and 0 <= v <= 1 for v in (x, y)) or y < .001:
-        return None
-    X, Z = x / y, (1 - x - y) / y
-    linear = (1.656492 * X - .354851 - .255038 * Z,
-              -.707196 * X + 1.655397 + .036152 * Z,
-              .051713 * X - .121364 + 1.011530 * Z)
-    scale = max(1, *linear)
-    channels = [max(0, value / scale) for value in linear]
-    return [round(255 * (12.92 * c if c <= .0031308 else 1.055 * c ** (1 / 2.4) - .055))
-            for c in channels]
 
 
 def scene_settings(body):
@@ -213,6 +196,14 @@ class Lighting:
                     await self.music.stop()
                     return web.json_response(self.music.status())
                 group = body["group"]
+                if "level" in body:
+                    level = body["level"]
+                    if type(level) is not int or not 1 <= level <= 100:
+                        raise ValueError()
+                    if self.music.group != group or self.music.task is None:
+                        raise web.HTTPConflict()
+                    results = await self.music.set_level(level)
+                    return web.json_response({**self.music.status(), "results": results})
                 members = self.store.load_groups()[group]["members"]
                 if self.lamp_test and self.lamp_test.target in members:
                     await self.lamp_test.stop()
@@ -239,7 +230,9 @@ class Lighting:
         brand, *parts = json.loads(key)
         if action == "temperature":
             limits = light.get("temperature_mirek")
-            if brand != "hue" or not limits or not limits["min"] <= value <= limits["max"]:
+            valid = ((brand == "hue" and limits and limits["min"] <= value <= limits["max"])
+                     or (brand == "govee" and 2000 <= value <= 9000))
+            if not valid:
                 return "skipped"
         try:
             if brand == "twinkly":
@@ -270,7 +263,8 @@ class Lighting:
                 value = rgb(value)
                 if not any(value):
                     raise ValueError()
-            elif action == "temperature" and type(value) is int and 1 <= value <= 1000 and "group" not in body:
+            elif (action == "temperature" and type(value) is int and "group" not in body
+                  and (1 <= value <= 1000 or 2000 <= value <= 9000)):
                 pass
             else:
                 raise ValueError()

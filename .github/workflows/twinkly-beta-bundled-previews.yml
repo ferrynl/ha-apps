@@ -19,6 +19,13 @@ jobs:
           node-version: '22'
       - run: node --test twinkly_beta/test_network_map.cjs
       - run: docker build -t twinkly-beta twinkly_beta
+      - name: Generate container SBOM
+        uses: anchore/sbom-action@57aae528053a48a3f6235f2d9461b05fbcb7366d # v0.23.1
+        with:
+          image: twinkly-beta:latest
+          format: spdx-json
+          artifact-name: twinkly-beta-${{ runner.arch }}.spdx.json
+          upload-release-assets: false
   browser:
     runs-on: ubuntu-24.04
     steps:

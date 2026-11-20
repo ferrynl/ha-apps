@@ -1,3 +1,10 @@
+## 2.0.0-beta.18
+
+- Toon een kleurpreview bij opgeslagen Hue-scènes waar Hue kleuren rapporteert. Kies desgewenst zelf een JPG-, PNG- of WebP-afbeelding per scène.
+- Regel het niveau van gemengde LedFX-muziek met een masterfader. Twinkly dimt de pixelframes. Hue en Govee volgen waar helderheid en de vorige stand bekend zijn.
+- Stel warm of koel wit in bij Govee-lampen die via LAN een geldige wittemperatuur melden.
+- Genereer in GitHub een SPDX-onderdelenlijst (SBOM) voor de bèta-container op AMD64 en ARM64.
+
 ## 2.0.0-beta.17
 
 - Bekijk de roadmap en changelog in dezelfde appomgeving als Home, met het Christmas-logo en het volledige menu.

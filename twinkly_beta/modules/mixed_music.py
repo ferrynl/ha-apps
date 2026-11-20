@@ -25,6 +25,9 @@ class MixedMusic:
         self.twinkly = set()
         self.external = {}
         self.changed = set()
+        self.level = 100
+        self.brightness_changed = set()
+        self.controller.mixed_music_levels = {}
         self.live = False
         self.timings = {}
         self.task = None
@@ -33,6 +36,7 @@ class MixedMusic:
         result = {"group": self.group, "live": self.live}
         if self.group is not None:
             result["timings"] = self.timings
+            result["level"] = self.level
         return result
 
     async def start(self, group, lights):
@@ -74,6 +78,19 @@ class MixedMusic:
         else:
             self.group = None
         return {"eligible": eligible, "skipped": skipped}
+
+    async def set_level(self, level):
+        self.level = level
+        self.controller.mixed_music_levels.update(dict.fromkeys(self.twinkly, level))
+        targets = {}
+        for key, (light, _) in self.external.items():
+            initial = light["state"].get("brightness")
+            if light["capabilities"].get("brightness") and type(initial) in (int, float) and 1 <= initial <= 100:
+                targets[key] = (light, max(1, round(initial * level / 100)))
+        self.brightness_changed.update(targets)
+        results = await asyncio.gather(*(self.send(key, light, "brightness", brightness)
+                                         for key, (light, brightness) in targets.items()))
+        return dict(zip(targets, results))
 
     async def restore(self):
         keys = tuple(self.changed)
@@ -133,6 +150,14 @@ class MixedMusic:
             async with self.controller.edit:
                 self.controller.music.difference_update(self.twinkly)
         await self.restore()
+        for key in self.brightness_changed:
+            light, _ = self.external[key]
+            result = await self.send(key, light, "brightness", round(light["state"]["brightness"]))
+            if result not in {"accepted", "unconfirmed"}:
+                LOG.warning("Could not restore the brightness of %s after mixed music", light["name"])
+        self.brightness_changed.clear()
+        self.controller.mixed_music_levels.clear()
+        self.level = 100
         self.task = None
         self.group = None
         self.members.clear()

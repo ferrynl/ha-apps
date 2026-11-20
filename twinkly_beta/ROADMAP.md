@@ -2,18 +2,19 @@
 
 ## In de bèta
 - **Home en merkpagina’s.** Eén bediening voor de drie merken, met aparte merkpagina’s en verbindingsbeheer in Instellingen.
-- **Hue-kamers, zones en scènes.** Bedien kamers en zones per Bridge en activeer opgeslagen Hue-scènes op de merkpagina. Praktijktest van deze bediening staat nog open.
+- **Hue-kamers, zones en scènes.** Bedien kamers en zones per Bridge en activeer opgeslagen Hue-scènes op de merkpagina. Basisbediening is in de praktijk bevestigd. Bij scènes zie je een kleurpreview en kun je een afbeelding toevoegen.
 - **Gemengde groepen en scènes.** Aan/uit, helderheid en kleur voor ondersteunde lampen, met resultaat per lamp.
-- **LedFX.** Twinkly krijgt pixeleffecten. Ondersteunde Hue- en Govee-lampen volgen dezelfde muziek met maximaal één kleurupdate per seconde.
+- **LedFX.** Twinkly krijgt pixeleffecten. Ondersteunde Hue- en Govee-lampen volgen dezelfde muziek met maximaal één kleurupdate per seconde. De masterfader regelt het niveau van de gemengde muziekgroep.
 - **Testcentrum.** Twinkly-ledmapping, Hue-tests en Govee-LAN-tests. De app leest bij Hue en Govee na afloop de stand opnieuw uit om het herstel te controleren.
-- **Beveiliging.** Netwerkkaart in het Security Center, een Python-lockfile en bijgewerkte afhankelijkheden.
+- **Govee-wittemperatuur.** Warm en koel wit bij lampen met een geldige LAN-terugmelding.
+- **Beveiliging.** Netwerkkaart in het Security Center, een Python-lockfile bijgewerkte afhankelijkheden en een SBOM per bèta-containerarchitectuur.
 
 ## Open voor stabiel
 - **Philips Hue.** Realtime effecten via Hue Entertainment.
 - **Govee.** Ondersteuning per model verder uitwerken, inclusief scènes, segmenten en de optionele officiële cloud-API.
-- **Gezamenlijke bediening.** Masterfader en Showbouwer voor gemengde groepen.
+- **Gezamenlijke bediening.** Showbouwer voor gemengde groepen.
 - **Spatial Light Studio.** Beginnen met een lokale 2D-foto-editor en het plaatsen van lampen op oppervlakken. Daarna effecten op basis van gedeelde coördinaten en vertragingskalibratie. Een 3D-weergave is optioneel.
-- **Security Center.** Automatische scans, een SBOM, beveiligingsrapportage per versie en de Aikido-audit voor stabiel.
+- **Security Center.** Automatische kwetsbaarheidsscans, beveiligingsrapportage per versie en de Aikido-audit voor stabiel.
 - **Praktijktests.** Hue-tests zijn in de praktijk bevestigd. De Twinkly-muur, Govee en werking, timing en herstel van gemengde groepen staan nog op de testlijst.
 
 # 2.x — Verbeteringen na 2.0
