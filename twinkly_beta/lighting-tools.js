@@ -17,6 +17,14 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, pr
     de: ["Mein Zuhause", "Lampen", "Größe", "Keine Lampen gefunden", "Wähle eine Lampe und tippe auf das Foto. Ziehe die Lampe zum Verschieben und den runden Eckgriff zum Skalieren.", "Platziert"],
     es: ["Mi casa", "Luces", "Tamaño", "No hay luces", "Elige una luz y toca la foto para colocarla. Arrastra la luz para moverla y el tirador redondo para cambiar su tamaño.", "Colocada"],
   };
+  const effectLabels = {
+    nl: ["Kleurveeg", "Richting", "Links naar rechts", "Rechts naar links", "Boven naar beneden", "Beneden naar boven", "Tijd tussen lampen (ms)", "Volgorde tonen", "Lampen die meedoen", "RGB-lampen die als ingeschakeld bekend zijn, doen mee. Na de veeg blijft de gekozen kleur actief.", "Laatste uitgevoerde stap", "Opdrachttijd in de app", "Kleurveeg klaar", "Kleurveeg gestopt", "Kleurveeg mislukt", "Kleurveeg wordt voorbereid…", "Geaccepteerd", "Overgeslagen", "Mislukt"],
+    en: ["Colour sweep", "Direction", "Left to right", "Right to left", "Top to bottom", "Bottom to top", "Time between lights (ms)", "Show order", "Participating lights", "Lights with RGB and a known on state take part. The selected colour stays active after the sweep.", "Last completed step", "Command time in the app", "Sweep complete", "Sweep stopped", "Sweep failed", "Preparing sweep…", "Accepted", "Skipped", "Failed"],
+    de: ["Farbverlauf", "Richtung", "Links nach rechts", "Rechts nach links", "Oben nach unten", "Unten nach oben", "Zeit zwischen Lampen (ms)", "Reihenfolge anzeigen", "Teilnehmende Lampen", "RGB-Lampen mit bestätigtem Ein-Zustand nehmen teil. Die gewählte Farbe bleibt danach aktiv.", "Zuletzt ausgeführter Schritt", "Befehlsdauer in der App", "Farbverlauf abgeschlossen", "Farbverlauf gestoppt", "Farbverlauf fehlgeschlagen", "Farbverlauf wird vorbereitet…", "Angenommen", "Übersprungen", "Fehlgeschlagen"],
+    es: ["Barrido de color", "Dirección", "Izquierda a derecha", "Derecha a izquierda", "Arriba abajo", "Abajo arriba", "Tiempo entre luces (ms)", "Mostrar orden", "Luces participantes", "Participan las luces RGB cuyo estado encendido es conocido. El color elegido permanece al terminar.", "Último paso ejecutado", "Tiempo de comando en la aplicación", "Barrido terminado", "Barrido detenido", "Barrido fallido", "Preparando barrido…", "Aceptado", "Omitido", "Fallido"],
+  };
+  const directions = {right: [0, 1], left: [0, -1], down: [1, 1], up: [1, -1]};
+  const sweep = {direction: "right", color: "#ffbd63", delay: 550, preview: false};
   const showKey = "christmas-mixed-shows-v1";
   const spatialKey = "christmas-spatial-layout-v1";
   const maxSteps = 20;
@@ -25,6 +33,10 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, pr
   const spatialSection = node("section", "", "lighting-tool");
   const showStatus = node("p");
   const spatialStatus = node("p");
+  const effectStatus = node("p");
+  effectStatus.setAttribute("role", "status");
+  const reports = [node("details", "", "house-effect-report"), node("details", "", "house-effect-report")];
+  let refreshEffectButtons;
   showStatus.setAttribute("role", "status");
   spatialStatus.setAttribute("role", "status");
   showSection.append(showStatus);
@@ -61,6 +73,7 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, pr
   syncStatus.setAttribute("role", "status");
   mount.prepend(syncStatus);
   const t = index => (labels[language()] || labels.nl)[index];
+  const e = index => (effectLabels[language()] || effectLabels.nl)[index];
   const h = index => (houseLabels[language()] || houseLabels.nl)[index];
   const msg = index => (serverLabels[language()] || serverLabels.nl)[index];
   const isPlaying = () => ["playing", "stopping"].includes(playback.state);
@@ -81,19 +94,41 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, pr
     layout.points = new Map(data.layout.points);
     const changed = JSON.stringify(playback) !== JSON.stringify(data.playback);
     playback = data.playback;
-    if (changed) updatePlaybackStatus();
+    if (changed) {
+      updatePlaybackStatus();
+      refreshEffectButtons?.();
+    }
     if (inventory && (showsChanged || runningChanged)) renderShows();
     if (inventory && layoutChanged) renderSpatial(focusId);
   }
 
   function updatePlaybackStatus() {
     const state = playback.state;
-    if (state === "idle") return;
-    const headline = state === "playing" ? t(12) + " " + playback.step + " / " + playback.total
-      : state === "stopping" ? msg(6)
+    if (state === "idle") {
+      for (const details of reports) details.hidden = true;
+      return;
+    }
+    const spatial = playback.kind === "spatial";
+    const headline = state === "playing" ? (spatial && playback.step === 0 ? e(15)
+      : t(12) + " " + playback.step + " / " + playback.total)
+      : state === "stopping" ? (spatial ? e(0) + " · " + t(10) + "…" : msg(6))
+      : spatial ? e({complete: 12, stopped: 13, failed: 14}[state])
       : t({complete: 13, stopped: 14, failed: 15}[state]);
-    showStatus.textContent = [headline, playback.uncertain && t(16), playback.partial && t(35)]
-      .filter(Boolean).join(" · ");
+    const status = [headline, playback.uncertain && t(16), playback.partial && t(35)].filter(Boolean).join(" · ");
+    showStatus.textContent = spatial && isPlaying() ? e(0) + " · " + status : spatial ? "" : status;
+    effectStatus.textContent = spatial ? status : isPlaying() ? t(0) + " · " + status : "";
+    const names = new Map((inventory?.lights || []).map(light => [light.id, light.name]));
+    for (const [index, details] of reports.entries()) {
+      const last = playback.last;
+      details.hidden = !last || spatial !== Boolean(index);
+      if (details.hidden) continue;
+      const label = result => ({accepted: e(16), skipped: e(17), failed: e(18), unconfirmed: t(16)})[result] || result;
+      const list = node("ul");
+      for (const [id, commands] of Object.entries(last.results)) {
+        list.append(node("li", (names.get(id) || t(31)) + " · " + Object.values(commands).map(label).join(" / ")));
+      }
+      details.replaceChildren(node("summary", e(10) + " " + last.step + " · " + e(11) + " " + last.milliseconds + " ms"), list);
+    }
   }
 
   async function refresh() {
@@ -249,7 +284,7 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, pr
     const header = node("div", "", "lighting-heading");
     header.append(node("h3", t(0)));
     if (isPlaying()) header.append(action(t(10), () => change({action: "stop"}, showStatus), playback.state === "stopping"));
-    showSection.replaceChildren(header, node("p", t(26)), showStatus, list, form);
+    showSection.replaceChildren(header, node("p", t(26)), showStatus, reports[0], list, form);
     if (legacyShows.length || legacyLayout.photo) showSection.append(action(msg(2), () => migrate()));
   }
 
@@ -337,6 +372,7 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, pr
   function lampMarker(photo, light, point) {
     const [x, y, size = defaultSize] = point;
     const item = node("div", "", "house-marker");
+    item.dataset.lamp = light.id;
     const marker = action("", () => {
       selected = light.id;
       renderSpatial(light.id);
@@ -420,6 +456,59 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, pr
     return {item, marker, handle};
   }
 
+  function effectControls(stage) {
+    const section = node("section", "", "house-effects");
+    const controls = node("div", "", "lighting-controls");
+    const direction = dropdown(Object.keys(directions).map((key, index) => [key, e(index + 2)]), sweep.direction);
+    const speed = node("input");
+    Object.assign(speed, {type: "number", min: 250, max: 2000, step: 50, required: true, value: sweep.delay});
+    speed.onchange = () => { sweep.delay = Number(speed.value); };
+    const color = node("input");
+    Object.assign(color, {type: "color", value: sweep.color, title: e(0)});
+    color.oninput = () => { sweep.color = color.value; };
+    const preview = node("input");
+    Object.assign(preview, {type: "checkbox", checked: sweep.preview});
+    const summary = node("p");
+    const play = action(t(9), () => {
+      if (!speed.reportValidity()) return;
+      const rgb = sweep.color.slice(1).match(/../g).map(value => parseInt(value, 16));
+      if (rgb.every(value => value === 0)) {
+        effectStatus.textContent = e(14);
+        return;
+      }
+      return change({action: "spatial", revision: layout.revision, direction: sweep.direction,
+        color: rgb, delay: Number(speed.value)}, effectStatus);
+    });
+    const stop = action(t(10), () => change({action: "stop"}, effectStatus));
+    function drawOrder() {
+      const available = new Set((inventory.lights || []).filter(light => light.status !== "unavailable"
+        && light.capabilities?.rgb && light.state?.on === true).map(light => light.id));
+      const [axis, sign] = directions[sweep.direction];
+      const ordered = [...layout.points].filter(([id]) => available.has(id))
+        .sort((a, b) => sign * (a[1][axis] - b[1][axis]));
+      const numbers = new Map(ordered.map(([id], index) => [id, index + 1]));
+      for (const marker of stage.querySelectorAll(".house-marker")) {
+        const number = numbers.get(marker.dataset.lamp);
+        if (sweep.preview && number) marker.dataset.order = number;
+        else delete marker.dataset.order;
+      }
+      summary.textContent = e(8) + " · " + ordered.length + " / " + layout.points.size;
+      play.disabled = isPlaying() || !ordered.length;
+      stop.hidden = !isPlaying();
+      stop.disabled = playback.state === "stopping";
+    }
+    refreshEffectButtons = drawOrder;
+    direction.onchange = () => { sweep.direction = direction.value; drawOrder(); };
+    preview.onchange = () => { sweep.preview = preview.checked; drawOrder(); };
+    const colorLabel = {nl: "Kleur", en: "Colour", de: "Farbe", es: "Color"}[language()] || "Colour";
+    controls.append(field(e(1), direction), field(colorLabel, color), field(e(6), speed),
+      field(e(7), preview), play, stop);
+    section.append(node("h3", e(0)), node("p", e(9)), controls, summary, effectStatus, reports[1]);
+    drawOrder();
+    updatePlaybackStatus();
+    return section;
+  }
+
   function renderSpatial(focusId) {
     const lights = new Map((inventory.lights || []).map(light => [light.id, light]));
     for (const id of layout.points.keys()) {
@@ -451,6 +540,7 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, pr
     toolbar.append(field(t(18), upload));
     if (legacyLayout.photo) toolbar.append(action(msg(2), () => migrate(spatialStatus)));
     if (!layout.photoVersion) {
+      refreshEffectButtons = undefined;
       spatialSection.replaceChildren(spatialStatus, toolbar);
       return;
     }
@@ -509,7 +599,7 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, pr
     const canvas = node("div", "", "house-canvas");
     canvas.append(stage, settings);
     editor.append(canvas, panel);
-    spatialSection.replaceChildren(toolbar, spatialStatus, node("p", h(4)), editor);
+    spatialSection.replaceChildren(toolbar, spatialStatus, node("p", h(4)), editor, effectControls(stage));
     focus?.focus();
   }
 
@@ -540,6 +630,8 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, pr
       signature = nextSignature;
       renderShows();
       renderSpatial();
+      updatePlaybackStatus();
     }
+    if (page === "house") refreshEffectButtons?.();
   };
 };

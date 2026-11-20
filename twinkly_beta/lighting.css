@@ -112,3 +112,14 @@
   .house-lamp-panel { grid-row: 1; }
   .house-lamp-list { grid-template-columns: repeat(2, minmax(0, 1fr)); max-height: 8rem; }
 }
+
+.house-effects { margin-top: 18px; }
+.house-effects .lighting-controls { align-items: end; flex-wrap: wrap; }
+.house-effects input[type=number] { width: 6rem; }
+.house-effect-report { margin-block: 8px; }
+.house-marker[data-order]::before {
+  content: attr(data-order); position: absolute; z-index: 3; top: -9px; right: -9px;
+  display: grid; place-items: center; min-width: 24px; min-height: 24px; padding-inline: 3px;
+  background: #272016; color: #fff2d7; border: 1px solid #f7cd84; border-radius: 20px;
+  font-size: 12px; font-weight: 700; pointer-events: none;
+}

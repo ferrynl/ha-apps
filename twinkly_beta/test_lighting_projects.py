@@ -141,3 +141,32 @@ class LightingProjectsTest(unittest.IsolatedAsyncioTestCase):
         else:
             self.fail("Show did not stop")
         self.lighting.run_scene.assert_awaited_once_with(FIRST, GROUP)
+
+    async def test_spatial_effect_follows_photo_coordinates_and_skips_off_lights(self):
+        left = '["twinkly","tree"]'
+        right = '["hue","bridge","right"]'
+        off = '["govee","off","off"]'
+        lights = {
+            key: {"status": "online", "capabilities": {"rgb": True}, "state": {"on": key != off}}
+            for key in (left, right, off)
+        }
+        self.lighting.lights = AsyncMock(return_value=(lights, {}))
+        self.lighting.send_spatial_color = AsyncMock(side_effect=["unconfirmed", "accepted"])
+        response = await self.change("layout", revision=None, photo=self.image(),
+                                     points=[[left, [14, 50]], [off, [40, 50]], [right, [88, 60]]])
+        revision = (await response.json())["layout"]["revision"]
+        args = {"revision": revision, "direction": "left", "color": [255, 10, 20], "delay": 250}
+        self.assertEqual((await self.change("spatial", **{**args, "revision": None})).status, 409)
+        response = await self.change("spatial", **args)
+        self.assertEqual(response.status, 200)
+        for _ in range(150):
+            state = (await (await self.client.get("/lighting/projects")).json())["playback"]
+            if state["state"] != "playing":
+                break
+            await asyncio.sleep(.01)
+        self.assertEqual(state["state"], "complete")
+        self.assertEqual(state["kind"], "spatial")
+        self.assertTrue(state["uncertain"])
+        self.assertEqual(state["last"]["results"], {left: {"color": "accepted"}})
+        self.assertGreaterEqual(state["last"]["milliseconds"], 0)
+        self.assertEqual([call.args[0] for call in self.lighting.send_spatial_color.await_args_list], [right, left])

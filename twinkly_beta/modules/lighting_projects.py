@@ -10,12 +10,14 @@ import uuid
 from aiohttp import web
 from PIL import Image, ImageOps, UnidentifiedImageError
 
+from .common import rgb
 from .lighting import ERRORS
 
 LOG = logging.getLogger(__name__)
 MAX_PHOTO = 470_000
 MAX_SHOWS = 20
 MAX_STEPS = 20
+DIRECTIONS = {"right": (0, 1), "left": (0, -1), "down": (1, 1), "up": (1, -1)}
 HEADERS = {
     "Cache-Control": "private, no-store",
     "X-Content-Type-Options": "nosniff",
@@ -95,35 +97,75 @@ class Playback:
         self.status = {"state": "idle"}
 
     def start(self, show):
-        if self.task is not None:
-            raise web.HTTPConflict()
         if not self.lighting.valid_show(show):
             raise ValueError("Unavailable scene")
-        self.stop.clear()
-        self.status = {"state": "playing", "id": show["id"], "step": 0, "total": len(show["steps"]),
-                       "uncertain": False, "partial": False}
-        self.task = asyncio.create_task(self.run(show))
 
-    async def run(self, show):
+        async def apply(step):
+            return await self.lighting.run_scene(step["scene"], show["group"])
+
+        self.schedule("show", show["steps"], apply, show["id"])
+
+    def start_spatial(self, points, direction, color, delay):
+        axis, sign = DIRECTIONS[direction]
+        ordered = sorted(points, key=lambda item: sign * item[1][axis])
+
+        async def plan():
+            lights, _ = await self.lighting.lights()
+            for key, _ in ordered:
+                light = lights.get(key)
+                if (light and light["status"] != "unavailable" and light["capabilities"].get("rgb")
+                        and light["state"].get("on") is True):
+                    yield {"lamp": key, "light": light, "seconds": delay / 1000}
+
+        async def apply(step):
+            key = step["lamp"]
+            result = await self.lighting.send_spatial_color(key, step["light"], color, self.stop)
+            return {key: {"color": result}}
+
+        self.schedule("spatial", [], apply, prepare=plan)
+
+    def schedule(self, kind, steps, apply, identifier=None, prepare=None):
+        if self.task is not None:
+            raise web.HTTPConflict()
+        self.stop.clear()
+        self.status = {"state": "playing", "kind": kind, "id": identifier, "step": 0, "total": len(steps),
+                       "uncertain": False, "partial": False, "last": None}
+        self.task = asyncio.create_task(self.run(steps, apply, prepare))
+
+    async def run(self, steps, apply, prepare):
         outcome = "complete"
         try:
-            for number, step in enumerate(show["steps"], 1):
+            if prepare:
+                steps = [step async for step in prepare()]
+                self.status["total"] = len(steps)
+            succeeded = False
+            loop = asyncio.get_running_loop()
+            for number, step in enumerate(steps, 1):
                 if self.stop.is_set():
                     break
                 self.status["step"] = number
-                results = await self.lighting.run_scene(step["scene"], show["group"])
+                started = loop.time()
+                results = await apply(step)
+                self.status["last"] = {"step": number, "milliseconds": round((loop.time() - started) * 1000),
+                                       "results": results}
                 outcomes = {value for commands in results.values() for value in commands.values()}
                 self.status["uncertain"] |= "unconfirmed" in outcomes
                 self.status["partial"] |= bool(outcomes.intersection({"failed", "skipped"}))
-                if not outcomes.intersection({"accepted", "unconfirmed"}):
+                sent = bool(outcomes.intersection({"accepted", "unconfirmed"}))
+                succeeded |= sent
+                if not sent and prepare is None:
                     outcome = "failed"
+                    break
+                if prepare and number == len(steps):
                     break
                 try:
                     await asyncio.wait_for(self.stop.wait(), step["seconds"])
                 except TimeoutError:
                     pass
+            if not succeeded:
+                outcome = "failed"
         except (*ERRORS, KeyError, TypeError):
-            LOG.exception("Mixed show interrupted")
+            LOG.exception("Lighting playback interrupted")
             outcome = "failed"
         finally:
             self.status["state"] = "stopped" if self.stop.is_set() else outcome
@@ -244,6 +286,15 @@ def install(app, lighting):
                                           "points": positions(body["points"])}
                 elif action == "play":
                     playback.start(shows[identifier(body["id"])])
+                    return response(data)
+                elif action == "spatial":
+                    direction, color, delay = body["direction"], rgb(body["color"]), body["delay"]
+                    if (direction not in DIRECTIONS or not any(color) or type(delay) is not int
+                            or not 250 <= delay <= 2000 or not layout["points"]):
+                        raise ValueError("Invalid spatial effect")
+                    if body["revision"] != layout["revision"]:
+                        raise web.HTTPConflict()
+                    playback.start_spatial(layout["points"], direction, color, delay)
                     return response(data)
                 elif action == "stop":
                     playback.request_stop()

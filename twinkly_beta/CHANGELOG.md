@@ -1,3 +1,9 @@
+## 2.0.0-beta.24
+
+- Speel in **Mijn Huis** een kleurveeg af op basis van de lampposities. Kies een richting, kleur en pauze. RGB-lampen met een bekende aan-stand doen mee en behouden de gekozen kleur.
+- Bekijk vooraf op de foto de volgorde en het aantal lampen dat meedoet.
+- Bekijk voor shows en kleurvegen de resultaten per lamp en de opdrachttijd van de laatste stap. Deze tijd meet de uitvoering in de app.
+
 ## 2.0.0-beta.23
 
 - Beperk de toegang tot bestanden met GIF's, effecten en productafbeeldingen.
