@@ -1,3 +1,9 @@
+## 2.0.0-beta.22
+
+- Beperk de toegang tot bestanden met GIF's, effecten en productafbeeldingen.
+- Laad het Twinkly-logo lokaal en geef technische LedFX-foutdetails niet door aan de browser.
+- Bouw op Debian Trixie, voer de app zonder rootrechten uit en controleer lokaal of de app reageert.
+
 ## 2.0.0-beta.21
 
 - Bewaar shows, foto's en lampplaatsingen op je Home Assistant-server en open ze vanaf elk apparaat met toegang tot de app.

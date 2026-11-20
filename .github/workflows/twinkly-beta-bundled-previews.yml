@@ -2,10 +2,10 @@ name: Twinkly Beta tests
 on:
   pull_request:
     branches: [main]
-    paths: ['twinkly_beta/**', '.github/workflows/twinkly-beta-bundled-previews.yml']
+    paths: ['twinkly_beta/**', 'scripts/smoke_twinkly.sh', '.github/workflows/twinkly-beta-bundled-previews.yml']
   push:
     branches: [main]
-    paths: ['twinkly_beta/**', '.github/workflows/twinkly-beta-bundled-previews.yml']
+    paths: ['twinkly_beta/**', 'scripts/smoke_twinkly.sh', '.github/workflows/twinkly-beta-bundled-previews.yml']
 permissions:
   contents: read
 jobs:
@@ -22,6 +22,7 @@ jobs:
           node-version: '22'
       - run: node --test twinkly_beta/test_network_map.cjs
       - run: docker build -t twinkly-beta twinkly_beta
+      - run: bash scripts/smoke_twinkly.sh twinkly_beta 18491 twinkly-beta
       - name: Generate container SBOM
         uses: anchore/sbom-action@57aae528053a48a3f6235f2d9461b05fbcb7366d # v0.23.1
         with:
