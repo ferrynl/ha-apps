@@ -1,3 +1,8 @@
+## 2.0.0-beta.22
+
+- Open **Mijn Huis** via het hoofdmenu. De foto-editor heeft een eigen pagina met een lampenlijst en productfoto’s voor herkende Twinkly-modellen. Andere lampen hebben een algemene lampillustratie.
+- Plaats lampen op je foto, versleep ze en pas de grootte aan met de hoekgreep of schuifregelaar. De grootte wordt samen met de positie op je Home Assistant-server bewaard. Eerdere foto’s en posities blijven beschikbaar.
+
 ## 2.0.0-beta.21
 
 - Bewaar shows, foto's en lampplaatsingen op je Home Assistant-server en open ze vanaf elk apparaat met toegang tot de app.

@@ -58,8 +58,10 @@ def positions(value):
                 or len(parts) != (2 if parts[0] == "twinkly" else 3)
                 or any(not isinstance(part, str) or not 1 <= len(part) <= 128 for part in parts)):
             raise ValueError("Invalid light")
-        if (not isinstance(coordinate, list) or len(coordinate) != 2
-                or any(type(n) not in (int, float) or not 0 <= n <= 100 for n in coordinate)):
+        if (not isinstance(coordinate, list) or len(coordinate) not in (2, 3)
+                or any(type(n) not in (int, float) or not 0 <= n <= 100 for n in coordinate[:2])
+                or (len(coordinate) == 3 and (type(coordinate[2]) not in (int, float)
+                                             or not 4 <= coordinate[2] <= 40))):
             raise ValueError("Invalid position")
         points[json.dumps(parts, separators=(",", ":"))] = coordinate
     return list(points.items())
