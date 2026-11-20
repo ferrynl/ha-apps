@@ -1,3 +1,10 @@
+## 2.0.0-beta.17
+
+- Bekijk de roadmap en changelog in dezelfde appomgeving als Home, met het Christmas-logo en het volledige menu.
+- Bedien Hue-kamers en -zones per Bridge. Schakel ze aan of uit en dim ze als de Bridge die functie rapporteert.
+- Activeer bestaande Hue-scènes vanuit de bijbehorende kamer of zone.
+- Werk de installatie- en bedieningshandleiding in Home Assistant bij met de juiste appnamen en uitleg over Hue, de changelog en de roadmap.
+
 ## 2.0.0-beta.16
 
 - Open vanuit de footer bij het versienummer de wijzigingen van deze versie.

@@ -82,3 +82,60 @@ class RouteTests(unittest.IsolatedAsyncioTestCase):
             r=await self.client.post("/providers/hue/certificate",json={"address":"8.8.8.8"})
             inspect.assert_not_awaited()
         self.assertEqual(r.status,400)
+
+    async def test_hue_collections_report_rooms_zones_and_scenes_per_bridge(self):
+        self.store.save({"version": 1, "govee": {}, "hue": {
+            name: {"address": address, "application_key": "abcdefghij", "certificate_sha256": "ab" * 32}
+            for name, address in [("first", "192.168.1.2"), ("offline", "192.168.1.3")]
+        }})
+        resources = {
+            "room": [{"id": "room", "metadata": {"name": "Woonkamer"},
+                      "services": [{"rtype": "grouped_light", "rid": "room-control"}]}],
+            "zone": [{"id": "zone", "metadata": {"name": "Kersthoek"}}],
+            "grouped_light": [{"id": "room-control", "on": {"on": True}, "dimming": {"brightness": 42}}],
+            "scene": [{"id": "scene", "metadata": {"name": "Avondlicht"},
+                       "group": {"rtype": "zone", "rid": "zone"}}],
+        }
+
+        async def request(client, method, resource):
+            if client.address == "192.168.1.3":
+                raise TimeoutError()
+            self.assertEqual(method, "GET")
+            return resources[resource]
+
+        with patch("modules.hue.Hue.request", autospec=True, side_effect=request):
+            response = await self.client.get("/providers/hue/collections")
+        self.assertEqual(response.status, 200)
+        self.assertEqual((await response.json())["bridges"], [
+            {"id": "first", "status": "online", "address": "192.168.1.2", "collections": [
+                {"id": "room", "kind": "room", "name": "Woonkamer", "grouped_light": "room-control",
+                 "on": True, "brightness": 42, "scenes": []},
+                {"id": "zone", "kind": "zone", "name": "Kersthoek", "grouped_light": None,
+                 "on": None, "brightness": None, "scenes": [{"id": "scene", "name": "Avondlicht"}]},
+            ]},
+            {"id": "offline", "status": "unavailable", "address": "192.168.1.3", "collections": []},
+        ])
+
+    async def test_hue_collection_actions_use_native_resource_commands(self):
+        self.store.save({"version": 1, "govee": {}, "hue": {
+            "bridge": {"address": "192.168.1.2", "application_key": "abcdefghij", "certificate_sha256": "ab" * 32},
+        }})
+        resource = "00000000-0000-4000-8000-000000000001"
+        cases = [
+            ("power", False, "grouped_light", {"on": {"on": False}}),
+            ("brightness", 42, "grouped_light", {"dimming": {"brightness": 42}}),
+            ("recall", None, "scene", {"recall": {"action": "active"}}),
+        ]
+        with patch("modules.hue.Hue.request", new=AsyncMock()) as send:
+            for action, value, kind, payload in cases:
+                response = await self.client.post("/providers/hue/collections/control", json={
+                    "bridge": "bridge", "id": resource, "action": action, "value": value,
+                })
+                self.assertEqual(response.status, 200)
+                send.assert_awaited_once_with("PUT", f"{kind}/{resource}", payload)
+                send.reset_mock()
+            response = await self.client.post("/providers/hue/collections/control", json={
+                "bridge": "bridge", "id": "../resource", "action": "recall",
+            })
+            self.assertEqual(response.status, 400)
+            send.assert_not_awaited()

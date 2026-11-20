@@ -23,6 +23,8 @@ def install(app, store=None, controller=None):
     scan_lock = asyncio.Lock()
     mutation_lock = asyncio.Lock()
     clients = {}
+    lighting = None
+    collection_lock = asyncio.Lock()
     connection_errors = (ClientError, TimeoutError, ValueError, OSError, RuntimeError)
 
     def adapter(provider, identifier, record):
@@ -146,6 +148,42 @@ def install(app, store=None, controller=None):
         except (*connection_errors, KeyError, TypeError):
             return web.json_response({"error": "control_failed"}, status=400)
 
+    async def hue_collections(request):
+        async def bridge(identifier, record):
+            row = {"id": identifier, "address": record["address"]}
+            try:
+                collections = await adapter("hue", identifier, record).collections()
+                return dict(row, collections=collections, status="online")
+            except (*connection_errors, KeyError, TypeError):
+                return dict(row, collections=[], status="unavailable")
+
+        try:
+            records = store.load()["hue"]
+        except (ValueError, OSError):
+            return web.json_response({"error": "configuration_unavailable"}, status=503)
+        return web.json_response({"bridges": await asyncio.gather(
+            *(bridge(identifier, record) for identifier, record in records.items())
+        )})
+
+    async def control_hue_collection(request):
+        try:
+            body = await request.json()
+            identifier = body["bridge"]
+            async with (lighting.control_lock if lighting else collection_lock):
+                if lighting:
+                    testing = lamp_test.task is not None and not lamp_test.task.done()
+                    active = lighting.music.members | ({lamp_test.target} if testing else set())
+                    if any(key and json.loads(key)[:2] == ["hue", identifier] for key in active):
+                        return web.json_response({"error": "hue_bridge_busy"}, status=409)
+                async with mutation_lock:
+                    record = store.load()["hue"][identifier]
+                    await adapter("hue", identifier, record).control_collection(
+                        body["id"], body["action"], body.get("value")
+                    )
+            return web.json_response({"ok": True})
+        except (*connection_errors, KeyError, TypeError):
+            return web.json_response({"error": "control_failed"}, status=400)
+
     async def certificate(request):
         if scan_lock.locked():
             return web.json_response({"error": "scan_busy"}, status=409)
@@ -158,6 +196,8 @@ def install(app, store=None, controller=None):
             except (ValueError, KeyError, TypeError, OSError, TimeoutError):
                 return web.json_response({"error": "certificate_unavailable"}, status=400)
 
+    app.router.add_get("/providers/hue/collections", hue_collections)
+    app.router.add_post("/providers/hue/collections/control", control_hue_collection)
     app.router.add_post("/providers/hue/certificate", certificate)
     app.router.add_post("/providers/{provider}/connect", connect)
     app.router.add_post("/providers/{provider}/control", control)

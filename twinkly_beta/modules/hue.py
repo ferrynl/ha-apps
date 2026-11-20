@@ -66,3 +66,47 @@ class Hue:
             body["color_temperature"] = {"mirek": mirek}
         if not body: raise ValueError("Empty command")
         return await self.request("PUT","light/"+light_id,body)
+
+    async def collections(self):
+        grouped_lights = {light["id"]: light for light in await self.request("GET", "grouped_light")}
+        collections = []
+        for kind in ("room", "zone"):
+            for resource in await self.request("GET", kind):
+                grouped_id = next((service["rid"] for service in resource.get("services", [])
+                                   if service.get("rtype") == "grouped_light"), None)
+                grouped_light = grouped_lights.get(grouped_id, {})
+                collections.append({
+                    "id": resource["id"],
+                    "kind": kind,
+                    "name": resource.get("metadata", {}).get("name") or resource["id"],
+                    "grouped_light": grouped_id if grouped_light else None,
+                    "on": grouped_light.get("on", {}).get("on"),
+                    "brightness": grouped_light.get("dimming", {}).get("brightness"),
+                    "scenes": [],
+                })
+
+        by_group = {(entry["kind"], entry["id"]): entry for entry in collections}
+        for scene in await self.request("GET", "scene"):
+            group = scene.get("group", {})
+            entry = by_group.get((group.get("rtype"), group.get("rid")))
+            if entry is not None:
+                entry["scenes"].append({
+                    "id": scene["id"],
+                    "name": scene.get("metadata", {}).get("name") or scene["id"],
+                })
+        return collections
+
+    async def control_collection(self, resource_id, action, value=None):
+        if not isinstance(resource_id, str) or not re.fullmatch(
+            r"[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}", resource_id
+        ):
+            raise ValueError("Invalid resource ID")
+        if action == "recall" and value is None:
+            return await self.request("PUT", "scene/" + resource_id, {"recall": {"action": "active"}})
+        if action == "power" and type(value) is bool:
+            body = {"on": {"on": value}}
+        elif action == "brightness":
+            body = {"dimming": {"brightness": brightness(value)}}
+        else:
+            raise ValueError("Invalid command")
+        return await self.request("PUT", "grouped_light/" + resource_id, body)

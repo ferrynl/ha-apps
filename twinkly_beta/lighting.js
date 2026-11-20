@@ -5,6 +5,12 @@
     de: ["Start", "Alle Lampen", "Aktualisieren", "Verbunden", "Nicht erreichbar", "Status unbekannt", "Govee · unbestätigt", "Ein", "Aus", "Helligkeit", "Farbe", "Noch keine Lampen", "Verbindungen", "Geräte suchen", "Koppeln", "Erneut koppeln", "Geräte-ID", "LAN-Adresse", "Zertifikat abrufen", "SHA256-Fingerabdruck", "Vergleiche diesen Fingerabdruck mit einer unabhängigen, vertrauenswürdigen Quelle. Fahre nur fort, wenn du dem Zertifikat vertraust.", "Drücke kurz vor dem Koppeln die Taste an der Hue Bridge.", "Aktiviere die LAN-Steuerung in der Govee-App.", "Gemischte Gruppen", "Gruppenname", "Speichern", "Bearbeiten", "Löschen", "Abbrechen", "Angenommen", "Unbestätigt", "Übersprungen", "Fehlgeschlagen", "Verbindung verwalten", "Lampen auswählen", "Keine Geräte gefunden", "Wird geladen…", "Nicht erreichbare Lampe", "Gekoppelt"],
     es: ["Inicio", "Todas las luces", "Actualizar", "Conectado", "No disponible", "Estado desconocido", "Govee · sin confirmar", "Encender", "Apagar", "Brillo", "Color", "Aún no hay luces", "Conexiones", "Buscar dispositivos", "Vincular", "Volver a vincular", "ID del dispositivo", "Dirección LAN", "Consultar certificado", "Huella SHA256", "Compara esta huella con una fuente fiable e independiente. Continúa solo si confías en el certificado.", "Pulsa el botón físico del puente Hue justo antes de vincularlo.", "Activa el control LAN en la aplicación Govee.", "Grupos mixtos", "Nombre del grupo", "Guardar", "Editar", "Eliminar", "Cancelar", "Aceptado", "Sin confirmar", "Omitido", "Error", "Gestionar conexión", "Elegir luces", "No se encontraron dispositivos", "Cargando…", "Luz no disponible", "Vinculado"],
   };
+  const collectionWords = {
+    nl: ["Hue-kamers en zones", "Kamer", "Zone", "Hue-scènes", "Geen kamers of zones gevonden.", "Stop de Hue-test of gemengde muziek op deze bridge en probeer opnieuw."],
+    en: ["Hue rooms and zones", "Room", "Zone", "Hue scenes", "No rooms or zones found.", "Stop the Hue test or mixed music on this bridge and try again."],
+    de: ["Hue-Räume und -Zonen", "Raum", "Zone", "Hue-Szenen", "Keine Räume oder Zonen gefunden.", "Beende den Hue-Test oder die gemischte Musik auf dieser Bridge und versuche es erneut."],
+    es: ["Habitaciones y zonas Hue", "Habitación", "Zona", "Escenas Hue", "No se encontraron habitaciones ni zonas.", "Detén la prueba Hue o la música mixta en este puente e inténtalo de nuevo."],
+  };
   const temperatureLabels = {
     nl: "Wittemperatuur", en: "White temperature", de: "Weißtemperatur", es: "Temperatura del blanco",
   };
@@ -44,6 +50,7 @@
   const panel = el("lighting-panel");
   const settings = el("lighting-settings");
   const studio = el("twinkly-lighting");
+  const hueCollections = el("hue-collections");
   const feedback = el("lighting-feedback");
   const t = i => (words[el("language").value] || words.nl)[i];
   let data;
@@ -52,6 +59,9 @@
   let editingScene;
   let context = "";
   let groupBusy = false;
+  let collections = [];
+  let collectionsStatus = "loading";
+  let collectionsRead = 0;
 
   function node(tag, text, className) {
     const item = document.createElement(tag);
@@ -73,7 +83,9 @@
     try {
       await callback();
     } catch (error) {
-      feedback.textContent = t(error.message === "pairing_permission" ? 21 : 32);
+      feedback.textContent = error.message === "hue_bridge_busy"
+        ? (collectionWords[el("language").value] || collectionWords.nl)[5]
+        : t(error.message === "pairing_permission" ? 21 : 32);
     } finally {
       item.disabled = false;
       delete item.dataset.running;
@@ -553,6 +565,83 @@
   const hueTestPanel = lampTestPanel("hue", el("tests-content"));
   const goveeTestPanel = lampTestPanel("govee", hueTestPanel.section);
 
+  function renderCollections() {
+    hueCollections.hidden = context !== "hue";
+    if (hueCollections.hidden) return;
+    const labels = collectionWords[el("language").value] || collectionWords.nl;
+    const title = node("h2", labels[0]);
+    title.id = "hue-collections-title";
+    const heading = node("div", "", "lighting-heading");
+    heading.append(title, button(t(2), loadCollections));
+    hueCollections.replaceChildren(heading);
+    if (collectionsStatus !== "ready") {
+      hueCollections.append(node("p", t(collectionsStatus === "loading" ? 36 : 32)));
+      return;
+    }
+    if (!collections.length) hueCollections.append(node("p", labels[4]));
+    for (const bridge of collections) {
+      const grid = node("div", "", "lighting-grid hue-collection-grid");
+      hueCollections.append(node("h3", "Hue Bridge · " + bridge.address), grid);
+      if (bridge.status !== "online" || !bridge.collections.length) {
+        grid.append(node("p", bridge.status === "online" ? labels[4] : t(4)));
+        continue;
+      }
+      const send = async (id, action, value) => {
+        await api("providers/hue/collections/control", {bridge: bridge.id, id, action, value});
+        if (context === "hue") {
+          feedback.textContent = t(29);
+          await Promise.all([loadCollections(), refresh(false).catch(() => {})]);
+        }
+      };
+      for (const collection of bridge.collections) {
+        const card = node("article", "", "lighting-card hue-collection");
+        card.append(node("p", collection.kind === "room" ? labels[1] : labels[2]),
+          node("h4", collection.name));
+        const controls = node("div", "", "lighting-controls");
+        if (collection.grouped_light && typeof collection.on === "boolean") {
+          for (const [value, index] of [[true, 7], [false, 8]]) {
+            const toggle = button(t(index), () => send(collection.grouped_light, "power", value));
+            toggle.setAttribute("aria-pressed", String(collection.on === value));
+            controls.append(toggle);
+          }
+        }
+        if (collection.grouped_light && Number.isFinite(collection.brightness)) {
+          const level = node("input");
+          level.type = "range";
+          level.min = 1;
+          level.max = 100;
+          level.value = collection.brightness;
+          level.addEventListener("change", () => task(level,
+            () => send(collection.grouped_light, "brightness", Number(level.value))));
+          controls.append(field(t(9), level));
+        }
+        if (controls.childElementCount) card.append(controls);
+        if (collection.scenes.length) {
+          const scenes = node("div", "", "lighting-controls");
+          for (const scene of collection.scenes) {
+            scenes.append(button(scene.name, () => send(scene.id, "recall")));
+          }
+          card.append(node("h5", labels[3]), scenes);
+        }
+        grid.append(card);
+      }
+    }
+  }
+
+  async function loadCollections() {
+    const request = ++collectionsRead;
+    try {
+      const result = await api("providers/hue/collections");
+      if (request !== collectionsRead) return;
+      collections = result.bridges;
+      collectionsStatus = "ready";
+    } catch {
+      if (request !== collectionsRead) return;
+      collectionsStatus = "failed";
+    }
+    renderCollections();
+  }
+
   function render() {
     panel.hidden = !["home", "hue", "govee"].includes(context);
     if (context === "tests") {
@@ -614,6 +703,11 @@
     }
     el("nav-home").textContent = t(0);
     render();
+    if (previous !== context && context === "hue") {
+      collectionsStatus = "loading";
+      loadCollections();
+    }
+    renderCollections();
     if (previous !== context && ["home", "hue", "govee", "control", "settings", "tests"].includes(context)) {
       refresh(false).catch(() => { feedback.textContent = t(32); });
     }

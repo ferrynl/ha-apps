@@ -2,13 +2,14 @@
 
 ## In de bèta
 - **Home en merkpagina’s.** Eén bediening voor de drie merken, met aparte merkpagina’s en verbindingsbeheer in Instellingen.
+- **Hue-kamers, zones en scènes.** Bedien kamers en zones per Bridge en activeer opgeslagen Hue-scènes op de merkpagina. Praktijktest van deze bediening staat nog open.
 - **Gemengde groepen en scènes.** Aan/uit, helderheid en kleur voor ondersteunde lampen, met resultaat per lamp.
 - **LedFX.** Twinkly krijgt pixeleffecten. Ondersteunde Hue- en Govee-lampen volgen dezelfde muziek met maximaal één kleurupdate per seconde.
 - **Testcentrum.** Twinkly-ledmapping, Hue-tests en Govee-LAN-tests. De app leest bij Hue en Govee na afloop de stand opnieuw uit om het herstel te controleren.
 - **Beveiliging.** Netwerkkaart in het Security Center, een Python-lockfile en bijgewerkte afhankelijkheden.
 
 ## Open voor stabiel
-- **Philips Hue.** Kamers, zones, native scènes en realtime effecten via Hue Entertainment.
+- **Philips Hue.** Realtime effecten via Hue Entertainment.
 - **Govee.** Ondersteuning per model verder uitwerken, inclusief scènes, segmenten en de optionele officiële cloud-API.
 - **Gezamenlijke bediening.** Masterfader en Showbouwer voor gemengde groepen.
 - **Spatial Light Studio.** Beginnen met een lokale 2D-foto-editor en het plaatsen van lampen op oppervlakken. Daarna effecten op basis van gedeelde coördinaten en vertragingskalibratie. Een 3D-weergave is optioneel.

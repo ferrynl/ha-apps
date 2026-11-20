@@ -242,22 +242,66 @@ test('the footer opens the matching release and the Matter roadmap on mobile', a
  await page.setViewportSize({width: 390, height: 844});
  await page.goto('http://127.0.0.1:8765/index.html', {waitUntil: 'domcontentloaded'});
  const footer = page.locator('#project-footer');
+ const project = page.locator('#project-page');
+ const header = page.locator('.workspace-header');
  await footer.getByRole('link', {name: 'Versie ' + version, exact: true}).click();
- await expect(page.getByRole('heading', {name: 'Changelog'})).toBeVisible();
- await expect(page.locator('details').first()).toHaveAttribute('id', 'release-' + version);
- await expect(page.locator('details').first()).toHaveJSProperty('open', true);
+ await expect(project.getByRole('heading', {name: 'Changelog'})).toBeVisible();
+ await expect(header.locator('.christmas-mark svg')).toBeVisible();
+ await expect(header.getByRole('link', {name: 'Philips Hue'})).toBeVisible();
+ await expect(project.locator('details').first()).toHaveAttribute('id', 'release-' + version);
+ await expect(project.locator('details').first()).toHaveJSProperty('open', true);
  const search = page.getByRole('searchbox', {name: 'Zoek op versie of wijziging'});
  await search.fill('LED Order');
- await expect(page.locator('details:visible')).not.toHaveCount(0);
- await expect(page.locator('details').first()).toBeHidden();
+ await expect(project.locator('details:visible')).not.toHaveCount(0);
+ await expect(project.locator('details').first()).toBeHidden();
  await search.fill('xyz-missing-release');
- await expect(page.getByRole('status')).toHaveText('Geen versies gevonden.');
+ await expect(project.getByRole('status')).toHaveText('Geen versies gevonden.');
  await footer.getByRole('link', {name: 'Roadmap'}).click();
  await expect(page.getByRole('heading', {name: 'Roadmap', exact: true})).toBeVisible();
  const roadmap3 = page.locator('.roadmap-version').filter({has: page.getByRole('heading', {name: /^3\.0/})});
  await expect(roadmap3.getByText('Matter-lampen.', {exact: true})).toBeVisible();
  await expect(roadmap3.getByText('Matter-stopcontacten.', {exact: true})).toBeVisible();
  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBeTruthy();
- await page.getByRole('link', {name: 'Naar Home'}).click();
+ await expect(header.getByRole('link', {name: 'Home', exact: true})).toBeVisible();
+ await header.getByRole('link', {name: 'Home', exact: true}).click();
+ await expect(project).toBeHidden();
+ await expect(page.locator('#lighting-panel')).toBeVisible();
  await expect(footer.getByRole('link', {name: 'Versie ' + version, exact: true})).toBeVisible();
+});
+
+test('Hue rooms and zones retain their own controls and Bridge scenes', async ({page}) => {
+ const requests = [];
+ await page.route('**/lighting', route => route.fulfill({json:{lights:[], groups:{}, scenes:{}, bridges:{}}}));
+ await page.route('**/providers/hue/collections', route => route.fulfill({json:{bridges:[
+  {id:'hue-a', address:'192.168.1.2', status:'online', collections:[
+   {kind:'room', name:'Woonkamer', grouped_light:'room-control', on:false, brightness:44,
+    scenes:[{id:'scene-one', name:'Avondlicht'}]},
+   {kind:'zone', name:'Kersthoek', grouped_light:'zone-control', on:true, brightness:null, scenes:[]},
+  ]},
+  {id:'hue-b', address:'192.168.1.3', status:'unavailable', collections:[]},
+ ]}}));
+ await page.route('**/providers/hue/collections/control', route => {
+  requests.push(route.request().postDataJSON());
+  return route.fulfill({json:{ok:true}});
+ });
+ await page.setViewportSize({width:390, height:844});
+ await page.goto('http://127.0.0.1:8765/index.html#hue',{waitUntil:'domcontentloaded'});
+ const pane = page.locator('#hue-collections');
+ const room = pane.locator('article').filter({hasText:'Woonkamer'});
+ const zone = pane.locator('article').filter({hasText:'Kersthoek'});
+ await expect(zone.getByRole('button',{name:'Aan',exact:true})).toHaveAttribute('aria-pressed','true');
+ await expect(zone.getByRole('slider')).toHaveCount(0);
+ await expect(room.getByRole('slider')).toHaveValue('44');
+ await expect(pane.getByText('Niet bereikbaar')).toBeVisible();
+ await room.getByRole('button',{name:'Aan',exact:true}).click();
+ await expect.poll(() => requests.length).toBe(1);
+ await zone.getByRole('button',{name:'Uit',exact:true}).click();
+ await expect.poll(() => requests.length).toBe(2);
+ await room.getByRole('button',{name:'Avondlicht'}).click();
+ await expect.poll(() => requests).toEqual([
+  {bridge:'hue-a', id:'room-control', action:'power', value:true},
+  {bridge:'hue-a', id:'zone-control', action:'power', value:false},
+  {bridge:'hue-a', id:'scene-one', action:'recall'},
+ ]);
+ expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBeTruthy();
 });
