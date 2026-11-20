@@ -2338,7 +2338,10 @@ class Controller:
             raise web.HTTPFound("./#instellingen")
 
         app.router.add_get("/provider-studio", legacy_provider_page)
-        for asset in ("lighting.js", "lighting.css", "twinkly-nav-logo.svg", "hue-app-icon.webp", "govee-logo.png"):
+        for asset in (
+            "lighting.js", "lighting.css", "twinkly-nav-logo.svg", "hue-app-icon.webp", "govee-logo.png",
+            "project.html", "project.css", "project.js", "CHANGELOG.md", "ROADMAP.md",
+        ):
             app.router.add_get("/" + asset, lambda _, filename=asset: web.FileResponse(
                 filename, headers={"Cache-Control": "no-store"}))
         app.router.add_get("/", lambda _: web.FileResponse(

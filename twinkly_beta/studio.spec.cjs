@@ -233,3 +233,31 @@ test('Home combines providers and keeps pairing in Settings', async ({page}) => 
  await expect.poll(() => pairing).toEqual({id:'bridge',address:'192.168.1.2',certificate_sha256:fingerprint});
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBeTruthy();
 });
+
+test('the footer opens the matching release and the Matter roadmap on mobile', async ({page}) => {
+ const fs = require('node:fs');
+ const path = require('node:path');
+ const config = fs.readFileSync(path.join(__dirname, 'config.yaml'), 'utf8');
+ const version = /^version:\s*["']?([^\s"']+)/m.exec(config)[1];
+ await page.setViewportSize({width: 390, height: 844});
+ await page.goto('http://127.0.0.1:8765/index.html', {waitUntil: 'domcontentloaded'});
+ const footer = page.locator('#project-footer');
+ await footer.getByRole('link', {name: 'Versie ' + version, exact: true}).click();
+ await expect(page.getByRole('heading', {name: 'Changelog'})).toBeVisible();
+ await expect(page.locator('details').first()).toHaveAttribute('id', 'release-' + version);
+ await expect(page.locator('details').first()).toHaveJSProperty('open', true);
+ const search = page.getByRole('searchbox', {name: 'Zoek op versie of wijziging'});
+ await search.fill('LED Order');
+ await expect(page.locator('details:visible')).not.toHaveCount(0);
+ await expect(page.locator('details').first()).toBeHidden();
+ await search.fill('xyz-missing-release');
+ await expect(page.getByRole('status')).toHaveText('Geen versies gevonden.');
+ await footer.getByRole('link', {name: 'Roadmap'}).click();
+ await expect(page.getByRole('heading', {name: 'Roadmap', exact: true})).toBeVisible();
+ const roadmap3 = page.locator('.roadmap-version').filter({has: page.getByRole('heading', {name: /^3\.0/})});
+ await expect(roadmap3.getByText('Matter-lampen.', {exact: true})).toBeVisible();
+ await expect(roadmap3.getByText('Matter-stopcontacten.', {exact: true})).toBeVisible();
+ expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBeTruthy();
+ await page.getByRole('link', {name: 'Naar Home'}).click();
+ await expect(footer.getByRole('link', {name: 'Versie ' + version, exact: true})).toBeVisible();
+});

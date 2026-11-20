@@ -1,3 +1,9 @@
+## 2.0.0-beta.16
+
+- Open vanuit de footer bij het versienummer de wijzigingen van deze versie.
+- Doorzoek de changelog op versie of wijziging en klap eerdere versies uit.
+- Bekijk in de app welke onderdelen van 2.0 in de bèta zitten, welke punten nog openstaan en wat gepland is voor 2.x en 3.0. Voor 3.0 staan Matter-lampen en Matter-stopcontacten op de roadmap.
+
 ## 2.0.0-beta.15
 
 - Add Govee LAN identification, on/off, dimming, RGB and rainbow tests to the Test Center.
