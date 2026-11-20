@@ -13,7 +13,7 @@ def sample_color(frame):
         return None
     pixels = zip(frame[::3], frame[1::3], frame[2::3])
     pixel = max(pixels, key=sum, default=(0, 0, 0))
-    return [min(255, (channel + 8) // 16 * 16) for channel in pixel] if max(pixel) >= 8 else None
+    return pixel if max(pixel) >= 8 else None
 
 
 class MixedMusic:
@@ -26,10 +26,14 @@ class MixedMusic:
         self.external = {}
         self.changed = set()
         self.live = False
+        self.timings = {}
         self.task = None
 
     def status(self):
-        return {"group": self.group, "live": self.live}
+        result = {"group": self.group, "live": self.live}
+        if self.group is not None:
+            result["timings"] = self.timings
+        return result
 
     async def start(self, group, lights):
         self.group = group
@@ -81,8 +85,27 @@ class MixedMusic:
             else:
                 LOG.warning("Could not restore the color of %s after mixed music", self.external[key][0]["name"])
 
+    async def dispatch(self, color, received):
+        started = time.monotonic()
+
+        async def command(key, light):
+            outcome = await self.send(key, light, "color", color)
+            return light["provider"], outcome, round((time.monotonic() - started) * 1000)
+
+        # Record attempted changes before awaiting I/O to cover cancellation.
+        self.changed.update(self.external)
+        results = await asyncio.gather(*(command(key, light) for key, (light, _) in self.external.items()))
+        timings = {}
+        for provider, outcome, elapsed in results:
+            entry = timings.setdefault(provider, {"frame_age_ms": round(max(0, started - received) * 1000),
+                                                 "command_ms": 0, "failed": 0})
+            entry["command_ms"] = max(entry["command_ms"], elapsed)
+            entry["failed"] += outcome not in ("accepted", "unconfirmed")
+        self.timings = timings
+
     async def run(self):
         last_color = None
+        smoothed = None
         last_lit = None
         while True:
             color = sample_color(self.controller.music_frame())
@@ -90,16 +113,15 @@ class MixedMusic:
             if color:
                 last_lit = now
                 self.live = True
-                if color != last_color:
-                    # Record attempted changes before awaiting I/O so Stop also
-                    # repairs writes that finished as cancellation arrived.
-                    self.changed.update(self.external)
-                    await asyncio.gather(*(self.send(key, light, "color", color)
-                                           for key, (light, _) in self.external.items()))
-                    last_color = color
+                smoothed = color if smoothed is None else tuple(
+                    (previous + 3 * current) / 4 for previous, current in zip(smoothed, color))
+                outgoing = [min(255, (int(channel + 8) // 16) * 16) for channel in smoothed]
+                if any(outgoing) and outgoing != last_color:
+                    await self.dispatch(outgoing, self.controller.ddp.received)
+                    last_color = outgoing
             elif last_lit is not None and now - last_lit >= 3:
                 await self.restore()
-                last_lit = last_color = None
+                last_lit = last_color = smoothed = None
                 self.live = False
             await asyncio.sleep(1)
 
@@ -117,4 +139,5 @@ class MixedMusic:
         self.twinkly.clear()
         self.external.clear()
         self.changed.clear()
+        self.timings = {}
         self.live = False

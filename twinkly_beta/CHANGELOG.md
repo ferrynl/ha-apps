@@ -1,3 +1,8 @@
+## 2.0.0-beta.12
+
+- Smooth shared LedFX color changes for Hue and Govee while keeping the existing update limit.
+- Show how old the LedFX frame was when sending and how long each brand's latest command batch took. These measurements exclude the physical reaction of the lights.
+
 ## 2.0.0-beta.11
 
 - Start or stop LedFX music from a mixed group on Home. Twinkly receives the existing pixel effects. Supported, switched-on Philips Hue and Govee lights follow one sampled color from the same stream, with at most one color update per second.

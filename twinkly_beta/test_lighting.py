@@ -1,5 +1,6 @@
 import asyncio
 import tempfile
+import time
 import unittest
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
@@ -27,6 +28,7 @@ class LightingTests(unittest.IsolatedAsyncioTestCase):
             devices={"tree": SimpleNamespace(row={"name": "Tree"}, offline=False, mode="color",
                                              last_brightness=70, last_color=[255, 10, 0])},
             edit=asyncio.Lock(), music=set(), patterns={}, physical_tests={},
+            ddp=SimpleNamespace(received=time.monotonic()),
             music_frame=lambda: bytes([255, 2, 1, 0, 0, 0]),
             apply_control=AsyncMock(return_value={"failed": []}),
         )
@@ -188,8 +190,23 @@ class LightingTests(unittest.IsolatedAsyncioTestCase):
             await asyncio.sleep(.01)
         self.control.assert_awaited_once_with(self.hue_id, color=[255, 0, 0])
         self.color.assert_awaited_once_with([255, 0, 0])
+        response = await self.client.get("/lighting")
+        timings = (await response.json())["music"]["timings"]
+        self.assertEqual(set(timings), {"hue", "govee"})
+        for entry in timings.values():
+            self.assertGreaterEqual(entry["frame_age_ms"], 0)
+            self.assertGreaterEqual(entry["command_ms"], 0)
+            self.assertEqual(entry["failed"], 0)
+        self.controller.music_frame = lambda: bytes([0, 0, 255])
+        self.controller.ddp.received = time.monotonic()
+        async with asyncio.timeout(3):
+            while self.control.await_count < 2 or self.color.await_count < 2:
+                await asyncio.sleep(.01)
+        self.control.assert_awaited_with(self.hue_id, color=[64, 0, 192])
+        self.color.assert_awaited_with([64, 0, 192])
+
         response = await self.client.post("/lighting/music", json={"stop": True})
         self.assertEqual(await response.json(), {"group": None, "live": False})
         self.assertEqual(self.controller.music, set())
-        self.assertEqual(self.control.await_count, 2)
+        self.assertEqual(self.control.await_count, 3)
         self.assertEqual(self.color.await_args.args, ([255, 1, 2],))
