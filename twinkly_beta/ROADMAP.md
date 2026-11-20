@@ -7,14 +7,15 @@
 - **LedFX.** Twinkly krijgt pixeleffecten. Ondersteunde Hue- en Govee-lampen volgen dezelfde muziek met maximaal één kleurupdate per seconde. De masterfader regelt het niveau van de gemengde muziekgroep.
 - **Testcentrum.** Twinkly-ledmapping, Hue-tests en Govee-LAN-tests. De app leest bij Hue en Govee na afloop de stand opnieuw uit om het herstel te controleren.
 - **Govee-wittemperatuur.** Warm en koel wit bij lampen met een geldige LAN-terugmelding.
-- **Beveiliging.** Netwerkkaart in het Security Center, een Python-lockfile bijgewerkte afhankelijkheden en een SBOM per bèta-containerarchitectuur.
+- **Showbouwer.** Maak op Home een reeks opgeslagen scènes voor één gemengde groep, met een wachttijd per stap. De show wordt in deze browser opgeslagen en loopt zolang Home open is.
+- **Spatial Light Studio.** Plaats lampen op een eigen 2D-foto. De foto en plaatsingen blijven in deze browser.
+- **Beveiliging.** Netwerkkaart in het Security Center, een Python-lockfile, bijgewerkte afhankelijkheden en een SBOM per bèta-containerarchitectuur. GitHub scant beide containerarchitecturen en maakt per bètaversie een beveiligingsrapport.
 
 ## Open voor stabiel
 - **Philips Hue.** Realtime effecten via Hue Entertainment.
 - **Govee.** Ondersteuning per model verder uitwerken, inclusief scènes, segmenten en de optionele officiële cloud-API.
-- **Gezamenlijke bediening.** Showbouwer voor gemengde groepen.
-- **Spatial Light Studio.** Beginnen met een lokale 2D-foto-editor en het plaatsen van lampen op oppervlakken. Daarna effecten op basis van gedeelde coördinaten en vertragingskalibratie. Een 3D-weergave is optioneel.
-- **Security Center.** Automatische kwetsbaarheidsscans, beveiligingsrapportage per versie en de Aikido-audit voor stabiel.
+- **Spatial Light Studio.** Effecten op basis van gedeelde coördinaten en vertragingskalibratie. Een 3D-weergave is optioneel.
+- **Security Center.** Aikido-audit voor stabiel.
 - **Praktijktests.** Hue-tests zijn in de praktijk bevestigd. De Twinkly-muur, Govee en werking, timing en herstel van gemengde groepen staan nog op de testlijst.
 
 # 2.x — Verbeteringen na 2.0

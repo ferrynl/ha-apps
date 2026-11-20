@@ -743,7 +743,12 @@
     renderCollections();
   }
 
+  const renderTools = window.createLightingTools({
+    mount: el("lighting-tools"), api, node, field, language: () => el("language").value,
+  });
+
   function render() {
+    renderTools(context === "home", data);
     panel.hidden = !["home", "hue", "govee"].includes(context);
     if (context === "tests") {
       hueTestPanel.render();
@@ -786,6 +791,7 @@
     try {
       await pending;
     } finally {
+      renderTools(context === "home", data);
       const settingsInUse = context === "settings" && settings.querySelector("details[open]");
       const groupInUse = context === "home" && (groupBusy || panel.querySelector(".lighting-group-form:focus-within, .lighting-scene-form:focus-within"));
       if (force || (!settingsInUse && !groupInUse && JSON.stringify(previous) !== JSON.stringify(data))) {

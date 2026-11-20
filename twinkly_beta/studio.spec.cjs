@@ -329,3 +329,55 @@ test('Hue rooms and zones retain their own controls and Bridge scenes', async ({
  await expect(image).toHaveCount(0);
  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBeTruthy();
 });
+
+test('Spatial Light Studio keeps a local photograph and lamp marker across reloads', async ({page}) => {
+ const light = {id:'lamp', provider:'hue', name:'Hue raam', status:'online', capabilities:{}, state:{}};
+ await page.route('**/lighting', route => route.fulfill({json:{lights:[light], groups:{}, scenes:{}, providers:{}}}));
+ await page.goto('http://127.0.0.1:8765/index.html#home');
+ const studio = page.locator('#lighting-tools section').filter({hasText:'Spatial Light Studio'});
+ const photo = await page.evaluate(() => document.createElement('canvas').toDataURL('image/png').split(',')[1]);
+ await studio.getByLabel('Kies een foto').setInputFiles({
+  name:'kamer.png', mimeType:'image/png', buffer:Buffer.from(photo,'base64'),
+ });
+ await studio.getByLabel('Kies een lamp').selectOption('lamp');
+ await studio.getByRole('button',{name:'Plaats in het midden'}).click();
+ const marker = studio.getByRole('button',{name:/Hue raam · Locatie/});
+ await expect(marker).toHaveAccessibleName('Hue raam · Locatie 50%, 50%');
+ await marker.press('ArrowRight');
+ await expect(marker).toHaveAccessibleName('Hue raam · Locatie 51%, 50%');
+ await page.reload();
+ await expect(marker).toHaveAccessibleName('Hue raam · Locatie 51%, 50%');
+ await expect(studio.getByAltText('Foto van de ruimte')).toHaveAttribute('src',/^data:image\/jpeg/);
+});
+
+test('mixed show builder reorders and saves scenes, then stops before the next step', async ({page}) => {
+ const applied = [];
+ await page.route('**/lighting', route => route.fulfill({json:{
+  lights:[], groups:{room:{name:'Kamer',members:[]}},
+  scenes:{warm:{name:'Warm',group:'room',on:true},cool:{name:'Koel',group:'room',on:true}}, providers:{},
+ }}));
+ await page.route('**/lighting/scenes/*/apply', route => {
+  applied.push(new URL(route.request().url()).pathname.split('/').at(-2));
+  return route.fulfill({json:{results:{lamp:{power:'accepted'}}}});
+ });
+ await page.goto('http://127.0.0.1:8765/index.html#home');
+ const builder = page.locator('#lighting-tools section').filter({hasText:'Showbouwer'});
+ await builder.getByLabel('Shownaam').fill('Kerstshow');
+ await builder.getByRole('button',{name:'Stap toevoegen'}).click();
+ await builder.getByRole('button',{name:'Stap toevoegen'}).click();
+ const steps = builder.locator('.lighting-show-step');
+ await steps.nth(1).getByLabel('Scène').selectOption('cool');
+ await steps.nth(1).getByLabel('Wachttijd (sec.)').fill('20');
+ await steps.nth(1).getByRole('button',{name:'Omhoog'}).click();
+ await builder.getByRole('button',{name:'Opslaan'}).click();
+ await page.reload();
+ const show = builder.locator('article').filter({hasText:'Kerstshow'});
+ await show.getByRole('button',{name:'Bewerken'}).click();
+ await expect(steps.first().getByLabel('Scène')).toHaveValue('cool');
+ await show.getByRole('button',{name:'Afspelen'}).click();
+ await expect.poll(() => applied.slice()).toEqual(['cool']);
+ await builder.getByRole('button',{name:'Stoppen'}).click();
+ await expect(builder.getByRole('status')).toHaveText('Show gestopt');
+ await expect(show.getByRole('button',{name:'Afspelen'})).toBeEnabled();
+ expect(applied).toEqual(['cool']);
+});

@@ -2342,7 +2342,7 @@ class Controller:
 
         app.router.add_get("/provider-studio", legacy_provider_page)
         for asset in (
-            "lighting.js", "lighting.css", "twinkly-nav-logo.svg", "hue-app-icon.webp", "govee-logo.png",
+            "lighting.js", "lighting-tools.js", "lighting.css", "twinkly-nav-logo.svg", "hue-app-icon.webp", "govee-logo.png",
             "project.html", "project.css", "project.js", "CHANGELOG.md", "ROADMAP.md",
         ):
             app.router.add_get("/" + asset, lambda _, filename=asset: web.FileResponse(
