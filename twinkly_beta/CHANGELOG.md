@@ -1,3 +1,7 @@
+## 2.0.0-beta.14
+
+- Verify the previous Hue lamp state by reading it back from the bridge after each test. Report when the restore command is accepted but the original settings cannot be confirmed.
+
 ## 2.0.0-beta.13
 
 - Add Philips Hue to the Test Center with identification, power, dimming, RGB, rainbow and warm/cool white checks per light.

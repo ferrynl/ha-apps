@@ -27,10 +27,10 @@
     es: ["Antigüedad del fotograma", "Duración del comando", "Fallidos", "Medido en la aplicación, sin el tiempo de reacción de la luz."],
   };
   const hueTestWords = {
-    nl: ["Kies een Hue-lamp", "Identificeren", "Aan/uit-test", "Dimtest", "RGB-test", "Regenboog", "Warm/koel wit", "Hue-test stoppen", "Hue-test loopt", "Vorige stand hersteld", "Hue-test mislukt. Controleer de lamp en stop eventuele effecten.", "Vorige stand kon niet worden hersteld.", "Tests gelden voor de hele Hue-lamp. LED-volgorde en richtingstests staan bij Twinkly."],
-    en: ["Choose a Hue light", "Identify", "Power test", "Dimmer test", "RGB test", "Rainbow", "Warm/cool white", "Stop Hue test", "Hue test running", "Previous state restored", "Hue test failed. Check the light and stop any effects.", "Could not restore the previous state.", "Tests apply to the whole Hue light. LED order and direction tests are under Twinkly."],
-    de: ["Hue-Lampe auswählen", "Identifizieren", "Ein-/Aus-Test", "Dimmtest", "RGB-Test", "Regenbogen", "Warm-/Kaltweiß", "Hue-Test stoppen", "Hue-Test läuft", "Vorheriger Zustand wiederhergestellt", "Hue-Test fehlgeschlagen. Prüfe die Lampe und beende aktive Effekte.", "Der vorherige Zustand konnte nicht wiederhergestellt werden.", "Tests gelten für die ganze Hue-Lampe. LED-Reihenfolge und Richtungstests findest du bei Twinkly."],
-    es: ["Elige una luz Hue", "Identificar", "Prueba de encendido", "Prueba de brillo", "Prueba RGB", "Arcoíris", "Blanco cálido/frío", "Detener prueba Hue", "Prueba Hue en curso", "Estado anterior restaurado", "La prueba Hue falló. Comprueba la luz y detén cualquier efecto.", "No se pudo restaurar el estado anterior.", "Las pruebas se aplican a toda la luz Hue. Las pruebas de orden LED y dirección están en Twinkly."],
+    nl: ["Kies een Hue-lamp", "Identificeren", "Aan/uit-test", "Dimtest", "RGB-test", "Regenboog", "Warm/koel wit", "Hue-test stoppen", "Hue-test loopt", "Vorige stand hersteld", "Hue-test mislukt. Controleer de lamp en stop eventuele effecten.", "Vorige stand kon niet worden hersteld.", "Tests gelden voor de hele Hue-lamp. LED-volgorde en richtingstests staan bij Twinkly.", "De bridge heeft het herstel van de vorige stand nog niet bevestigd."],
+    en: ["Choose a Hue light", "Identify", "Power test", "Dimmer test", "RGB test", "Rainbow", "Warm/cool white", "Stop Hue test", "Hue test running", "Previous state restored", "Hue test failed. Check the light and stop any effects.", "Could not restore the previous state.", "Tests apply to the whole Hue light. LED order and direction tests are under Twinkly.", "The bridge did not confirm that the previous state was restored."],
+    de: ["Hue-Lampe auswählen", "Identifizieren", "Ein-/Aus-Test", "Dimmtest", "RGB-Test", "Regenbogen", "Warm-/Kaltweiß", "Hue-Test stoppen", "Hue-Test läuft", "Vorheriger Zustand wiederhergestellt", "Hue-Test fehlgeschlagen. Prüfe die Lampe und beende aktive Effekte.", "Der vorherige Zustand konnte nicht wiederhergestellt werden.", "Tests gelten für die ganze Hue-Lampe. LED-Reihenfolge und Richtungstests findest du bei Twinkly.", "Die Bridge hat den vorherigen Zustand noch nicht bestätigt."],
+    es: ["Elige una luz Hue", "Identificar", "Prueba de encendido", "Prueba de brillo", "Prueba RGB", "Arcoíris", "Blanco cálido/frío", "Detener prueba Hue", "Prueba Hue en curso", "Estado anterior restaurado", "La prueba Hue falló. Comprueba la luz y detén cualquier efecto.", "No se pudo restaurar el estado anterior.", "Las pruebas se aplican a toda la luz Hue. Las pruebas de orden LED y dirección están en Twinkly.", "El puente no ha confirmado que se haya restaurado el estado anterior."],
   };
   const brands = {twinkly: "Twinkly", hue: "Philips Hue", govee: "Govee"};
   const wordmarks = {twinkly: "twinkly-nav-logo.svg", hue: "hue-app-icon.webp", govee: "govee-logo.png"};
@@ -528,7 +528,7 @@
     const stop = button(labels[7], () => run("stop"));
     stop.disabled = hueTestBusy || !running;
     actions.append(stop);
-    const result = {running: 8, restored: 9, failed: 10, restore_failed: 11}[hueTestStatus?.result];
+    const result = {running: 8, restored: 9, failed: 10, restore_failed: 11, restore_unverified: 13}[hueTestStatus?.result];
     hueTestSection.append(actions);
     if (result != null) {
       const message = node("p", labels[result]);
