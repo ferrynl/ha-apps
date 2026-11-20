@@ -1,3 +1,7 @@
+## 2.0.0-beta.30
+
+- Open het Security Center voor drie nieuwe onderdelen. Bekijk de geïnstalleerde release en links naar broncode en GitHub-rapporten, vergelijk de bibliotheekversies in de container met de lockfile en controleer lokaal de Ingress-regels en de toegangsrechten van het sleutelbestand.
+
 ## 2.0.0-beta.29
 
 - Mijn Huis tekent Twinkly-leds op basis van de echte Twinkly-mapping van de set of groep. Zonder fysieke mapping verschijnt een melding.

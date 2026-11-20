@@ -2341,6 +2341,8 @@ class Controller:
         self.network_until = 0
         self.network_devices = []
         app = web.Application(middlewares=[ingress_only], client_max_size=720_000)
+        from modules.security_center import install as install_security_center
+        install_security_center(app, Path(__file__).resolve().parent, DATA.parent, ingress_only)
         from modules.provider_routes import install
         app.cleanup_ctx.append(self.stream)
         install(app, controller=self)
@@ -2350,7 +2352,7 @@ class Controller:
         app.router.add_get("/provider-studio", legacy_provider_page)
         for asset in (
             "lighting.js", "lighting-tools.js", "lighting.css", "twinkly-nav-logo.svg", "hue-app-icon.webp", "govee-logo.png",
-            "project.html", "project.css", "project.js", "CHANGELOG.md", "ROADMAP.md",
+            "project.html", "project.css", "project.js", "security-center.js", "CHANGELOG.md", "ROADMAP.md",
         ):
             app.router.add_get("/" + asset, lambda _, filename=asset: web.FileResponse(
                 filename, headers={"Cache-Control": "no-store"}))

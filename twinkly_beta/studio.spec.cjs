@@ -583,3 +583,23 @@ test('Mijn Huis shows an existing Twinkly group as a single panel and identifies
  await scene.press('ArrowUp');
  await expect.poll(()=>world.evaluate(element=>element.style.transform)).toContain('rotateX(-27deg)');
 });
+
+test('Security Center shows runtime inventory, release links and local checks', async ({page}) => {
+ await page.route('**/security-center/status', route => route.fulfill({json:{
+  version:'2.0.0-beta.30',runtime:{python:'3.12.0',architecture:'aarch64',root:false},
+  dependencies:[{name:'aiohttp',expected:'3.14.5',installed:'3.14.5'},
+   {name:'pillow',expected:'13.0.0',installed:'12.0.0'}],
+  checks:[{id:'direct_access',result:'pass'},{id:'credentials_permissions',result:'not_configured'}],
+  checked_at:'2026-11-20T00:00:00Z'
+ }}));
+ await page.goto('http://127.0.0.1:8765/index.html#security-center');
+ const modules = page.locator('#security-modules');
+ await expect(modules.getByRole('heading',{name:'Broncode en release'})).toBeVisible();
+ await expect(modules.getByText('Geïnstalleerde bèta · 2.0.0-beta.30')).toBeVisible();
+ await expect(modules.getByRole('link',{name:'GitHub-tests en beveiligingsrapporten'})).toHaveAttribute('href',/actions\/workflows/);
+ await expect(modules.getByText('Afwijkingen · 1')).toBeVisible();
+ await modules.getByText('Pakketten volgens lockfile · 1 / 2').click();
+ await expect(modules.getByText('pillow · 12.0.0 → 13.0.0')).toBeVisible();
+ await expect(modules.getByText('Rechtstreekse toegang geblokkeerd · Geslaagd')).toBeVisible();
+ await expect(modules.getByText('Toegangsrechten van de sleutelopslag · Niet ingesteld')).toBeVisible();
+});
