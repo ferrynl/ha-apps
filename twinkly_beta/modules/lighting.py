@@ -8,6 +8,7 @@ from aiohttp import ClientError, web
 
 from .common import brightness, rgb
 from .profiles import govee_profile
+from .mixed_music import MixedMusic
 
 ERRORS = (ClientError, OSError, RuntimeError, TimeoutError, ValueError, web.HTTPException)
 CAPABILITY = {"power": "power", "brightness": "brightness", "color": "rgb", "temperature": "temperature"}
@@ -59,6 +60,7 @@ class Lighting:
         self.provider_control = provider_control
         self.group_lock = asyncio.Lock()
         self.control_lock = asyncio.Lock()
+        self.music = MixedMusic(controller, self.send)
 
     async def lights(self):
         lights = {}
@@ -95,7 +97,7 @@ class Lighting:
                     if brand == "hue":
                         state["color"] = color_from_xy(state.pop("xy", None))
                     status = profile.get("status", row["status"]) if row["status"] == "online" else row["status"]
-                    lights[key] = {**profile, "state": state, "id": key, "status": status}
+                    lights[key] = {**profile, "provider": brand, "state": state, "id": key, "status": status}
         return lights, connections
 
     async def inventory(self, request):
@@ -109,7 +111,7 @@ class Lighting:
         except ERRORS:
             scenes = None
         return web.json_response({"lights": list(lights.values()), "connections": connections,
-                                  "groups": groups, "scenes": scenes})
+                                  "groups": groups, "scenes": scenes, "music": self.music.status()})
 
     async def save_group(self, request):
         try:
@@ -137,6 +139,9 @@ class Lighting:
                     identifier = identifier or uuid.uuid4().hex
                     groups[identifier] = {"name": name.strip(), "members": list(dict.fromkeys(members))}
                 self.store.save_groups(groups)
+            async with self.control_lock:
+                if self.music.group == identifier:
+                    await self.music.stop()
             return web.json_response({"id": identifier})
         except (ValueError, TypeError):
             raise web.HTTPBadRequest()
@@ -181,6 +186,8 @@ class Lighting:
                 if group is None:
                     raise web.HTTPConflict()
                 members = group["members"]
+                if self.music.members.intersection(members):
+                    await self.music.stop()
                 lights, _ = await self.lights()
                 commands = [("power", scene["on"])]
                 commands.extend((action, scene[action]) for action in ("color", "brightness") if action in scene)
@@ -192,6 +199,31 @@ class Lighting:
             return web.json_response({"results": results})
         except (ValueError, KeyError, TypeError, OSError):
             raise web.HTTPServiceUnavailable()
+
+    async def control_music(self, request):
+        try:
+            body = await request.json()
+            if not isinstance(body, dict):
+                raise ValueError()
+            async with self.control_lock:
+                if body.get("stop") is True:
+                    await self.music.stop()
+                    return web.json_response(self.music.status())
+                group = body["group"]
+                members = self.store.load_groups()[group]["members"]
+                await self.music.stop()
+                lights, _ = await self.lights()
+                result = await self.music.start(group, {key: lights.get(key) for key in members})
+                return web.json_response({**self.music.status(), **result})
+        except (ValueError, KeyError, TypeError):
+            raise web.HTTPBadRequest()
+        except OSError:
+            raise web.HTTPServiceUnavailable()
+
+    async def music_cleanup(self, app):
+        yield
+        async with self.control_lock:
+            await self.music.stop()
 
     async def send(self, key, light, action, value):
         if (not light or not light["capabilities"].get(CAPABILITY[action])
@@ -246,6 +278,8 @@ class Lighting:
         except OSError:
             raise web.HTTPServiceUnavailable()
         async with self.control_lock:
+            if self.music.members.intersection(members):
+                await self.music.stop()
             lights, _ = await self.lights()
             results = await asyncio.gather(*(self.send(key, lights.get(key), action, value) for key in members))
         return web.json_response({"results": dict(zip(members, results))})
@@ -254,5 +288,6 @@ class Lighting:
         router.add_get("/lighting", self.inventory)
         router.add_post("/lighting/groups", self.save_group)
         router.add_post("/lighting/control", self.control)
+        router.add_post("/lighting/music", self.control_music)
         router.add_post("/lighting/scenes", self.save_scene)
         router.add_post("/lighting/scenes/{id}/apply", self.apply_scene)

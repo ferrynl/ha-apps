@@ -85,13 +85,14 @@ test('Home combines providers and keeps pairing in Settings', async ({page}) => 
  });
  const groups = {};
  const scenes = {};
+ let music={group:null,live:false};
  let groupControl;
  let pairing;
  let temperature;
  await page.route('**/lighting', route => route.fulfill({json:{
   lights:[light('t','twinkly','Tree',true),{...light('h','hue','Living room',false),
    capabilities:{power:true,temperature:true}, temperature_mirek:{min:153,max:500}, state:{on:true,mirek:370}},light('g','govee','Strip',false,'unknown')],
-  connections:{hue:[{id:'bridge',address:'192.168.1.2',status:'online'}],govee:[]}, groups, scenes,
+  connections:{hue:[{id:'bridge',address:'192.168.1.2',status:'online'}],govee:[]}, groups, scenes, music,
  }}));
  await page.route('**/lighting/groups', route => {
   const {name,members}=route.request().postDataJSON();
@@ -106,6 +107,11 @@ test('Home combines providers and keeps pairing in Settings', async ({page}) => 
   }
   groupControl=command;
   return route.fulfill({json:{results:{t:'accepted',h:'skipped',g:'unconfirmed'}}});
+ });
+ await page.route('**/lighting/music', route => {
+  const {group,stop}=route.request().postDataJSON();
+  music={group:stop?null:group,live:!stop};
+  return route.fulfill({json:{...music,eligible:['t','h'],skipped:['g']}});
  });
  await page.route('**/lighting/scenes', route => {
   const scene=route.request().postDataJSON();
@@ -150,6 +156,10 @@ test('Home combines providers and keeps pairing in Settings', async ({page}) => 
  await group.getByRole('button',{name:'Aan',exact:true}).click();
  await expect(page.locator('#lighting-feedback')).toContainText('Onbevestigd · 1');
  expect(groupControl).toEqual({group:'mixed',action:'power',value:true});
+ await group.getByRole('button',{name:'Muziek starten'}).click();
+ await expect(group.getByText('LedFX actief')).toBeVisible();
+ await group.getByRole('button',{name:'Muziek stoppen'}).click();
+ await expect(group.getByRole('button',{name:'Muziek starten'})).toBeVisible();
  const sceneForm=home.locator('.lighting-scene-form');
  await sceneForm.getByLabel('Scènenaam').fill('Kerstavond');
  await sceneForm.getByLabel('Helderheid').fill('45');
