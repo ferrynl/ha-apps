@@ -279,11 +279,13 @@ test('the footer opens the matching release and the Matter roadmap on mobile', a
 test('Hue rooms and zones retain their own controls and Bridge scenes', async ({page}) => {
  const requests = [];
  let cover = null;
+ let imageUnavailable = false;
  await page.route('**/providers/hue/scene-image/hue-a/scene-one*', route => {
   if (route.request().method() === 'POST') {
    cover = route.request().postDataJSON().image;
    return route.fulfill({json:{ok:true}});
   }
+  if (imageUnavailable) return route.fulfill({status:404});
   return route.fulfill({body:Buffer.from(cover,'base64'),contentType:'image/jpeg'});
  });
  await page.route('**/lighting', route => route.fulfill({json:{lights:[], groups:{}, scenes:{}, bridges:{}}}));
@@ -322,9 +324,17 @@ test('Hue rooms and zones retain their own controls and Bridge scenes', async ({
  await room.getByLabel('Afbeelding kiezen · Avondlicht').setInputFiles({
   name:'avondlicht.png', mimeType:'image/png', buffer:Buffer.from(png,'base64'),
  });
- const image = room.locator('.hue-scene-cover img');
+ const preview = room.locator('.hue-scene-cover');
+ const image = preview.locator('img');
  await expect(image).toBeVisible();
  await expect.poll(() => image.evaluate(img => img.complete && img.naturalWidth > 0)).toBe(true);
+ imageUnavailable = true;
+ const missingImage = page.waitForResponse(response =>
+  response.url().includes('/scene-image/hue-a/scene-one') && response.status() === 404);
+ await page.reload({waitUntil:'domcontentloaded'});
+ await missingImage;
+ await expect(image).toHaveCount(0);
+ await expect(preview).toHaveCSS('background-image', /rgb\(255, 100, 0\)/);
  await room.getByRole('button',{name:'Afbeelding verwijderen · Avondlicht'}).click();
  await expect(image).toHaveCount(0);
  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBeTruthy();

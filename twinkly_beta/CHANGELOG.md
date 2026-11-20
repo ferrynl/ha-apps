@@ -1,3 +1,7 @@
+## 2.0.0-beta.19
+
+- Toon automatisch previews voor Hue-scènes met kleur, wittemperatuur of alleen helderheid. Scènes zonder lichtgegevens krijgen een neutrale preview. Als een eigen afbeelding niet laadt, blijft de automatische preview zichtbaar.
+
 ## 2.0.0-beta.18
 
 - Toon een kleurpreview bij opgeslagen Hue-scènes waar Hue kleuren rapporteert. Kies desgewenst zelf een JPG-, PNG- of WebP-afbeelding per scène.

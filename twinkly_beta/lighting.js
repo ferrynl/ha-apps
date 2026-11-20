@@ -624,16 +624,19 @@
     const play = button(scene.name, activate);
     const cover = node("span", "", "hue-scene-cover");
     cover.setAttribute("aria-hidden", "true");
+    const colors = (scene.palette || []).map(stateColor).filter(Boolean);
+    if (colors.length === 1) colors.push(colors[0]);
+    if (colors.length) {
+      cover.style.backgroundImage = "linear-gradient(165deg, #fff2, transparent 48%, #0008), " +
+        "linear-gradient(125deg, " + colors.join(", ") + ")";
+    }
     if (scene.has_image) {
       const image = node("img");
       image.alt = "";
       image.loading = "lazy";
+      image.addEventListener("error", () => image.remove(), {once: true});
       image.src = path + "?v=" + (sceneImageRevisions.get(path) || 0);
       cover.append(image);
-    } else {
-      const colors = (scene.palette || []).map(stateColor).filter(Boolean);
-      if (colors.length === 1) cover.style.backgroundColor = colors[0];
-      if (colors.length > 1) cover.style.backgroundImage = "linear-gradient(125deg, " + colors.join(", ") + ")";
     }
     play.prepend(cover);
     const upload = node("input");
