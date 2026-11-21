@@ -10,6 +10,7 @@ from types import SimpleNamespace
 
 from aiohttp import web
 
+from .security_reports import SecurityReports
 from .update_status import UpdateStatus
 
 
@@ -88,6 +89,7 @@ def install(app, directory, data_dir, middleware):
     lock = directory / "requirements.lock"
     config = directory / "config.yaml"
 
+    reports = SecurityReports()
     updates = UpdateStatus(parse_version, platform.python_version())
 
     def installed_version():
@@ -114,6 +116,7 @@ def install(app, directory, data_dir, middleware):
                         "root": os.geteuid() == 0},
             "dependencies": packages,
             "updates": updates.report,
+            "scan_reports": reports.report,
             "checks": checks,
             "checked_at": datetime.now(timezone.utc).isoformat(),
         }, headers={"Cache-Control": "no-store"})
@@ -122,5 +125,10 @@ def install(app, directory, data_dir, middleware):
         report = await updates.check(installed_version(), installed_packages())
         return web.json_response(report, headers={"Cache-Control": "no-store"})
 
+    async def check_reports(request):
+        report = await reports.check(installed_version())
+        return web.json_response(report, headers={"Cache-Control": "no-store"})
+
     app.router.add_get("/security-center/status", status)
+    app.router.add_post("/security-center/reports", check_reports)
     app.router.add_post("/security-center/updates", check_updates)
