@@ -287,8 +287,11 @@ class Lighting:
                 raise ValueError()
             async with self.control_lock:
                 if body.get("stop") is True:
-                    await self.music.stop()
-                    return web.json_response(self.music.status())
+                    report = await self.music.stop()
+                    result = self.music.status()
+                    if report:
+                        result["restoration"] = report
+                    return web.json_response(result)
                 group = body["group"]
                 if "level" in body:
                     level = body["level"]

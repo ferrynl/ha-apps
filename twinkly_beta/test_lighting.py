@@ -231,12 +231,30 @@ class LightingTests(unittest.IsolatedAsyncioTestCase):
             while self.streamer.send_colors.call_args.args[0][0].blue != 65535:
                 await asyncio.sleep(.01)
         response = await self.client.post("/lighting/music", json={"stop": True})
-        self.assertEqual(await response.json(), {"group": None, "live": False})
+        self.assertEqual(await response.json(), {"group": None, "live": False, "restoration": {
+            "twinkly_released": 1, "hue": "released", "color": {self.govee: "unconfirmed"},
+        }})
         self.assertEqual(self.controller.music, set())
         self.control.assert_not_awaited()
         self.color.assert_awaited_with([255, 1, 2])
         bridge.assert_awaited_with("PUT", RESOURCE + "/" + AREA, {"action": "stop"})
         self.streamer.disconnect.assert_called_once()
+
+    async def test_music_stop_reports_unconfirmed_hue_release_and_failed_govee_restore(self):
+        group = "a" * 32
+        bridge = self.mock_entertainment()
+        self.store.save_groups({group: {"name": "Wall", "members": [self.hue, self.govee]}})
+        response = await self.client.post("/lighting/music", json={"group": group})
+        self.assertEqual(response.status, 200)
+        async with asyncio.timeout(2):
+            while not self.color.await_count:
+                await asyncio.sleep(.01)
+        bridge.side_effect = OSError
+        self.color.side_effect = OSError
+        response = await self.client.post("/lighting/music", json={"stop": True})
+        self.assertEqual(await response.json(), {"group": None, "live": False, "restoration": {
+            "hue": "unconfirmed", "color": {self.govee: "failed"},
+        }})
 
     async def test_music_skips_an_area_with_lights_outside_the_group(self):
         group = "a" * 32

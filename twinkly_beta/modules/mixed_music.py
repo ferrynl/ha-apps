@@ -107,7 +107,7 @@ class MixedMusic:
         return dict(zip(targets, results))
 
     async def restore(self):
-        keys = tuple(self.changed)
+        keys = tuple(sorted(self.changed))
         results = await asyncio.gather(*(self.send(key, self.external[key][0], *self.external[key][1])
                                          for key in keys))
         for key, result in zip(keys, results):
@@ -115,6 +115,7 @@ class MixedMusic:
                 self.changed.discard(key)
             else:
                 LOG.warning("Could not restore the color of %s after mixed music", self.external[key][0]["name"])
+        return dict(zip(keys, results))
 
     async def dispatch(self, color, received):
         started = time.monotonic()
@@ -157,18 +158,25 @@ class MixedMusic:
             await asyncio.sleep(1)
 
     async def stop(self):
+        report = {}
         if self.task:
             self.task.cancel()
             await asyncio.gather(self.task, return_exceptions=True)
         if self.twinkly:
             async with self.controller.edit:
                 self.controller.music.difference_update(self.twinkly)
-        if self.hue_members and self.entertainment.music_active:
-            await self.entertainment.stop()
-        await self.restore()
-        for key in self.brightness_changed:
+            report["twinkly_released"] = len(self.twinkly)
+        if self.hue_members:
+            if self.entertainment.music_active:
+                await self.entertainment.stop()
+            report["hue"] = "unconfirmed" if self.entertainment.error == "stop_failed" else "released"
+        colors = await self.restore()
+        if colors:
+            report["color"] = colors
+        for key in sorted(self.brightness_changed):
             light, _ = self.external[key]
             result = await self.send(key, light, "brightness", round(light["state"]["brightness"]))
+            report.setdefault("brightness", {})[key] = result
             if result not in {"accepted", "unconfirmed"}:
                 LOG.warning("Could not restore the brightness of %s after mixed music", light["name"])
         self.brightness_changed.clear()
@@ -184,3 +192,4 @@ class MixedMusic:
         self.hue = None
         self.timings = {}
         self.live = False
+        return report
