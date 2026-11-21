@@ -4,6 +4,7 @@ COPY requirements.lock ./
 RUN pip install --no-cache-dir --no-deps -r requirements.lock && pip check
 COPY app.py index.html lighting.js lighting-tools.js govee-cloud.js lighting.css twinkly.svg twinkly-nav-logo.svg hue-app-icon.webp govee-logo.png config.yaml ./
 COPY project.html project.css project.js security-center.js CHANGELOG.md ROADMAP.md ./
+COPY govee-guide-config.webp govee-guide-yaml.webp govee-guide-cloud.webp ./
 COPY effect_previews ./effect_previews
 COPY product_photos ./product_photos
 COPY matrix_gifs ./matrix_gifs

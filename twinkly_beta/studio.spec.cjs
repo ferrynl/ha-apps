@@ -782,6 +782,24 @@ test('Mijn Huis assigns a wall to a second room and filters the 3D view', async 
  await expect(plan.locator('.house-3d-world')).toHaveAttribute('style', /rotateY\(28deg\)/);
 });
 
+test('Govee cloud shows the configuration steps and local screenshots without a key', async ({page}) => {
+ await page.setViewportSize({width:390,height:844});
+ await page.route('**/providers/govee/cloud', route => route.fulfill({json:{configured:false}}));
+ await page.goto('http://127.0.0.1:8765/index.html#govee');
+ const guide = page.locator('#govee-cloud .govee-setup-guide');
+ await expect(guide).toHaveAttribute('open','');
+ await expect(guide.getByText(/Ongebruikte optionele configuratieopties weergeven/)).toBeVisible();
+ await expect(guide.getByText('govee_api_key: "YOUR_API_KEY"')).toBeVisible();
+ const images = guide.getByRole('img');
+ await expect(images).toHaveCount(3);
+ for (const image of await images.all()) {
+  await image.scrollIntoViewIfNeeded();
+  await expect.poll(() => image.evaluate(el => el.naturalWidth)).toBeGreaterThan(0);
+ }
+ await guide.getByText('Govee API-sleutel instellen',{exact:true}).click();
+ await expect(guide).not.toHaveAttribute('open','');
+});
+
 test('Govee cloud shows each model and sends the selected segment only', async ({page}) => {
  const calls = [];
  await page.route('**/providers/govee/cloud**', route => {
@@ -798,6 +816,8 @@ test('Govee cloud shows each model and sends the selected segment only', async (
  const cloud = page.locator('#govee-cloud');
  await expect(cloud.getByRole('heading',{name:'Govee-cloud'})).toBeVisible();
  expect(calls).toEqual([]);
+ await expect(cloud.getByText('Govee API-sleutel instellen',{exact:true})).toBeVisible();
+ await expect(cloud.locator('.govee-setup-guide')).not.toHaveAttribute('open','');
  await cloud.getByRole('button',{name:'Cloudlampen ophalen'}).click();
  await expect(cloud.getByRole('option',{name:'Woonkamer · H605C'})).toBeAttached();
  await cloud.getByRole('button',{name:'Scène toepassen'}).click();

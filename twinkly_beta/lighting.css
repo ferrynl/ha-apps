@@ -344,3 +344,17 @@
 .mixer-group > label { display:grid; margin-top:.6rem; gap:.25rem; }
 .mixer-group > button { margin-top:.65rem; }
 .mixer-dialog .lighting-scene-form { align-items:end; }
+
+.govee-setup-guide { width: 100%; border: 1px solid var(--studio-line); border-radius: .8rem; padding: .85rem 1rem; }
+.govee-setup-guide summary { cursor: pointer; font-weight: 700; }
+.govee-setup-guide ol { margin: .8rem 0; padding-inline-start: 1.5rem; }
+.govee-setup-guide li + li { margin-top: .45rem; }
+.govee-setup-guide pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+.govee-setup-figures { display: grid; grid-template-columns: minmax(0, 1fr); gap: .85rem; }
+.govee-setup-figures figure { margin: 0; min-width: 0; }
+.govee-setup-figures img { display: block; width: 100%; height: auto; border: 1px solid var(--studio-line); border-radius: .55rem; }
+.govee-setup-figures figcaption { margin-top: .4rem; font-size: .9rem; }
+@media (min-width: 850px) {
+  .govee-setup-figures { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .govee-setup-figures figure:last-child { grid-column: 1 / -1; max-width: 32rem; }
+}
