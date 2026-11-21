@@ -1,3 +1,8 @@
+## 2.0.0-beta.38
+
+- Kleurkeuzes op de lichtmengtafel worden al verstuurd terwijl de kleurkiezer openstaat. Mixopdrachten gebruiken de recente lampenlijst en wachten bij een ontbrekende lijst alleen op de betrokken merken.
+- De mengtafel onthoudt de toegepaste kleur en helderheid per selectie als groepslampen verschillende waarden teruggeven of een statusupdate nog onderweg is.
+
 ## 2.0.0-beta.37
 
 - Bedien lampen, kamers en groepen vanaf de nieuwe DJ-lichtmengtafel met verticale helderheidsfader, kleurknop en verlichte scènepads. Kies alle merken samen of bedien Twinkly, Philips Hue of Govee afzonderlijk.

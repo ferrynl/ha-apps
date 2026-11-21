@@ -333,3 +333,28 @@ class LightingTests(unittest.IsolatedAsyncioTestCase):
         })
         self.assertEqual((await response.json())["results"], {self.hue: "accepted"})
         self.controller.apply_control.assert_not_awaited()
+
+    async def test_home_commands_do_not_wait_for_a_new_provider_inventory(self):
+        group = "b" * 32
+        self.store.save_groups({group: {"name": "Living room", "kind": "room",
+                                        "members": [self.twinkly, self.hue]}})
+        response = await self.client.get("/lighting")
+        self.assertEqual(response.status, 200)
+        self.profiles.reset_mock()
+        self.govee_statuses.reset_mock()
+        response = await self.client.post("/lighting/control", json={
+            "group": group, "action": "color", "value": [255, 0, 0],
+        })
+        self.assertEqual((await response.json())["results"], {self.twinkly: "accepted", self.hue: "skipped"})
+        self.profiles.assert_not_awaited()
+        self.govee_statuses.assert_not_awaited()
+        self.controller.apply_control.assert_awaited_once_with(
+            {"id": "tree", "action": "color", "value": "#ff0000"})
+
+    async def test_uncached_hue_command_only_reads_hue(self):
+        response = await self.client.post("/lighting/control", json={
+            "id": self.hue, "action": "power", "value": True,
+        })
+        self.assertEqual((await response.json())["results"], {self.hue: "accepted"})
+        self.profiles.assert_awaited_once()
+        self.govee_statuses.assert_not_awaited()
