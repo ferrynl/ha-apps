@@ -358,3 +358,12 @@
   .govee-setup-figures { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .govee-setup-figures figure:last-child { grid-column: 1 / -1; max-width: 32rem; }
 }
+
+.house-tree-editor { margin: .8rem 0; padding: .65rem .8rem; border: 1px solid var(--studio-line); border-radius: .7rem; }
+.house-tree-editor summary { cursor: pointer; font-weight: 700; }
+.house-tree-editor .lighting-controls { flex-wrap: wrap; align-items: end; margin-top: .65rem; }
+.house-tree-editor p:empty { display: none; }
+.house-3d-tree { position: absolute; left: 50%; bottom: 0; pointer-events: none;
+  transform-style: preserve-3d; transform-origin: 50% 100%; }
+.house-3d-tree[hidden] { display: none; }
+.house-3d-tree img { position: absolute; inset: 0; width: 100%; height: 100%; }

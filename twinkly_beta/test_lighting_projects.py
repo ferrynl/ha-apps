@@ -354,6 +354,31 @@ class LightingProjectsTest(unittest.IsolatedAsyncioTestCase):
         invalid = await restarted.post(url, json={**body, "slot": 32, "revision": last_room["revision"]})
         self.assertEqual(invalid.status, 400)
 
+    async def test_floor_plan_tree_validates_persists_and_can_be_removed(self):
+        url = "/lighting/projects/overview"
+        before = await (await self.client.get(url)).json()
+        tree = {"x_m": 0.75, "z_m": -1.5, "height_m": 2.4, "angle": -30}
+        body = {"room": 0, "tree": tree, "revision": before["revision"]}
+        invalid = await self.client.post(url + "/tree", json={**body, "tree": {**tree, "height_m": True}})
+        self.assertEqual(invalid.status, 400)
+        other_room = await self.client.post(url + "/tree", json={**body, "room": 7})
+        self.assertEqual(other_room.status, 409)
+
+        placed = await self.client.post(url + "/tree", json=body)
+        self.assertEqual(placed.status, 200)
+        changed = await placed.json()
+        self.assertEqual(changed["trees"], {"0": tree})
+        stale = await self.client.post(url + "/tree", json={**body, "tree": None})
+        self.assertEqual(stale.status, 409)
+        wall_edit = await self.client.post(url, json={"wall": "default", "slot": 1, "revision": before["revision"]})
+        self.assertEqual(wall_edit.status, 409)
+
+        restarted = await self.connect()
+        self.assertEqual(await (await restarted.get(url)).json(), changed)
+        removed = await restarted.post(url + "/tree", json={**body, "tree": None, "revision": changed["revision"]})
+        self.assertEqual(removed.status, 200)
+        self.assertEqual(await removed.json(), before)
+
     async def test_spatial_groups_play_once_with_individual_results_inside_the_group(self):
         group = '["group","twinkly:native:wall"]'
         members = ['["twinkly","a"]', '["twinkly","b"]']

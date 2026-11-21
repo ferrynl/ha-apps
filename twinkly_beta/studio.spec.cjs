@@ -782,6 +782,60 @@ test('Mijn Huis assigns a wall to a second room and filters the 3D view', async 
  await expect(plan.locator('.house-3d-world')).toHaveAttribute('style', /rotateY\(28deg\)/);
 });
 
+test('Mijn Huis previews, saves and removes the Christmas tree in a selected room', async ({page}) => {
+ await page.setViewportSize({width:390,height:844});
+ await page.route('**/lighting', route => route.fulfill({json:{lights:[],groups:{},scenes:{},connections:{}}}));
+ await page.route('**/lighting/projects', route => route.fulfill({json:{
+  walls:[{id:'default',name:'Wand'},{id:'other',name:'Andere wand'}], wall_id:'default',
+  shows:[],layout:{revision:'layout',photo_version:null,points:[]},playback:{state:'idle'}
+ }}));
+ const snapshot = {
+  revision:'initial',room_names:{1:'Woonkamer'},trees:{},
+  walls:[{id:'default',name:'Wand',slot:0,photo_version:null,points:[]},
+   {id:'other',name:'Andere wand',slot:4,photo_version:null,points:[]}],
+ };
+ const expected = {x_m:0.75,z_m:-1.5,height_m:2.4,angle:-30};
+ await page.route('**/lighting/projects/overview', route => route.fulfill({json:snapshot}));
+ await page.route('**/lighting/projects/overview/tree', route => {
+  const body = route.request().postDataJSON();
+  expect(body).toEqual({room:1,tree:snapshot.trees[1] ? null : expected,revision:snapshot.revision});
+  snapshot.trees = body.tree ? {1:body.tree} : {};
+  snapshot.revision = body.tree ? 'placed' : 'removed';
+  return route.fulfill({json:snapshot});
+ });
+ await page.route('**/product-photo/pre-lit-tree', route => route.fulfill({
+  path:require('node:path').join(__dirname,'product_photos','pre-lit-tree.png'),contentType:'image/png',
+ }));
+ const open = async () => {
+  await page.goto('http://127.0.0.1:8765/index.html#mijn-huis');
+  await page.getByRole('button',{name:'3D-weergave',exact:true}).click();
+  const editor = page.locator('.house-tree-editor');
+  await editor.getByText('3D-kerstboom',{exact:true}).click();
+  await editor.getByLabel('Kamer voor de kerstboom').selectOption({label:'Woonkamer'});
+  return editor;
+ };
+ let editor = await open();
+ const tree = page.locator('.house-3d-tree[data-room="1"]');
+ await expect(tree).toBeHidden();
+ await editor.getByLabel('Boom links/rechts (m)').fill('0.75');
+ await editor.getByLabel('Boom voor/achter (m)').fill('-1.5');
+ await editor.getByLabel('Hoogte kerstboom (m)').fill('2.4');
+ await editor.getByLabel('Draaihoek kerstboom (°)').fill('-30');
+ await expect(tree).toBeVisible();
+ await expect(tree).toHaveCSS('height','156px');
+ await expect(tree).toHaveAttribute('style',/rotateY\(-30deg\)/);
+ await expect.poll(() => tree.locator('img').first().evaluate(image => image.naturalWidth)).toBeGreaterThan(0);
+ await editor.getByRole('button',{name:'Kerstboom plaatsen',exact:true}).click();
+ await expect(editor.getByRole('button',{name:'Kerstboom opslaan',exact:true})).toBeVisible();
+ await page.reload();
+ editor = await open();
+ await expect(tree).toBeVisible();
+ await expect(editor.getByLabel('Hoogte kerstboom (m)')).toHaveValue('2.4');
+ await editor.getByRole('button',{name:'Kerstboom verwijderen',exact:true}).click();
+ await expect(tree).toBeHidden();
+ await expect(editor.getByRole('button',{name:'Kerstboom plaatsen',exact:true})).toBeVisible();
+});
+
 test('Govee cloud shows the configuration steps and local screenshots without a key', async ({page}) => {
  await page.setViewportSize({width:390,height:844});
  await page.route('**/providers/govee/cloud', route => route.fulfill({json:{configured:false}}));
