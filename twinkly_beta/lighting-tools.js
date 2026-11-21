@@ -32,9 +32,9 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language}) =
   const radialModes = {outward: 0, inward: 1};
   const directions = {right: [0, 1], left: [0, -1], down: [1, 1], up: [1, -1]};
   const planLabels = {
-    nl: ["3D-weergave", "Sluiten", "Sleep om te draaien. Gebruik de pijltjes of schuifknop om te draaien en te zoomen.", "Zoom", "Links draaien", "Rechts draaien", "Upload eerst een muurfoto.", "Echte ledposities", "Ledmapping ontbreekt", "Ledmapping ophalen…", "Muur plaatsen", "Kamer en wandzijde", "Kamer", "Voor", "Rechts", "Achter", "Links", "Alle kamers", "Beginstand", "Vernieuwen", "Bij een bezette plek wisselen de twee muren van plaats.", "Plek opgeslagen", "Open 3D-weergave en kies voor elke muur de kamer en wandzijde."],
-    en: ["3D view", "Close", "Drag to orbit. Use the arrow keys to turn and the slider to zoom.", "Zoom", "Turn left", "Turn right", "Upload a wall photo first.", "Physical LED positions", "LED mapping unavailable", "Loading LED mapping…", "Place wall", "Room and wall side", "Room", "Front", "Right", "Back", "Left", "All rooms", "Reset view", "Refresh", "If a spot is occupied, the two walls swap positions.", "Position saved", "Open the 3D view and select a room and side for each wall."],
-    de: ["3D-Ansicht", "Schließen", "Zum Drehen ziehen. Pfeiltasten drehen, der Schieberegler zoomt.", "Zoom", "Nach links drehen", "Nach rechts drehen", "Lade zuerst ein Wandfoto hoch.", "Physische LED-Positionen", "LED-Mapping fehlt", "LED-Mapping wird geladen…", "Wand platzieren", "Raum und Wandseite", "Raum", "Vorne", "Rechts", "Hinten", "Links", "Alle Räume", "Ansicht zurücksetzen", "Aktualisieren", "Ist ein Platz belegt, tauschen die beiden Wände ihre Position.", "Position gespeichert", "Öffne die 3D-Ansicht und wähle für jede Wand einen Raum und eine Seite."],
+    nl: ["3D-weergave", "Sluiten", "Sleep om te draaien. Gebruik de pijltjes of schuifknop om te draaien en te zoomen.", "Zoom", "Links draaien", "Rechts draaien", "Voeg muurmaten of een foto toe.", "Echte ledposities", "Ledmapping ontbreekt", "Ledmapping ophalen…", "Muur plaatsen", "Kamer en wandzijde", "Kamer", "Voor", "Rechts", "Achter", "Links", "Alle kamers", "Beginstand", "Vernieuwen", "Bij een bezette plek wisselen de twee muren van plaats.", "Plek opgeslagen", "Open 3D-weergave en kies voor elke muur de kamer en wandzijde."],
+    en: ["3D view", "Close", "Drag to orbit. Use the arrow keys to turn and the slider to zoom.", "Zoom", "Turn left", "Turn right", "Add wall dimensions or a photo.", "Physical LED positions", "LED mapping unavailable", "Loading LED mapping…", "Place wall", "Room and wall side", "Room", "Front", "Right", "Back", "Left", "All rooms", "Reset view", "Refresh", "If a spot is occupied, the two walls swap positions.", "Position saved", "Open the 3D view and select a room and side for each wall."],
+    de: ["3D-Ansicht", "Schließen", "Zum Drehen ziehen. Pfeiltasten drehen, der Schieberegler zoomt.", "Zoom", "Nach links drehen", "Nach rechts drehen", "Füge Wandmaße oder ein Foto hinzu.", "Physische LED-Positionen", "LED-Mapping fehlt", "LED-Mapping wird geladen…", "Wand platzieren", "Raum und Wandseite", "Raum", "Vorne", "Rechts", "Hinten", "Links", "Alle Räume", "Ansicht zurücksetzen", "Aktualisieren", "Ist ein Platz belegt, tauschen die beiden Wände ihre Position.", "Position gespeichert", "Öffne die 3D-Ansicht und wähle für jede Wand einen Raum und eine Seite."],
     es: ["Vista 3D", "Cerrar", "Arrastra para girar. Usa las flechas para girar y el control deslizante para ampliar.", "Zoom", "Girar a la izquierda", "Girar a la derecha", "Sube primero una foto de pared.", "Posiciones físicas de los LED", "Mapa LED no disponible", "Cargando mapa LED…", "Colocar pared", "Habitación y lado de la pared", "Habitación", "Delante", "Derecha", "Detrás", "Izquierda", "Todas las habitaciones", "Restablecer vista", "Actualizar", "Si el lugar está ocupado, las dos paredes intercambian posiciones.", "Posición guardada", "Abre la vista 3D y elige una habitación y un lado para cada pared."],
   };
   const wallLabels = {
@@ -43,13 +43,19 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language}) =
     de: ["Wand", "Wand 1", "Name der Wand", "Wand hinzufügen", "Wand umbenennen", "Wand löschen", "Diese Wand samt Foto und Lampenpositionen löschen?"],
     es: ["Pared", "Pared 1", "Nombre de la pared", "Añadir pared", "Cambiar nombre", "Eliminar pared", "¿Eliminar esta pared con su foto y posiciones de luces?"],
   };
+  const dimensionLabels = {
+    nl: ["Breedte (m)", "Hoogte (m)", "Muurmaten opslaan", "Lege muur"],
+    en: ["Width (m)", "Height (m)", "Save wall dimensions", "Blank wall"],
+    de: ["Breite (m)", "Höhe (m)", "Wandmaße speichern", "Leere Wand"],
+    es: ["Ancho (m)", "Altura (m)", "Guardar medidas de la pared", "Pared sin foto"],
+  };
   const wallGuide = {
     nl: ["Handleiding Mijn Huis", "Maak één foto per muur.", "Fotografeer de muur recht van voren, in goed licht. Zorg dat de hele muur en de plekken voor je lampen zichtbaar zijn.",
       "Voeg een muur toe, geef hem een naam en upload de bijbehorende foto.", "Kies een lamp uit de lijst en tik op de plek waar die hangt. Versleep de markering om de positie aan te passen en gebruik de hoekgreep of schuifregelaar voor de grootte.",
       "Kies onder Effect een kleurveeg of kleurverloop. Zet Volgorde tonen aan om het effect vooraf op je foto te bekijken.",
       "Elke muur bewaart zijn eigen foto en lampplaatsingen. Als je een foto vervangt, wist de app de plaatsingen op die muur."],
     en: ["My Home guide", "Take one photo per wall.", "Photograph the wall straight on in good light. Include the whole wall and the spots where your lights will go.",
-      "Add a wall, name it and upload its photo.", "Choose a light from the list and tap where it hangs. Drag its marker to reposition it and use the corner handle or slider to resize it.",
+      "Add and name a wall, then enter its dimensions or upload a photo.", "Choose a light from the list and tap where it hangs. Drag its marker to reposition it and use the corner handle or slider to resize it.",
       "Under Effect, choose a colour sweep or gradient. Turn on Show order to preview it on your photo.",
       "Each wall saves its own photo and light placements. Replacing a photo clears the placements on that wall."],
     de: ["Anleitung für Mein Zuhause", "Mache ein Foto pro Wand.", "Fotografiere die Wand frontal und bei gutem Licht. Die ganze Wand und alle vorgesehenen Lampenpositionen sollten sichtbar sein.",
@@ -218,6 +224,7 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language}) =
       if (layout.photoVersion) photoElement.src = roomPhotoPath(wallId, layout.photoVersion);
     }
     layout.revision = data.layout.revision;
+    layout.dimensions = data.layout.dimensions;
     layout.points = new Map(data.layout.points);
     const changed = JSON.stringify(playback) !== JSON.stringify(data.playback);
     playback = data.playback;
@@ -585,6 +592,12 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language}) =
   const camera = {yaw: 28, pitch: -15, zoom: null};
   const planPath = "lighting/projects/overview";
   const roomLabel = room => v(12) + " " + (room + 1);
+  const wallPixelsPerMeter = 65;
+
+  function showDimensions(dimensions) {
+    const format = new Intl.NumberFormat(language(), {maximumFractionDigits: 2});
+    return format.format(dimensions.width_m) + " × " + format.format(dimensions.height_m) + " m";
+  }
 
   function planPlacement(snapshot, walls) {
     if (!snapshot.revision) return undefined;
@@ -653,15 +666,25 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language}) =
       if (planRoom && !rooms.includes(Number(planRoom))) planRoom = "";
       const visibleRooms = planRoom ? rooms.filter(room => room === Number(planRoom)) : rooms;
       const roomCount = visibleRooms.length;
+      const visibleWalls = layoutWalls.filter(wall => visibleRooms.includes(Math.floor(wall.slot / 4)));
+      const roomSpan = Math.max(260, ...visibleWalls.map(wall => (wall.dimensions?.width_m || 0) * wallPixelsPerMeter));
+      const heightSpan = Math.max(160, ...visibleWalls.map(wall => (wall.dimensions?.height_m || 0) * wallPixelsPerMeter));
+      const fit = Math.min(1, 260 / roomSpan, 290 / heightSpan);
       for (const [index, roomId] of visibleRooms.entries()) {
         const room = node("div", "", "house-3d-room");
-        room.style.transform = "translateX(" + (index - (roomCount - 1) / 2) * 282 + "px)";
+        room.style.transform = "translateX(" + (index - (roomCount - 1) / 2) * (roomSpan + 22) + "px)";
         room.append(node("div", "", "house-3d-floor"));
         for (const wall of layoutWalls.filter(wall => Math.floor(wall.slot / 4) === roomId)) {
           const face = node("div", "", "house-3d-wall");
           face.dataset.wall = wall.id;
           face.style.transform = "rotateY(" + (wall.slot % 4) * 90 + "deg) translateZ(130px)";
           const name = wall.name || (wallLabels[language()] || wallLabels.nl)[1];
+          if (wall.dimensions) {
+            const width = wall.dimensions.width_m * wallPixelsPerMeter;
+            const height = wall.dimensions.height_m * wallPixelsPerMeter;
+            Object.assign(face.style, {width: width + "px", height: height + "px",
+              left: (260 - width) / 2 + "px", top: (160 - height) + "px"});
+          }
           if (wall.photo_version) {
             const image = node("img");
             image.alt = name;
@@ -671,7 +694,8 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language}) =
           } else {
             face.classList.add("house-3d-wall-empty");
           }
-          face.append(node("span", name, "house-3d-name"));
+          const caption = wall.dimensions ? name + " · " + showDimensions(wall.dimensions) : name;
+          face.append(node("span", caption, "house-3d-name"));
           if (inventory) {
             for (const [id, [x, y, size = defaultSize]] of wallPoints(wall.points)) {
               const light = lights.get(id);
@@ -694,7 +718,7 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language}) =
       Object.assign(zoom, {type: "range", min: 35, max: 125, value: camera.zoom ?? initialZoom});
       const rotate = () => {
         camera.pitch = clamp(camera.pitch, -75, 75);
-        world.style.transform = "rotateX(" + camera.pitch + "deg) rotateY(" + camera.yaw + "deg) scale(" + Number(zoom.value) / 100 + ")";
+        world.style.transform = "rotateX(" + camera.pitch + "deg) rotateY(" + camera.yaw + "deg) scale(" + (Number(zoom.value) / 100 * fit) + ")";
       };
       zoom.oninput = () => { camera.zoom = Number(zoom.value); rotate(); };
       let drag;
@@ -733,7 +757,7 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language}) =
           zoom.value = initialZoom;
           rotate();
         }));
-      status.textContent = [message, v(2), !layoutWalls.some(wall => wall.photo_version) && v(6)].filter(Boolean).join(" ");
+      status.textContent = [message, v(2), !layoutWalls.some(wall => wall.photo_version || wall.dimensions) && v(6)].filter(Boolean).join(" ");
       plan.append(controls, scene);
       rotate();
       if (message) placement?.querySelector("button")?.focus();
@@ -943,6 +967,29 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language}) =
     return section;
   }
 
+  function dimensionsForm() {
+    const [widthLabel, heightLabel, saveLabel] = dimensionLabels[language()] || dimensionLabels.nl;
+    const input = value => Object.assign(node("input"),
+      {type: "number", min: 0.25, max: 20, step: 0.01, value: value ?? "", required: true});
+    const width = input(layout.dimensions?.width_m);
+    const height = input(layout.dimensions?.height_m);
+    const form = node("form", "", "lighting-controls house-dimensions");
+    const save = node("button", saveLabel);
+    save.type = "submit";
+    form.append(field(widthLabel, width), field(heightLabel, height), save);
+    form.onsubmit = async event => {
+      event.preventDefault();
+      save.disabled = true;
+      try {
+        await change({action: "wall_dimensions", revision: layout.revision,
+          width_m: width.valueAsNumber, height_m: height.valueAsNumber}, spatialStatus, "dimensions");
+      } finally {
+        save.disabled = false;
+      }
+    };
+    return form;
+  }
+
   function renderSpatial(focusId) {
     const owners = wallGroupOwners();
     const placements = wallPoints();
@@ -966,7 +1013,7 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language}) =
       upload.disabled = true;
       try {
         const photo = await importPhoto(file);
-        if (targetWall === wallId && !requestedWall) await updateLayout(new Map(), {photo, revision});
+        if (targetWall === wallId && !requestedWall) await updateLayout(layout.photoVersion ? new Map() : placements, {photo, revision});
       } catch {
         spatialStatus.textContent = t(24);
       } finally {
@@ -977,15 +1024,24 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language}) =
     const toolbar = node("div", "", "lighting-controls");
     toolbar.append(field(t(18), upload));
     if (legacyLayout.photo) toolbar.append(action(msg(2), () => migrate(spatialStatus)));
-    if (!layout.photoVersion) {
+    const dimensions = dimensionsForm();
+    if (!layout.photoVersion && !layout.dimensions) {
       refreshEffectButtons = undefined;
-      spatialSection.replaceChildren(spatialStatus, toolbar);
+      spatialSection.replaceChildren(spatialStatus, dimensions, toolbar);
       return;
     }
-    const photo = photoElement;
-    photo.className = "house-room-photo";
-    photo.alt = t(33);
+    const photo = layout.photoVersion ? photoElement : node("div", "", "house-blank-wall");
     const stage = node("div", "", "lighting-spatial-stage");
+    if (layout.photoVersion) {
+      photo.className = "house-room-photo";
+      photo.alt = t(33);
+    } else {
+      const blankLabel = (dimensionLabels[language()] || dimensionLabels.nl)[3];
+      photo.setAttribute("role", "img");
+      photo.setAttribute("aria-label", blankLabel + " · " + showDimensions(layout.dimensions));
+      stage.style.width = Math.min(720, 480 * layout.dimensions.width_m / layout.dimensions.height_m) + "px";
+      photo.style.aspectRatio = layout.dimensions.width_m + " / " + layout.dimensions.height_m;
+    }
     stage.append(photo);
     photo.onclick = event => {
       const rect = photo.getBoundingClientRect();
@@ -1020,7 +1076,7 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language}) =
     if (!lights.size) cards.append(node("p", h(3)));
     const panel = node("aside", "", "house-lamp-panel");
     panel.append(node("h3", h(1)), cards);
-    toolbar.append(action(t(23), () => {
+    if (layout.photoVersion) toolbar.append(action(t(23), () => {
       if (window.confirm(t(23) + "?")) return updateLayout(new Map(), {photo: null});
     }));
     const settings = node("div", "", "lighting-controls");
@@ -1052,7 +1108,8 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language}) =
     const canvas = node("div", "", "house-canvas");
     canvas.append(stage, settings);
     editor.append(canvas, panel);
-    spatialSection.replaceChildren(toolbar, spatialStatus, node("p", h(4)), editor, effectControls(stage));
+    spatialSection.replaceChildren(dimensions, toolbar, spatialStatus, node("p", h(4)), editor, effectControls(stage));
+    if (focusId === "dimensions") focus = dimensions.querySelector("button");
     focus?.focus();
   }
 

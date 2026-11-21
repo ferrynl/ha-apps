@@ -556,19 +556,29 @@ test('Mijn Huis previews the sweep order and displays the last command result', 
  await expect(effect.getByText('Van midden naar buiten · Kleurveeg klaar')).toBeVisible();
 });
 
-test('Mijn Huis adds walls and switches to the matching photo', async ({page}) => {
+test('Mijn Huis saves a measured wall without a photo and renders it to scale', async ({page}) => {
  const first = {revision:'first',photo_version:'photo-one',points:[]};
  const second = {revision:'second',photo_version:null,points:[]};
  const walls = [{id:'default',name:''}];
+ await page.route('**/lighting/projects/overview', route => route.fulfill({json:{walls:[
+  {...first,id:'default',name:'',slot:0}, {...second,id:'second',name:'Woonkamer',slot:1}
+ ]}}));
  await page.route('**/lighting', route => route.fulfill({json:{lights:[],groups:{},scenes:{},connections:{}}}));
  await page.route('**/lighting/projects/photo?*', route => route.fulfill({contentType:'image/svg+xml',
   body:'<svg xmlns="http://www.w3.org/2000/svg" width="480" height="240"></svg>'}));
  await page.route(/\/lighting\/projects(?:\?[^/]*)?$/, route => {
   let wall = new URL(route.request().url()).searchParams.get('wall') ?? 'default';
   if (route.request().method() === 'POST') {
-   expect(route.request().postDataJSON()).toEqual({action:'add_wall',name:'Woonkamer'});
-   walls.push({id:'second',name:'Woonkamer'});
-   wall = 'second';
+   const body = route.request().postDataJSON();
+   if (body.action === 'add_wall') {
+    expect(body).toEqual({action:'add_wall',name:'Woonkamer'});
+    walls.push({id:'second',name:'Woonkamer'});
+    wall = 'second';
+   } else {
+    expect(wall).toBe('second');
+    expect(body).toEqual({action:'wall_dimensions',revision:'second',width_m:3.25,height_m:2.5});
+    Object.assign(second,{revision:'measured',dimensions:{width_m:3.25,height_m:2.5}});
+   }
   }
   return route.fulfill({json:{wall_id:wall,walls,shows:[],layout:wall === 'default' ? first : second,
    playback:{state:'idle'}}});
@@ -585,6 +595,15 @@ test('Mijn Huis adds walls and switches to the matching photo', async ({page}) =
  await expect(photo).toHaveAttribute('src','lighting/projects/photo?v=photo-one');
  await picker.selectOption('second');
  await expect(photo).toHaveCount(0);
+ await page.getByLabel('Breedte (m)',{exact:true}).fill('3.25');
+ await page.getByLabel('Hoogte (m)',{exact:true}).fill('2.5');
+ await page.getByRole('button',{name:'Muurmaten opslaan'}).click();
+ await expect(page.getByRole('img',{name:'Lege muur · 3,25 × 2,5 m'})).toBeVisible();
+ await page.getByRole('button',{name:'3D-weergave',exact:true}).click();
+ const wall = page.locator('.house-3d-wall[data-wall=second]');
+ await expect(wall).toContainText('Woonkamer · 3,25 × 2,5 m');
+ await expect(wall).toHaveCSS('width','211.25px');
+ await expect(wall).toHaveCSS('height','162.5px');
 });
 
 test('Mijn Huis shows an existing Twinkly group as a single panel and identifies a Hue strip', async ({page}) => {

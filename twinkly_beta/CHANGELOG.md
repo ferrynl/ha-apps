@@ -1,3 +1,8 @@
+## 2.0.0-beta.40
+
+- Geef in Mijn Huis elke muur een breedte en hoogte in meters. De 3D-weergave toont de maten en gebruikt ze voor de schaal van de muur.
+- Plaats lampen en speel ruimtelijke effecten op een muur die alleen maten heeft. Voeg later desgewenst een foto toe met behoud van de geplaatste lampen.
+
 ## 2.0.0-beta.39
 
 - Muziek op Home streamt LedFX-kleuren via Hue Entertainment. Zet de Hue-kleurenlampen aan en maak in de officiële Hue-app een Entertainmentruimte waarvan alle lampen in dezelfde Home-groep zitten. Home toont de gekozen ruimte en eventuele overgeslagen lampen.

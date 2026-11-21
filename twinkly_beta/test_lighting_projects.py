@@ -92,6 +92,33 @@ class LightingProjectsTest(unittest.IsolatedAsyncioTestCase):
         stale = await self.change("delete", id=show["id"], revision=show["revision"])
         self.assertEqual(stale.status, 409)
 
+    async def test_measured_wall_without_photo_persists_and_keeps_its_lamps_on_upload(self):
+        rejected = await self.change("layout", revision=None, points=[POINT])
+        self.assertEqual(rejected.status, 400)
+        for width in (True, None, "3.25", 0, 21):
+            invalid = await self.change("wall_dimensions", revision=None, width_m=width, height_m=2.6)
+            self.assertEqual(invalid.status, 400)
+        saved = await self.change("wall_dimensions", revision=None, width_m=3.25, height_m=2.6)
+        self.assertEqual(saved.status, 200)
+        layout = (await saved.json())["layout"]
+        dimensions = {"width_m": 3.25, "height_m": 2.6}
+        self.assertEqual(layout["dimensions"], dimensions)
+        stale = await self.change("wall_dimensions", revision=None, width_m=4, height_m=2.6)
+        self.assertEqual(stale.status, 409)
+        placed = await self.change("layout", revision=layout["revision"], points=[POINT])
+        self.assertEqual(placed.status, 200)
+        before = (await placed.json())["layout"]
+        restarted = await self.connect()
+        plan = await (await restarted.get("/lighting/projects/overview")).json()
+        self.assertEqual(plan["walls"][0]["dimensions"], dimensions)
+        self.assertEqual(plan["walls"][0]["points"], [POINT])
+        self.assertIsNone(plan["walls"][0]["photo_version"])
+        photo = await restarted.post("/lighting/projects", json={
+            "action": "layout", "revision": before["revision"], "points": before["points"], "photo": self.image(),
+        })
+        self.assertEqual(photo.status, 200)
+        self.assertEqual((await photo.json())["layout"]["dimensions"], dimensions)
+
     async def test_lamp_scale_is_validated_and_preserved_with_legacy_points(self):
         other = ['["twinkly","strings"]', [12, 55, 24]]
         layout = await self.change("layout", revision=None, photo=self.image(), points=[POINT, other])

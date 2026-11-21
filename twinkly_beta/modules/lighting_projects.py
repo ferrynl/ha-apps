@@ -260,6 +260,13 @@ def wall_layout(data, wall_id):
     return data["layout"] if wall_id == DEFAULT_WALL else data["walls"][wall_id]
 
 
+def wall_dimensions(body):
+    width, height = body["width_m"], body["height_m"]
+    if any(type(value) not in (int, float) or not 0.25 <= value <= 20 for value in (width, height)):
+        raise ValueError("Invalid wall dimensions")
+    return {"width_m": round(width, 2), "height_m": round(height, 2)}
+
+
 def wall_name(data):
     name = data["name"]
     if not isinstance(name, str) or not 1 <= len(name.strip()) <= 60:
@@ -324,7 +331,7 @@ def install(app, lighting):
             "shows": list(data["shows"].values()),
             "walls": walls, "wall_id": wall_id,
             "layout": {"revision": layout["revision"], "photo_version": layout["photo_version"],
-                       "points": layout["points"]},
+                       "points": layout["points"], "dimensions": layout.get("dimensions")},
             "playback": playback.status, **extra,
         }, headers=HEADERS)
 
@@ -344,7 +351,8 @@ def install(app, lighting):
         for wall_id, slot in sorted(slots.items(), key=lambda item: item[1]):
             layout = wall_layout(data, wall_id)
             result.append({"id": wall_id, "name": layout.get("name", ""), "slot": slot,
-                           "photo_version": layout["photo_version"], "points": layout["points"]})
+                           "photo_version": layout["photo_version"], "points": layout["points"],
+                           "dimensions": layout.get("dimensions")})
         return web.json_response({"revision": plan_revision(slots), "walls": result}, headers=HEADERS)
 
     async def overview(request):
@@ -443,6 +451,11 @@ def install(app, lighting):
                     if shows[show_id]["revision"] != body.get("revision"):
                         raise web.HTTPConflict()
                     del shows[show_id]
+                elif action == "wall_dimensions":
+                    if body["revision"] != layout["revision"]:
+                        raise web.HTTPConflict()
+                    update_wall_layout(data, wall_id, {**layout, "dimensions": wall_dimensions(body),
+                                                       "revision": uuid.uuid4().hex})
                 elif action == "layout":
                     if body["revision"] != layout["revision"]:
                         raise web.HTTPConflict()
@@ -452,8 +465,8 @@ def install(app, lighting):
                         current_photo = await asyncio.to_thread(photo_jpeg, encoded) if encoded is not None else None
                         photo_version = uuid.uuid4().hex if current_photo is not None else None
                     points = positions(body["points"])
-                    if points and current_photo is None:
-                        raise ValueError("Positions require a photo")
+                    if points and current_photo is None and not layout.get("dimensions"):
+                        raise ValueError("Positions require a photo or wall dimensions")
                     update_wall_layout(data, wall_id, {**layout, "revision": uuid.uuid4().hex,
                                       "photo_version": photo_version, "photo": current_photo, "points": points})
                 elif action == "import":
