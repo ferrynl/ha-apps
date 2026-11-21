@@ -3,7 +3,7 @@ import tempfile
 import time
 import unittest
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, Mock, patch
 
 from aiohttp import web
 from aiohttp.test_utils import TestClient, TestServer
@@ -11,6 +11,9 @@ from aiohttp.test_utils import TestClient, TestServer
 from modules.lighting import light_key
 from modules.provider_routes import install
 from modules.provider_store import ProviderStore
+from modules.hue_entertainment import HueEntertainment, RESOURCE
+
+AREA = "38a6171a-af01-4eea-a634-c84b79b56a05"
 
 
 class LightingTests(unittest.IsolatedAsyncioTestCase):
@@ -49,10 +52,37 @@ class LightingTests(unittest.IsolatedAsyncioTestCase):
             setattr(self, name.split(".")[-1], patcher.start())
             self.addCleanup(patcher.stop)
         app = web.Application()
-        install(app, self.store, self.controller)
+        self.streamer = Mock(is_connected=True)
+        entertainment = HueEntertainment(lambda: self.streamer)
+        with patch("modules.provider_routes.HueEntertainment", return_value=entertainment):
+            install(app, self.store, self.controller)
         self.client = TestClient(TestServer(app))
         await self.client.start_server()
         self.addAsyncCleanup(self.client.close)
+
+    def mock_entertainment(self, include_other=False):
+        cfg = self.store.load()
+        cfg["hue"]["bridge"]["client_key"] = "f" * 32
+        self.store.save(cfg)
+        members = [{"service": {"rid": "renderer", "rtype": "entertainment"}}]
+        if include_other:
+            members.append({"service": {"rid": "renderer-other", "rtype": "entertainment"}})
+        self.profiles.return_value[0]["capabilities"]["rgb"] = True
+        responses = {
+            RESOURCE: [{"id": AREA, "metadata": {"name": "Living room"}, "status": "inactive",
+                        "channels": [{"channel_id": 3, "members": members}]}],
+            "light": [{"id": self.hue_id, "owner": {"rid": "lamp"}},
+                      {"id": "another-light", "owner": {"rid": "other"}}],
+            "entertainment": [{"id": "renderer", "owner": {"rid": "lamp"}},
+                              {"id": "renderer-other", "owner": {"rid": "other"}}],
+        }
+
+        async def request(method, path, body=None):
+            return responses[path] if method == "GET" else []
+
+        patcher = patch("modules.provider_routes.Hue.request", new=AsyncMock(side_effect=request))
+        self.addCleanup(patcher.stop)
+        return patcher.start()
 
     async def test_normalized_inventory_and_redaction(self):
         response = await self.client.get("/lighting")
@@ -173,43 +203,52 @@ class LightingTests(unittest.IsolatedAsyncioTestCase):
         self.controller.apply_control.assert_awaited_once_with({"id": "tree", "action": "off", "value": False})
 
 
-    async def test_mixed_music_mirrors_and_restores_then_releases_twinkly(self):
+    async def test_mixed_music_streams_hue_and_restores_govee_then_releases_twinkly(self):
         group = "a" * 32
-        self.profiles.return_value[0]["capabilities"]["rgb"] = True
-        self.profiles.return_value[0]["state"]["xy"] = {"x": 0.31, "y": 0.33}
+        bridge = self.mock_entertainment()
         self.store.save_groups({group: {"name": "Wall", "members": [self.twinkly, self.hue, self.govee, self.silent]}})
         response = await self.client.post("/lighting/music", json={"group": group})
         self.assertEqual(response.status, 200, await response.text())
         info = await response.json()
         self.assertEqual(info["eligible"], [self.twinkly, self.hue, self.govee])
         self.assertEqual(info["skipped"], [self.silent])
+        self.assertEqual(info["hue"], {"state": "streaming", "area": "Living room", "skipped": 0, "group": group})
         self.assertEqual(self.controller.music, {"tree"})
-        for _ in range(50):
-            if self.control.await_count and self.color.await_count:
-                break
-            await asyncio.sleep(.01)
-        self.control.assert_awaited_once_with(self.hue_id, color=[255, 0, 0])
+        async with asyncio.timeout(2):
+            while not self.streamer.send_colors.called or not self.color.await_count:
+                await asyncio.sleep(.01)
         self.color.assert_awaited_once_with([255, 0, 0])
+        colors, = self.streamer.send_colors.call_args.args
+        self.assertEqual((colors[0].channel_id, colors[0].red), (3, 65535))
         response = await self.client.get("/lighting")
         timings = (await response.json())["music"]["timings"]
-        self.assertEqual(set(timings), {"hue", "govee"})
-        for entry in timings.values():
-            self.assertGreaterEqual(entry["frame_age_ms"], 0)
-            self.assertGreaterEqual(entry["command_ms"], 0)
-            self.assertEqual(entry["failed"], 0)
+        self.assertEqual(set(timings), {"govee"})
+        self.assertEqual(timings["govee"]["failed"], 0)
+        response = await self.client.post("/providers/hue/entertainment/control", json={"action": "stop"})
+        self.assertEqual(response.status, 409)
         self.controller.music_frame = lambda: bytes([0, 0, 255])
-        self.controller.ddp.received = time.monotonic()
-        async with asyncio.timeout(3):
-            while self.control.await_count < 2 or self.color.await_count < 2:
+        async with asyncio.timeout(2):
+            while self.streamer.send_colors.call_args.args[0][0].blue != 65535:
                 await asyncio.sleep(.01)
-        self.control.assert_awaited_with(self.hue_id, color=[64, 0, 192])
-        self.color.assert_awaited_with([64, 0, 192])
-
         response = await self.client.post("/lighting/music", json={"stop": True})
         self.assertEqual(await response.json(), {"group": None, "live": False})
         self.assertEqual(self.controller.music, set())
-        self.assertEqual(self.control.await_count, 3)
-        self.assertEqual(self.color.await_args.args, ([255, 1, 2],))
+        self.control.assert_not_awaited()
+        self.color.assert_awaited_with([255, 1, 2])
+        bridge.assert_awaited_with("PUT", RESOURCE + "/" + AREA, {"action": "stop"})
+        self.streamer.disconnect.assert_called_once()
+
+    async def test_music_skips_an_area_with_lights_outside_the_group(self):
+        group = "a" * 32
+        bridge = self.mock_entertainment(include_other=True)
+        self.store.save_groups({group: {"name": "Wall", "members": [self.hue]}})
+        response = await self.client.post("/lighting/music", json={"group": group})
+        info = await response.json()
+        self.assertIsNone(info["group"])
+        self.assertEqual(info["hue"], {"state": "missing_area", "area": None, "skipped": 1, "group": group})
+        self.assertEqual(info["skipped"], [self.hue])
+        self.assertTrue(all(call.args[0] == "GET" for call in bridge.await_args_list))
+        self.streamer.connect.assert_not_called()
 
     async def test_hue_test_center_starts_and_restores_a_single_lamp(self):
         light = {
@@ -298,6 +337,7 @@ class LightingTests(unittest.IsolatedAsyncioTestCase):
             capabilities={"brightness": True, "rgb": True},
             state={"on": True, "brightness": 80, "xy": {"x": .6, "y": .3}},
         )
+        self.mock_entertainment()
         self.govee_statuses.return_value["192.168.1.3"]["brightness"] = 60
         with patch("modules.provider_routes.Govee.dim", new=AsyncMock()) as govee:
             response = await self.client.post("/lighting/music", json={"group": group})
@@ -305,12 +345,15 @@ class LightingTests(unittest.IsolatedAsyncioTestCase):
             response = await self.client.post("/lighting/music", json={"group": group, "level": 50})
             self.assertEqual((await response.json())["level"], 50)
             self.assertEqual(self.controller.mixed_music_levels, {"tree": 50})
-            self.control.assert_any_await(self.hue_id, level=40)
+            async with asyncio.timeout(2):
+                while (not self.streamer.send_colors.called
+                       or self.streamer.send_colors.call_args.args[0][0].red != 32768):
+                    await asyncio.sleep(.01)
             govee.assert_awaited_once_with(30)
             response = await self.client.post("/lighting/music", json={"stop": True})
             self.assertEqual(response.status, 200)
             self.assertEqual(self.controller.mixed_music_levels, {})
-            self.control.assert_any_await(self.hue_id, level=80)
+            self.control.assert_not_awaited()
             govee.assert_awaited_with(60)
 
     async def test_home_room_assignment_and_filtered_scene_preserve_other_brands(self):

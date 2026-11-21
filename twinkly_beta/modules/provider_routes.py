@@ -233,6 +233,8 @@ def install(app, store=None, controller=None, govee_key=None):
             async with (lighting.control_lock if lighting else collection_lock):
                 async with mutation_lock:
                     if body["action"] == "stop":
+                        if entertainment.music_active:
+                            raise EntertainmentError("busy", 409)
                         await entertainment.stop()
                     elif body["action"] == "start":
                         identifier = body["bridge"]
@@ -297,7 +299,43 @@ def install(app, store=None, controller=None, govee_key=None):
         async def unified_inventory(provider):
             return await read_inventory(provider, reports=True)
 
+        async def start_hue_music(targets, level):
+            if not targets:
+                return "no_lights", None, set()
+            by_bridge = {}
+            for key in sorted(targets):
+                _, identifier, light_id = json.loads(key)
+                by_bridge.setdefault(identifier, {})[light_id] = key
+            state = "missing_area"
+            async with mutation_lock:
+                try:
+                    records = store.load()["hue"]
+                except connection_errors:
+                    return "connection_failed", None, set()
+                for identifier, members in by_bridge.items():
+                    record = records.get(identifier)
+                    if not record:
+                        continue
+                    if lamp_test.task and not lamp_test.task.done() and lamp_test.target:
+                        if json.loads(lamp_test.target)[:2] == ["hue", identifier]:
+                            state = "busy"
+                            continue
+                    try:
+                        covered, area = await entertainment.start_music(
+                            identifier, record, adapter("hue", identifier, record),
+                            members.keys(), lambda: controller.music_frame(), level,
+                        )
+                    except EntertainmentError as error:
+                        state = error.code
+                    except connection_errors:
+                        state = "connection_failed"
+                    else:
+                        return "streaming", area, {members[light_id] for light_id in covered}
+            return state, None, set()
+
         lighting = Lighting(controller, store, unified_inventory, send)
+        lighting.music.entertainment = entertainment
+        lighting.music.start_hue = start_hue_music
         lighting.install(app.router)
         lamp_test = LampTest()
         lighting.lamp_test = lamp_test

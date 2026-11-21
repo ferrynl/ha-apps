@@ -86,6 +86,12 @@
   entertainment.hidden = true;
   hueCollections.after(entertainment);
   const entertainmentPath = "providers/hue/entertainment";
+  const hueMusicWords = {
+    nl: {streaming: "Muziekstream actief", missing_area: "Maak in de Hue-app een Entertainmentruimte met de ingeschakelde kleurenlampen van deze groep.", no_lights: "Zet de Hue-kleurenlampen van deze groep aan.", stop: "Stop muziek op Home."},
+    en: {streaming: "Music streaming", missing_area: "Create an Entertainment area in the Hue app with this group’s powered-on color lights.", no_lights: "Turn on this group’s Hue color lights.", stop: "Stop music on Home."},
+    de: {streaming: "Musikstream aktiv", missing_area: "Erstelle in der Hue-App einen Entertainment-Bereich mit den eingeschalteten Farblampen dieser Gruppe.", no_lights: "Schalte die Hue-Farblampen dieser Gruppe ein.", stop: "Stoppe die Musik auf der Startseite."},
+    es: {streaming: "Música en directo", missing_area: "Crea un área de entretenimiento en la app Hue con las luces de color encendidas de este grupo.", no_lights: "Enciende las luces Hue de color de este grupo.", stop: "Detén la música en Inicio."},
+  };
   const entertainmentWords = {
     nl: ["Maak een Entertainment-zone in de Philips Hue-app en kies die hieronder.", "Entertainment-zone", "Regenboog", "Zonsondergang", "Start effect", "Stop effect", "Effect actief", "Geen Entertainment-zones gevonden.", "Koppel de Bridge opnieuw via Instellingen om effecten te streamen.", "De Bridge is niet bereikbaar.", "Stop de actieve stream, Hue-test of gemengde muziek en probeer opnieuw.", "De verbinding met de Hue-stream is verbroken.", "De Bridge heeft het stoppen niet bevestigd.", "Effect starten mislukt. Controleer de Bridge en vernieuw de zones."],
     en: ["Create an entertainment area in the Philips Hue app, then select it below.", "Entertainment area", "Rainbow", "Sunset", "Start effect", "Stop effect", "Effect running", "No entertainment areas found.", "Reconnect the Bridge in Settings to stream effects.", "The Bridge is unavailable.", "Stop the active stream, Hue test or mixed music and try again.", "The Hue stream disconnected.", "The Bridge did not confirm that streaming stopped.", "Could not start the effect. Check the Bridge and refresh the areas."],
@@ -391,6 +397,17 @@
           }
           card.append(measurements, node("small", hint));
         }
+      }
+      const hueMusic = data.music?.hue;
+      if (hueMusic?.group === id) {
+        const language = el("language").value;
+        const words = hueMusicWords[language] || hueMusicWords.nl;
+        const labels = entertainmentWords[language] || entertainmentWords.nl;
+        const errors = {pair_again: 8, busy: 10, stream_lost: 11, connection_failed: 9};
+        const status = words[hueMusic.state] || labels[errors[hueMusic.state] ?? 13];
+        const area = hueMusic.area ? " · " + hueMusic.area : "";
+        const skipped = hueMusic.skipped ? " · " + skippedMusic + " " + hueMusic.skipped : "";
+        card.append(node("p", "Hue Entertainment · " + status + area + skipped));
       }
       card.append(button(music ? stopMusic : startMusic, async () => {
         const result = await api("lighting/music", music ? {stop: true} : {group: id});
@@ -1216,11 +1233,15 @@
       function paint() {
         start.disabled = busy || Boolean(active);
         stop.disabled = busy;
-        stop.hidden = !active;
+        stop.hidden = !active || active.effect === "music";
         reload.disabled = busy;
         const running = choices.find(choice => choice.bridge === active?.bridge && choice.area === active?.area);
         status.textContent = error ? labels[errors[error] ?? 13] :
           active ? labels[6] + (running ? " · " + running.name : "") : "";
+        if (active?.effect === "music") {
+          const words = hueMusicWords[el("language").value] || hueMusicWords.nl;
+          status.textContent = words.streaming + (running ? " · " + running.name : "") + " · " + words.stop;
+        }
       }
       async function control(action) {
         busy = true;

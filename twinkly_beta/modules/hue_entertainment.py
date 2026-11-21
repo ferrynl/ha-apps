@@ -26,6 +26,47 @@ def channel_ids(area):
                    and 0 <= channel["channel_id"] <= 255})
 
 
+def music_area(areas, lights, services, targets):
+    """Choose the largest area whose channels all belong to the requested lights."""
+    by_device = {}
+    for light in lights:
+        owner = (light.get("owner") or {}).get("rid")
+        if owner:
+            by_device.setdefault(owner, set()).add(light["id"])
+    by_service = {service["id"]: by_device.get((service.get("owner") or {}).get("rid"), set())
+                  for service in services}
+    best, matched = None, set()
+    for area in areas:
+        channels = area.get("channels", [])
+        if not channels or len(channel_ids(area)) != len(channels):
+            continue
+        if not all(channel.get("members") for channel in channels):
+            continue
+        members = [by_service.get((member.get("service") or {}).get("rid"), set())
+                   for channel in channels for member in channel["members"]]
+        if not all(len(lights) == 1 for lights in members):
+            continue
+        covered = set.union(*members)
+        if covered <= targets and len(covered) > len(matched):
+            best, matched = area, covered
+    return best, matched
+
+
+def music_frame(frame, channels, level):
+    from hue_entertainment import LightColorCommand
+
+    count = len(frame) // 3 if frame else 0
+    gain = 257 * level / 100
+    commands = []
+    for index, channel in enumerate(channels):
+        start = index * count // len(channels)
+        end = max(start + 1, (index + 1) * count // len(channels))
+        color = max((frame[3 * pixel:3 * pixel + 3] for pixel in range(start, min(end, count))),
+                    key=sum, default=(0, 0, 0))
+        commands.append(LightColorCommand(channel, *(round(value * gain) for value in color)))
+    return commands
+
+
 def effect_frame(effect, elapsed, channels, brightness):
     from hue_entertainment import LightColorCommand
 
@@ -61,6 +102,10 @@ class HueEntertainment:
     def active_bridge(self):
         return self.active["bridge"] if self.active else None
 
+    @property
+    def music_active(self):
+        return bool(self.active and self.active["effect"] == "music")
+
     def status(self):
         return {"active": self.active, "error": self.error}
 
@@ -80,22 +125,50 @@ class HueEntertainment:
         return result
 
     async def start(self, identifier, record, hue, area_id, effect, brightness):
-        if self.active:
-            raise EntertainmentError("busy", 409)
-        if not record.get("client_key"):
-            raise EntertainmentError("pair_again", 409)
+        self.check_bridge(record)
         if (not isinstance(area_id, str) or str(uuid.UUID(area_id)) != area_id
                 or not isinstance(effect, str) or effect not in EFFECTS
                 or type(brightness) is not int or not 1 <= brightness <= 100):
             raise ValueError("Invalid Hue effect settings")
-        self.error = None
-        resources = await hue.request("GET", RESOURCE)
+        resources = await self.idle_areas(hue)
         area = next((resource for resource in resources if resource.get("id") == area_id), None)
         if area is None or not (channels := channel_ids(area)):
             raise EntertainmentError("missing_area", 404)
+        await self.open(identifier, record, hue, area_id, effect, brightness,
+                        lambda elapsed: effect_frame(effect, elapsed, channels, brightness))
+
+    def check_bridge(self, record):
+        if self.active:
+            raise EntertainmentError("busy", 409)
+        if not record.get("client_key"):
+            raise EntertainmentError("pair_again", 409)
+
+    async def idle_areas(self, hue):
+        resources = await hue.request("GET", RESOURCE)
         if any(resource.get("status") == "active" for resource in resources):
             raise EntertainmentError("busy", 409)
+        return resources
 
+    async def start_music(self, identifier, record, hue, targets, frame, level):
+        self.check_bridge(record)
+        areas = await self.idle_areas(hue)
+        if not any(channel_ids(area) for area in areas):
+            raise EntertainmentError("missing_area", 404)
+        lights = await hue.lights()
+        services = await hue.request("GET", "entertainment")
+        area, covered = music_area(areas, lights, services, targets)
+        if area is None:
+            raise EntertainmentError("missing_area", 404)
+        area_id = area["id"]
+        if str(uuid.UUID(area_id)) != area_id:
+            raise ValueError("Invalid Hue area ID")
+        channels = channel_ids(area)
+        await self.open(identifier, record, hue, area_id, "music", level(),
+                        lambda _: music_frame(frame(), channels, level()))
+        return covered, (area.get("metadata") or {}).get("name") or area.get("name") or area_id
+
+    async def open(self, identifier, record, hue, area_id, effect, brightness, render):
+        self.error = None
         path = RESOURCE + "/" + area_id
         streamer = self.streamer_factory()
         await hue.request("PUT", path, {"action": "start"})
@@ -118,16 +191,16 @@ class HueEntertainment:
         self.active = {"bridge": identifier, "area": area_id, "effect": effect,
                        "brightness": brightness}
         self.stop_event.clear()
-        self.task = asyncio.create_task(self.run(hue, path, streamer, effect, brightness, channels))
+        self.task = asyncio.create_task(self.run(hue, path, streamer, render))
 
-    async def run(self, hue, path, streamer, effect, brightness, channels):
+    async def run(self, hue, path, streamer, render):
         loop = asyncio.get_running_loop()
         started = loop.time()
         try:
             while not self.stop_event.is_set():
                 if not streamer.is_connected:
                     raise RuntimeError("Hue stream disconnected")
-                streamer.send_colors(effect_frame(effect, loop.time() - started, channels, brightness))
+                streamer.send_colors(render(loop.time() - started))
                 try:
                     await asyncio.wait_for(self.stop_event.wait(), 1 / 25)
                 except TimeoutError:

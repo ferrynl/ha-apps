@@ -1,4 +1,4 @@
-"""Mirror one color from the shared LedFX stream to slower LAN lights."""
+"""Coordinate LedFX music for Twinkly, Hue Entertainment and Govee."""
 import asyncio
 import json
 import logging
@@ -20,6 +20,10 @@ class MixedMusic:
     def __init__(self, controller, send):
         self.controller = controller
         self.send = send
+        self.entertainment = None
+        self.start_hue = None
+        self.hue_members = set()
+        self.hue = None
         self.group = None
         self.members = set()
         self.twinkly = set()
@@ -34,6 +38,10 @@ class MixedMusic:
 
     def status(self):
         result = {"group": self.group, "live": self.live}
+        if self.hue:
+            result["hue"] = dict(self.hue)
+            if self.hue_members and not self.entertainment.music_active:
+                result["hue"]["state"] = "stream_lost"
         if self.group is not None:
             result["timings"] = self.timings
             result["level"] = self.level
@@ -43,7 +51,17 @@ class MixedMusic:
         self.group = group
         eligible = []
         skipped = []
+        hue = {key: light for key, light in lights.items() if json.loads(key)[0] == "hue"}
+        if hue and self.start_hue:
+            targets = {key for key, light in hue.items() if light and light["status"] != "unavailable"
+                       and light["capabilities"].get("rgb") and light["state"].get("on") is True}
+            state, area, self.hue_members = await self.start_hue(targets, lambda: self.level)
+            self.hue = {"group": group, "state": state, "area": area,
+                        "skipped": len(hue) - len(self.hue_members)}
         for key, light in lights.items():
+            if key in hue:
+                (eligible if key in self.hue_members else skipped).append(key)
+                continue
             if not light or light["status"] == "unavailable":
                 skipped.append(key)
                 continue
@@ -59,15 +77,11 @@ class MixedMusic:
                     controller.music.add(identifier)
                     self.twinkly.add(identifier)
             elif light["capabilities"].get("rgb") and state.get("on") is True:
-                if light["provider"] == "hue" and state.get("mirek") is not None:
-                    restore = ("temperature", state["mirek"])
-                elif (state.get("color") and any(state["color"])
-                      and not state.get("color_temperature_kelvin")):
-                    restore = ("color", state["color"])
-                else:
+                if (not state.get("color") or not any(state["color"])
+                        or state.get("color_temperature_kelvin")):
                     skipped.append(key)
                     continue
-                self.external[key] = (light, restore)
+                self.external[key] = (light, ("color", state["color"]))
             else:
                 skipped.append(key)
                 continue
@@ -149,6 +163,8 @@ class MixedMusic:
         if self.twinkly:
             async with self.controller.edit:
                 self.controller.music.difference_update(self.twinkly)
+        if self.hue_members and self.entertainment.music_active:
+            await self.entertainment.stop()
         await self.restore()
         for key in self.brightness_changed:
             light, _ = self.external[key]
@@ -164,5 +180,7 @@ class MixedMusic:
         self.twinkly.clear()
         self.external.clear()
         self.changed.clear()
+        self.hue_members.clear()
+        self.hue = None
         self.timings = {}
         self.live = False
