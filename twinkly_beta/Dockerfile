@@ -7,6 +7,7 @@ COPY project.html project.css project.js security-center.js CHANGELOG.md ROADMAP
 COPY govee-guide-config.webp govee-guide-yaml.webp govee-guide-cloud.webp ./
 COPY effect_previews ./effect_previews
 COPY product_photos ./product_photos
+COPY images/HUE ./images/HUE
 COPY matrix_gifs ./matrix_gifs
 RUN python matrix_gifs/generate.py
 COPY modules ./modules

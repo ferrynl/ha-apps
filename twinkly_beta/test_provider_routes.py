@@ -233,4 +233,7 @@ class RouteTests(unittest.IsolatedAsyncioTestCase):
             self.assertTrue((await response.json())["devices"][0]["lights"][0]["has_product_image"])
         response = await self.client.post(path, json={"image": None})
         self.assertEqual(response.status, 200)
-        self.assertEqual((await self.client.get(path)).status, 404)
+        fallback = await self.client.get(path)
+        self.assertEqual(fallback.status, 200)
+        self.assertEqual(fallback.content_type, "image/png")
+        self.assertEqual((await self.client.get("/providers/hue/product-image/UNKNOWN-000")).status, 404)

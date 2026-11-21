@@ -18,7 +18,7 @@
 - **Hue-productfoto’s.** Upload per model een transparante PNG op de Hue-pagina en gebruik dezelfde lokale foto in Mijn Huis, ook in 3D.
 
 ## Open voor stabiel
-- **Mijn Huis.** Een ingebouwde catalogus met officiële Hue-productfoto’s per model.
+- **Mijn Huis.** Vul de ingebouwde Hue-fotocatalogus aan voor modellen zonder geverifieerde transparante bronfoto.
 - **Govee.** Scènes en segmenten in de praktijk testen met een Govee-account en geschikte modellen.
 - **Spatial Light Studio.** Praktijktests voor de timingcorrectie.
 - **Security Center.** Aikido-audit voor stabiel. Het auditresultaat moet nog worden beoordeeld.

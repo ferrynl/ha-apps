@@ -932,7 +932,7 @@ test('Home mixer sends color while the picker is open and keeps room settings on
 
 test('Hue product photo is shared with the 2D and 3D walls in My Home', async ({page}) => {
  const id = '["hue","bridge","strip"]';
- const light = {id,name:'Bureau',provider:'hue',model:'LST002',capabilities:{},state:{},status:'online'};
+ const light = {id,name:'Bureau',provider:'hue',model:'LST002',capabilities:{},state:{},status:'online',has_catalog_image:true};
  await page.route('**/lighting', route => route.fulfill({json:{
   lights:[light],groups:{},scenes:{},connections:{},
  }}));
@@ -951,6 +951,7 @@ test('Hue product photo is shared with the 2D and 3D walls in My Home', async ({
  });
  await page.goto('http://127.0.0.1:8765/index.html#hue');
  await expect(page.getByText('Productfoto toevoegen',{exact:true})).toBeVisible();
+ await expect(page.locator('.lighting-card-head .hue-product-photo')).toBeVisible();
  await page.locator('#nav-house').click();
  await page.locator('.house-lamp-choice').filter({hasText:'Bureau'}).click();
  const settings = page.locator('#house-page .hue-product-settings');
