@@ -34,6 +34,20 @@
     de: ["Nach Updates suchen", "Versionen werden gesucht…", "Update verfügbar", "Aktuell", "Installierte Version ist neuer", "Neuere Python-Version erforderlich", "Unbekannt", "Nicht installiert", "Neueste Version", "Letzte Updateprüfung", "Updateprüfung fehlgeschlagen.", "Bibliotheksupdates", "Pakete konnten nicht geprüft werden."],
     es: ["Buscar actualizaciones", "Buscando versiones…", "Actualización disponible", "Al día", "La versión instalada es más reciente", "Requiere una versión de Python más reciente", "Desconocido", "No instalado", "Última versión", "Última búsqueda", "Falló la búsqueda de actualizaciones.", "Actualizaciones de bibliotecas", "No se pudieron comprobar los paquetes."],
   };
+  const scanWords = {
+    nl: ["Containerscans", "Rapporten ophalen", "Rapporten ophalen…", "Geïnstalleerde bèta",
+      "Bekijk bevindingen en SBOM in GitHub", "Geen bewaard rapport gevonden", "GitHub onbereikbaar",
+      "Gecontroleerd", "Er wordt gezocht naar rapporten voor jouw geïnstalleerde bèta."],
+    en: ["Container scans", "Find reports", "Looking up reports…", "Installed beta",
+      "View findings and SBOM on GitHub", "No retained report found", "GitHub unavailable",
+      "Checked", "Looks up reports for your installed beta."],
+    de: ["Container-Scans", "Berichte suchen", "Berichte werden gesucht…", "Installierte Beta",
+      "Befunde und SBOM auf GitHub öffnen", "Kein gespeicherter Bericht gefunden", "GitHub nicht erreichbar",
+      "Geprüft", "Sucht Berichte für die installierte Beta."],
+    es: ["Escaneos del contenedor", "Buscar informes", "Buscando informes…", "Beta instalada",
+      "Ver hallazgos y SBOM en GitHub", "No se encontró un informe guardado", "GitHub no disponible",
+      "Comprobado", "Busca informes para la beta instalada."],
+  };
   const updateResults = {update: 2, current: 3, ahead: 4, incompatible_python: 5, unavailable: 6, not_installed: 7};
   const ids = ["middleware_installed", "ingress_access", "direct_access", "json_only",
     "health_loopback", "health_ingress_denied", "credentials_permissions"];
@@ -47,6 +61,9 @@
   let updating = false;
   let updateFailed = false;
   let dependenciesOpen = false;
+  let scanReport;
+  let checkingScans = false;
+  let scanFailed = false;
 
   function node(tag, text, className) {
     const element = document.createElement(tag);
@@ -61,6 +78,55 @@
     element.target = "_blank";
     element.rel = "noopener noreferrer";
     return element;
+  }
+
+  function scanCard() {
+    const t = scanWords[language.value] || scanWords.nl;
+    const card = node("article", "", "lighting-card");
+    const button = node("button", checkingScans ? t[2] : t[1]);
+    button.type = "button";
+    button.id = "security-scan-check";
+    button.disabled = checkingScans;
+    button.onclick = checkScans;
+    const status = node("p", checkingScans ? t[2] : scanFailed ? t[6] : "");
+    status.setAttribute("role", "status");
+    card.append(node("h3", t[0]), node("p", t[8]), button, status);
+    if (scanReport) {
+      if (scanReport.version) card.append(node("p", t[3] + " · " + scanReport.version));
+      const list = node("ul");
+      for (const row of scanReport.reports) {
+        const item = node("li", row.architecture + " · ");
+        if (row.result === "available" && Number.isSafeInteger(row.run_id)) {
+          item.append(link(t[4], "/actions/runs/" + row.run_id));
+          if (row.created_at) item.append(" · " + new Date(row.created_at).toLocaleDateString(language.value || "nl"));
+        } else {
+          item.append(t[row.result === "not_found" ? 5 : 6]);
+        }
+        list.append(item);
+      }
+      card.append(list, node("p", t[7] + " · " +
+        new Date(scanReport.checked_at).toLocaleString(language.value || "nl")));
+    }
+    return card;
+  }
+
+  async function checkScans() {
+    if (checkingScans) return;
+    checkingScans = true;
+    scanFailed = false;
+    show();
+    try {
+      const response = await fetch("security-center/reports", {method: "POST",
+        headers: {"Content-Type": "application/json"}, body: "{}"});
+      if (!response.ok) throw new Error("Scan report lookup unavailable");
+      scanReport = await response.json();
+    } catch {
+      scanFailed = true;
+    } finally {
+      checkingScans = false;
+      show();
+      if (active) root.querySelector("#security-scan-check").focus();
+    }
   }
 
   function show() {
@@ -127,12 +193,13 @@
       const time = new Date(report.checked_at).toLocaleTimeString(language.value || "nl");
       checks.append(items, node("p", t[17] + " " + time));
     }
-    cards.append(source, runtime, checks);
+    cards.append(source, runtime, checks, scanCard());
     root.replaceChildren(refresh, notification, cards);
   }
 
   async function load(restoreFocus = false) {
     if (loading) return;
+    const priorScanReport = scanReport;
     loading = true;
     failed = false;
     show();
@@ -141,6 +208,7 @@
       if (!response.ok) throw new Error("Security status unavailable");
       report = await response.json();
       if (report.updates && !updating) updateReport = report.updates;
+      if (!checkingScans && scanReport === priorScanReport) scanReport = report.scan_reports;
     } catch {
       failed = true;
     } finally {

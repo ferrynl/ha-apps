@@ -627,3 +627,27 @@ test('Security Center checks app and package updates on request', async ({page})
  await expect(modules.getByText('aiohttp · 3.14.5 · Nieuwste versie · 3.15.0 · Update beschikbaar')).toBeVisible();
  expect(requests).toBe(1);
 });
+
+test('Security Center links the installed beta reports and shows missing architecture', async ({page}) => {
+ await page.route('**/security-center/status', route => route.fulfill({json:{
+  version:'2.0.0-beta.33', runtime:{python:'3.12',architecture:'x86_64',root:false},
+  dependencies:[], checks:[], checked_at:'2026-11-21T11:00:00Z',
+ }}));
+ await page.route('**/security-center/reports', route => {
+  expect(route.request().method()).toBe('POST');
+  return route.fulfill({json:{
+   version:'2.0.0-beta.33', checked_at:'2026-11-21T11:00:00Z',
+   reports:[
+    {architecture:'amd64',result:'available',run_id:44869747693,created_at:'2026-11-21T10:00:00Z'},
+    {architecture:'aarch64',result:'not_found'},
+   ],
+  }});
+ });
+ await page.goto('http://127.0.0.1:8765/index.html#security-center');
+ const card = page.locator('article').filter({has:page.getByRole('heading',{name:'Containerscans'})});
+ await card.getByRole('button',{name:'Rapporten ophalen'}).click();
+ await expect(card.getByText(/2\.0\.0-beta\.33/)).toBeVisible();
+ await expect(card.getByRole('link',{name:'Bekijk bevindingen en SBOM in GitHub'}))
+  .toHaveAttribute('href','https://github.com/ferrynl/ha-apps/actions/runs/44869747693');
+ await expect(card.getByText('aarch64 · Geen bewaard rapport gevonden')).toBeVisible();
+});

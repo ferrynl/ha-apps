@@ -10,12 +10,12 @@
 - **Govee-wittemperatuur.** Warm en koel wit bij lampen met een geldige LAN-terugmelding.
 - **Showbouwer.** Maak op Home een reeks opgeslagen scènes voor één gemengde groep, met een wachttijd per stap. Shows worden op de Home Assistant-server bewaard en spelen onafhankelijk van de browser af. Stop een actieve show vanuit elke sessie.
 - **Spatial Light Studio.** Open Mijn Huis om lampen op een 2D-foto te plaatsen, te verslepen en groter of kleiner te maken. Bewaar meerdere muren met elk een eigen foto en lampplaatsingen op de Home Assistant-server. Speel een kleurveeg of kleurverloop in vier richtingen en bekijk het effect vooraf op de foto. Geef trager reagerende lampen per lamp een handmatige timingcorrectie.
-- **Beveiliging.** Netwerkkaart in het Security Center, een Python-lockfile, bijgewerkte afhankelijkheden en een SBOM per bèta-containerarchitectuur. GitHub scant beide containerarchitecturen en maakt per bètaversie een beveiligingsrapport. Het Security Center toont broncode en release, de actieve Python-bibliotheken en lokale controles op Ingress en sleutelbestanden.
+- **Beveiliging.** Netwerkkaart in het Security Center, een Python-lockfile, bijgewerkte afhankelijkheden en een SBOM per bèta-containerarchitectuur. GitHub scant beide containerarchitecturen en maakt per bètaversie een beveiligingsrapport. Het Security Center toont broncode en release, de actieve Python-bibliotheken en lokale controles op Ingress en sleutelbestanden. Open per architectuur het GitHub-rapport van de geïnstalleerde bèta en bekijk de bevindingen en de SBOM.
 
 ## Open voor stabiel
 - **Govee.** Ondersteuning per model verder uitwerken, inclusief scènes, segmenten en de optionele officiële cloud-API.
 - **Spatial Light Studio.** Meer effecten op basis van gedeelde coördinaten en praktijktests voor de timingcorrectie. Een 3D-weergave is optioneel.
-- **Security Center.** Aikido-audit voor stabiel.
+- **Security Center.** Aikido-audit voor stabiel. Het auditresultaat moet nog worden beoordeeld.
 - **Praktijktests.** Hue-tests zijn in de praktijk bevestigd. De Twinkly-muur, Govee en werking, timing en herstel van gemengde groepen staan nog op de testlijst.
 
 # 2.x — Verbeteringen na 2.0
