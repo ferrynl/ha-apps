@@ -306,8 +306,18 @@ def wall_placement(value):
     return {"x_m": round(x, 2), "z_m": round(z, 2), "angle": angle}
 
 
-def plan_revision(slots, placements, names):
-    return sha256(json.dumps([slots, placements, names], sort_keys=True).encode()).hexdigest()
+def tree_placement(value):
+    if not isinstance(value, dict):
+        raise ValueError("Invalid tree")
+    height = value["height_m"]
+    if type(height) not in (int, float) or not 0.5 <= height <= 5:
+        raise ValueError("Invalid tree height")
+    return {**wall_placement(value), "height_m": round(height, 2)}
+
+
+def plan_revision(data, slots):
+    parts = [slots, data.get("wall_placements", {}), data.get("room_names", {}), data.get("trees", {})]
+    return sha256(json.dumps(parts, sort_keys=True).encode()).hexdigest()
 
 
 def install(app, lighting):
@@ -368,8 +378,8 @@ def install(app, lighting):
             if wall_id in placements:
                 wall["placement"] = placements[wall_id]
             result.append(wall)
-        return web.json_response({"revision": plan_revision(slots, placements, names), "walls": result,
-                                  "room_names": names}, headers=HEADERS)
+        return web.json_response({"revision": plan_revision(data, slots), "walls": result,
+                                  "room_names": names, "trees": data.get("trees", {})}, headers=HEADERS)
 
     async def overview(request):
         try:
@@ -395,7 +405,7 @@ def install(app, lighting):
                 slots = plan_slots(latest)
                 placements = latest.get("wall_placements", {}).copy()
                 names = latest.get("room_names", {}).copy()
-                if wall_id not in slots or revision != plan_revision(slots, placements, names):
+                if wall_id not in slots or revision != plan_revision(latest, slots):
                     return web.json_response({"error": "project_conflict"}, status=409, headers=HEADERS)
                 previous = slots[wall_id]
                 if (previous == slot and "room_name" not in body
@@ -418,6 +428,38 @@ def install(app, lighting):
                     else:
                         names.pop(room, None)
                 data = {**latest, "plan_slots": slots, "wall_placements": placements, "room_names": names}
+                await asyncio.to_thread(store.write, path, data, PROJECT_LIMIT)
+                state = data
+                return overview_response(data)
+        except invalid:
+            return web.json_response({"error": "invalid_project"}, status=400, headers=HEADERS)
+        except OSError:
+            return web.json_response({"error": "project_storage_unavailable"}, status=503, headers=HEADERS)
+
+    async def place_tree(request):
+        nonlocal state
+        try:
+            body = await request.json()
+            room, tree = body["room"], body["tree"]
+            if type(room) is not int or not 0 <= room < PLAN_SLOTS // 4:
+                raise ValueError("Invalid room")
+            placement = tree_placement(tree) if tree is not None else None
+            async with lock:
+                latest = await load()
+                slots = plan_slots(latest)
+                trees = latest.get("trees", {}).copy()
+                key = str(room)
+                if body["revision"] != plan_revision(latest, slots) or (
+                    key not in trees and not any(slot // 4 == room for slot in slots.values())
+                ):
+                    return web.json_response({"error": "project_conflict"}, status=409, headers=HEADERS)
+                if placement == trees.get(key):
+                    return overview_response(latest)
+                if placement is None:
+                    trees.pop(key)
+                else:
+                    trees[key] = placement
+                data = {**latest, "trees": trees}
                 await asyncio.to_thread(store.write, path, data, PROJECT_LIMIT)
                 state = data
                 return overview_response(data)
@@ -564,4 +606,5 @@ def install(app, lighting):
     app.router.add_get("/lighting/projects/photo", photo)
     app.router.add_get("/lighting/projects/overview", overview)
     app.router.add_post("/lighting/projects/overview", move_wall)
+    app.router.add_post("/lighting/projects/overview/tree", place_tree)
     app.cleanup_ctx.append(playback.cleanup)

@@ -222,7 +222,7 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language}) =
     renderWallPicker();
     const showsChanged = !initialized || JSON.stringify(shows) !== JSON.stringify(data.shows);
     const layoutChanged = !initialized || switched || layout.revision !== data.layout.revision;
-    const refreshPlan = initialized && layoutChanged && !plan.hidden && !movingWall;
+    const refreshPlan = initialized && layoutChanged && !plan.hidden && !savingPlan;
     const runningChanged = !initialized || isPlaying() !== ["playing", "stopping"].includes(data.playback.state)
       || playback.state !== data.playback.state;
     initialized = true;
@@ -598,11 +598,22 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language}) =
   let planGeneration = 0;
   let planWall;
   let planRoom = "";
-  let movingWall = false;
+  let treeRoom;
+  let treeEditorOpen = false;
+  let savingPlan = false;
   const camera = {yaw: 28, pitch: -15, zoom: null};
   const planPath = "lighting/projects/overview";
   const roomLabel = (room, names) => names?.[room] || v(12) + " " + (room + 1);
   const wallPixelsPerMeter = 65;
+
+  const treeLabels = {
+    nl: ["3D-kerstboom", "Kamer voor de kerstboom", "Boom links/rechts (m)", "Boom voor/achter (m)", "Hoogte kerstboom (m)", "Draaihoek kerstboom (°)", "Kerstboom plaatsen", "Kerstboom opslaan", "Kerstboom verwijderen", "Kerstboom opgeslagen", "Kerstboom verwijderd"],
+    en: ["3D Christmas tree", "Room for the tree", "Tree left/right (m)", "Tree front/back (m)", "Tree height (m)", "Tree angle (°)", "Place tree", "Save tree", "Remove tree", "Tree saved", "Tree removed"],
+    de: ["3D-Weihnachtsbaum", "Raum für den Baum", "Baum links/rechts (m)", "Baum vorne/hinten (m)", "Baumhöhe (m)", "Baumwinkel (°)", "Baum platzieren", "Baum speichern", "Baum entfernen", "Baum gespeichert", "Baum entfernt"],
+    es: ["Árbol de Navidad 3D", "Habitación para el árbol", "Árbol izquierda/derecha (m)", "Árbol delante/detrás (m)", "Altura del árbol (m)", "Ángulo del árbol (°)", "Colocar árbol", "Guardar árbol", "Quitar árbol", "Árbol guardado", "Árbol eliminado"],
+  };
+  const treeText = index => (treeLabels[language()] || treeLabels.nl)[index];
+  const treeWidthRatio = 290 / 478;
 
   function wallTransform(slot, placement) {
     if (!placement) return "rotateY(" + (slot % 4) * 90 + "deg) translateZ(130px)";
@@ -667,8 +678,8 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language}) =
     const reset = action(placementLabel(3), () => fill(null));
     form.onsubmit = async event => {
       event.preventDefault();
-      if (movingWall) return;
-      movingWall = true;
+      if (savingPlan) return;
+      savingPlan = true;
       const body = {wall: planWall, slot: Number(destination.value), revision: snapshot.revision};
       if (custom || currentWall().placement) body.placement = custom ? transform() : null;
       if (roomName.value.trim() !== savedRoomName()) body.room_name = roomName.value.trim();
@@ -684,7 +695,7 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language}) =
           feedback.textContent = t(25);
         }
       } finally {
-        movingWall = false;
+        savingPlan = false;
         controls.forEach(control => { control.disabled = false; });
       }
     };
@@ -703,7 +714,85 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language}) =
     return form;
   }
 
-  async function renderHouse3d(snapshot, message) {
+  function renderTree(model, tree) {
+    model.hidden = !tree;
+    if (!tree) return;
+    if (!model.firstChild) {
+      for (const angle of [0, 60, 120]) {
+        const image = node("img");
+        Object.assign(image, {src: "product-photo/pre-lit-tree", alt: "", draggable: false});
+        image.style.transform = "rotateY(" + angle + "deg)";
+        model.append(image);
+      }
+    }
+    const height = tree.height_m * wallPixelsPerMeter;
+    model.style.width = height * treeWidthRatio + "px";
+    model.style.height = height + "px";
+    model.style.transform = "translate3d(calc(-50% + " + tree.x_m * wallPixelsPerMeter + "px),0," +
+      tree.z_m * wallPixelsPerMeter + "px) rotateY(" + tree.angle + "deg)";
+  }
+
+  function treePlacement(snapshot, models) {
+    const roomIds = [...models.keys()];
+    if (!roomIds.includes(treeRoom)) treeRoom = roomIds[0];
+    const trees = snapshot.trees || {};
+    const room = dropdown(roomIds.map(id => [String(id), roomLabel(id, snapshot.room_names)]), String(treeRoom));
+    const number = (min, max, step) => Object.assign(node("input"), {type: "number", min, max, step, required: true});
+    const inputs = [number(-20, 20, .01), number(-20, 20, .01), number(.5, 5, .01), number(-180, 180, 1)];
+    const fields = ["x_m", "z_m", "height_m", "angle"];
+    const placement = () => Object.fromEntries(fields.map((key, index) => [key, inputs[index].valueAsNumber]));
+    const panel = node("details", "", "house-tree-editor");
+    panel.open = treeEditorOpen;
+    panel.ontoggle = () => {
+      if (!panel.isConnected) return;
+      treeEditorOpen = panel.open;
+      if (!panel.open) renderTree(models.get(treeRoom), trees[treeRoom]);
+    };
+    const form = node("form", "", "lighting-controls");
+    const save = node("button");
+    save.type = "submit";
+    const remove = action(treeText(8), () => commit(null));
+    const feedback = node("p");
+    feedback.setAttribute("role", "status");
+    const fill = () => {
+      const tree = trees[treeRoom] || {x_m: 0, z_m: 0, height_m: 2, angle: 0};
+      fields.forEach((key, index) => { inputs[index].value = tree[key]; });
+      save.textContent = treeText(trees[treeRoom] ? 7 : 6);
+      remove.hidden = !trees[treeRoom];
+    };
+    const preview = () => {
+      if (inputs.every(input => input.validity.valid)) renderTree(models.get(treeRoom), placement());
+    };
+    room.onchange = () => {
+      renderTree(models.get(treeRoom), trees[treeRoom]);
+      treeRoom = Number(room.value);
+      fill();
+    };
+    async function commit(tree) {
+      if (savingPlan) return;
+      savingPlan = true;
+      const controls = [room, ...inputs, save, remove];
+      controls.forEach(control => { control.disabled = true; });
+      try {
+        const response = await api(planPath + "/tree", {room: treeRoom, tree, revision: snapshot.revision});
+        if (!plan.hidden) renderHouse3d(response, treeText(tree ? 9 : 10), ".house-tree-editor summary");
+      } catch (error) {
+        if (error.message === "project_conflict" && !plan.hidden) renderHouse3d(undefined, msg(5));
+        else feedback.textContent = t(25);
+      } finally {
+        savingPlan = false;
+        controls.forEach(control => { control.disabled = false; });
+      }
+    }
+    form.onsubmit = event => { event.preventDefault(); commit(placement()); };
+    for (const input of inputs) input.oninput = preview;
+    fill();
+    form.append(field(treeText(1), room), ...inputs.map((input, index) => field(treeText(index + 2), input)), save, remove);
+    panel.append(node("summary", treeText(0)), form, feedback);
+    return panel;
+  }
+
+  async function renderHouse3d(snapshot, message, focusSelector = ".house-3d-placement button") {
     const request = ++planGeneration;
     const close = action(v(1), () => { plan.hidden = true; openPlan.setAttribute("aria-expanded", "false"); openPlan.focus(); });
     const header = node("div", "", "lighting-controls");
@@ -729,16 +818,21 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language}) =
       const groups = inventory?.spatial_groups || {};
       const lights = new Map((inventory?.lights || []).map(light => [light.id, light]));
       for (const [id, group] of Object.entries(groups)) lights.set(id, {...group, id});
-      const rooms = [...new Set(layoutWalls.map(wall => Math.floor(wall.slot / 4)))].sort();
+      const trees = snapshot.trees || {};
+      const rooms = [...new Set([...layoutWalls.map(wall => Math.floor(wall.slot / 4)), ...Object.keys(trees).map(Number)])].sort();
+      const treeModels = new Map();
       if (planRoom && !rooms.includes(Number(planRoom))) planRoom = "";
       const visibleRooms = planRoom ? rooms.filter(room => room === Number(planRoom)) : rooms;
       const roomCount = visibleRooms.length;
       const visibleWalls = layoutWalls.filter(wall => visibleRooms.includes(Math.floor(wall.slot / 4)));
       const roomSpan = Math.max(260, ...visibleWalls.map(wall => (wall.dimensions?.width_m || 0) * wallPixelsPerMeter));
-      const heightSpan = Math.max(160, ...visibleWalls.map(wall => (wall.dimensions?.height_m || 0) * wallPixelsPerMeter));
+      const visibleTrees = visibleRooms.map(room => trees[room]).filter(Boolean);
+      const heightSpan = Math.max(160, ...visibleWalls.map(wall => (wall.dimensions?.height_m || 0) * wallPixelsPerMeter),
+        ...visibleTrees.map(tree => tree.height_m * wallPixelsPerMeter));
       const positionSpan = Math.max(roomSpan, ...visibleWalls.map(wall => wall.placement
         ? wallPixelsPerMeter * 2 * Math.hypot(wall.placement.x_m, wall.placement.z_m) + (wall.dimensions?.width_m ?? 4) * wallPixelsPerMeter
-        : 0));
+        : 0), ...visibleTrees.map(tree =>
+        wallPixelsPerMeter * (2 * Math.hypot(tree.x_m, tree.z_m) + tree.height_m * treeWidthRatio)));
       const columns = Math.ceil(Math.sqrt(roomCount));
       const rows = Math.ceil(roomCount / columns);
       const fit = Math.min(1, 260 / positionSpan, 520 / (columns * positionSpan),
@@ -788,8 +882,16 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language}) =
           }
           room.append(face);
         }
+        const tree = node("div", "", "house-3d-tree");
+        tree.setAttribute("role", "img");
+        tree.setAttribute("aria-label", treeText(0));
+        tree.dataset.room = String(roomId);
+        renderTree(tree, trees[roomId]);
+        treeModels.set(roomId, tree);
+        room.append(tree);
         world.append(room);
       }
+      if (snapshot.revision) plan.append(treePlacement(snapshot, treeModels));
       const zoom = node("input");
       const initialZoom = roomCount === 1 ? 76 : 54;
       Object.assign(zoom, {type: "range", min: 35, max: 125, value: camera.zoom ?? initialZoom});
@@ -834,10 +936,10 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language}) =
           zoom.value = initialZoom;
           rotate();
         }));
-      status.textContent = [message, v(2), !layoutWalls.some(wall => wall.photo_version || wall.dimensions) && v(6)].filter(Boolean).join(" ");
+      status.textContent = [message, v(2), !visibleTrees.length && !layoutWalls.some(wall => wall.photo_version || wall.dimensions) && v(6)].filter(Boolean).join(" ");
       plan.append(controls, scene);
       rotate();
-      if (message) placement?.querySelector("button")?.focus();
+      if (message) plan.querySelector(focusSelector)?.focus();
     } catch {
       if (request === planGeneration && !plan.hidden) status.textContent = msg(1);
     }
@@ -1235,7 +1337,7 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language}) =
       signature = nextSignature;
       renderShows();
       renderSpatial();
-      if (page === "house" && !plan.hidden && !movingWall) renderHouse3d();
+      if (page === "house" && !plan.hidden && !savingPlan) renderHouse3d();
       updatePlaybackStatus();
     }
     if (page === "house") refreshEffectButtons?.();

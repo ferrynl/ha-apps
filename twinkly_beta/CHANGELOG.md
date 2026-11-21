@@ -1,3 +1,7 @@
+## 2.0.0-beta.42
+
+- Plaats in Mijn Huis → 3D-weergave een verlichte kerstboom per kamer. Stel de positie in meters, draaihoek en hoogte in en bekijk het resultaat direct. De app bewaart de plaatsing samen met de plattegrond.
+
 ## 2.0.0-beta.41
 
 - Open de handleiding onder Govee → Govee-cloud om te zien waar je de API-sleutel invult. De stappen bevatten schermafbeeldingen van de configuratie, de YAML-editor en de knop voor het ophalen van cloudlampen.
