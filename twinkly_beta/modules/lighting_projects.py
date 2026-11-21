@@ -218,6 +218,13 @@ class Playback:
                 results = await apply(step)
                 self.status["last"] = {"step": number, "milliseconds": round((loop.time() - started) * 1000),
                                        "results": results}
+                if "due" in step:
+                    self.status.setdefault("timing", []).append({
+                        "lamp": step["lamp"],
+                        "planned_ms": round(step["due"] * 1000),
+                        "sent_ms": round((started - timeline_start) * 1000),
+                        "command_ms": self.status["last"]["milliseconds"],
+                    })
                 outcomes = {value for commands in results.values() for value in commands.values()}
                 self.status["uncertain"] |= "unconfirmed" in outcomes
                 self.status["partial"] |= bool(outcomes.intersection({"failed", "skipped"}))

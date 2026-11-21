@@ -55,6 +55,12 @@
       alt: ["Pestaña de configuración con el interruptor de opciones opcionales y el campo govee_api_key destacados.", "Editor YAML con govee_api_key debajo de las opciones existentes.", "Nube de Govee con el botón para cargar las luces."],
     },
   };
+  const practice = {
+    nl: ["Praktijktest", "Kijk op de lamp of de gekozen scène of alleen de geselecteerde segmenten zijn gewijzigd.", "Lamp reageerde zoals bedoeld", "Lamp reageerde anders of bleef gelijk", "Waarneming voor deze opdracht"],
+    en: ["Hardware check", "Look at the light and check whether the selected scene or only the selected segments changed.", "Light responded as expected", "Light responded differently or did not change", "Observation for this command"],
+    de: ["Praxistest", "Prüfe an der Lampe, ob sich die gewählte Szene oder nur die ausgewählten Segmente geändert haben.", "Lampe reagierte wie erwartet", "Lampe reagierte anders oder blieb unverändert", "Beobachtung für diesen Befehl"],
+    es: ["Prueba en la luz", "Comprueba si cambió la escena elegida o si solo cambiaron los segmentos seleccionados.", "La luz respondió como se esperaba", "La luz respondió de otro modo o no cambió", "Observación para este comando"],
+  };
   const errors = {key_rejected: 15, rate_limited: 16, device_busy: 17};
   let visible = false;
   let revision = 0;
@@ -92,6 +98,17 @@
   function controls(container, device, details) {
     const status = element("p");
     status.setAttribute("role", "status");
+    const [title, help, expected, different, observation] = practice[language.value] || practice.nl;
+    const check = element("fieldset");
+    check.hidden = true;
+    const reading = element("p");
+    reading.setAttribute("aria-live", "polite");
+    const choices = [[expected, "expected"], [different, "different"]].map(([caption, value]) => {
+      const option = Object.assign(element("input"), {type: "radio", name: "govee-cloud-observation", value});
+      option.onchange = () => { reading.textContent = observation + " · " + caption; };
+      return field(caption, option);
+    });
+    check.append(element("legend", title), element("p", help), ...choices, reading);
     let busy = false;
     const buttons = [];
     const command = async body => {
@@ -99,9 +116,13 @@
       busy = true;
       for (const control of buttons) control.disabled = true;
       status.textContent = t(3);
+      check.hidden = true;
+      reading.textContent = "";
+      for (const option of check.querySelectorAll("input")) option.checked = false;
       try {
         await api("/apply", {device, ...body});
         status.textContent = t(12);
+        check.hidden = false;
       } catch (error) {
         status.textContent = t(errors[error.message] ?? 14);
       } finally {
@@ -154,7 +175,7 @@
     if (!details.scenes.length && !Object.keys(details.segments).length && !details.scene_error) {
       container.append(element("p", t(13)));
     }
-    container.append(status);
+    container.append(status, check);
   }
 
   function setupGuide(open) {

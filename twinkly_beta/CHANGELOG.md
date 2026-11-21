@@ -1,3 +1,8 @@
+## 2.0.0-beta.46
+
+- Bekijk na een ruimtelijk effect in Mijn Huis per lamp of groep de geplande verzendtijd, werkelijke verzendtijd en opdrachttijd.
+- Controleer bij Govee-cloud na een geaccepteerde opdracht of de lamp echt reageerde zoals bedoeld. De waarneming geldt voor de huidige opdracht op het scherm.
+
 ## 2.0.0-beta.45
 
 - Laad transparante Hue-productfoto’s automatisch op basis van de modelcode uit de ingebouwde catalogus met 552 transparante foto’s. De foto verschijnt op de Hue-pagina en in Mijn Huis in 2D en 3D. Een eigen upload blijft mogelijk en krijgt voorrang.
