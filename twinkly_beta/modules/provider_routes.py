@@ -7,6 +7,7 @@ from aiohttp import web, ClientError
 
 from .provider_store import ProviderStore
 from .hue import Hue
+from .hue_entertainment import EntertainmentError, HueEntertainment
 from .hue_pairing import fingerprint, pair, inspect_certificate
 from .govee import Govee
 from .common import lan_ip
@@ -28,6 +29,7 @@ def install(app, store=None, controller=None):
     clients = {}
     lighting = None
     collection_lock = asyncio.Lock()
+    entertainment = HueEntertainment()
     scene_images = install_hue_scene_images(app, store)
     connection_errors = (ClientError, TimeoutError, ValueError, OSError, RuntimeError)
 
@@ -123,6 +125,8 @@ def install(app, store=None, controller=None):
                     raise ValueError()
                 record = {"address": address}
                 if provider == "hue":
+                    if entertainment.active_bridge == identifier:
+                        return web.json_response({"error": "hue_bridge_busy"}, status=409)
                     pin = body["certificate_sha256"]
                     record.update(await pair(address, pin))
                     record["certificate_sha256"] = pin
@@ -144,6 +148,8 @@ def install(app, store=None, controller=None):
             record = store.load()[provider][identifier]
             client = adapter(provider, identifier, record)
             if provider == "hue":
+                if entertainment.active_bridge == identifier:
+                    raise RuntimeError("Hue Entertainment is active on this Bridge")
                 field = {"power": "on", "brightness": "level", "color": "color", "temperature": "mirek"}[action]
                 await client.control(light_id, **{field: value})
             else:
@@ -191,6 +197,8 @@ def install(app, store=None, controller=None):
             body = await request.json()
             identifier = body["bridge"]
             async with (lighting.control_lock if lighting else collection_lock):
+                if entertainment.active_bridge == identifier:
+                    return web.json_response({"error": "hue_bridge_busy"}, status=409)
                 if lighting:
                     testing = lamp_test.task is not None and not lamp_test.task.done()
                     active = lighting.music.members | ({lamp_test.target} if testing else set())
@@ -205,6 +213,43 @@ def install(app, store=None, controller=None):
         except (*connection_errors, KeyError, TypeError):
             return web.json_response({"error": "control_failed"}, status=400)
 
+    async def entertainment_areas(request):
+        bridges = await asyncio.gather(*(
+            entertainment.areas(identifier, record, adapter("hue", identifier, record))
+            for identifier, record in store.load()["hue"].items()
+        ))
+        return web.json_response({"bridges": bridges, **entertainment.status()})
+
+    async def entertainment_status(request):
+        return web.json_response(entertainment.status())
+
+    async def entertainment_control(request):
+        try:
+            body = await request.json()
+            async with (lighting.control_lock if lighting else collection_lock):
+                async with mutation_lock:
+                    if body["action"] == "stop":
+                        await entertainment.stop()
+                    elif body["action"] == "start":
+                        identifier = body["bridge"]
+                        if lighting:
+                            testing = lamp_test.task is not None and not lamp_test.task.done()
+                            active = lighting.music.members | ({lamp_test.target} if testing else set())
+                            if any(key and json.loads(key)[:2] == ["hue", identifier] for key in active):
+                                raise EntertainmentError("busy", 409)
+                        record = store.load()["hue"][identifier]
+                        await entertainment.start(identifier, record, adapter("hue", identifier, record),
+                                                  body["area"], body["effect"], body["brightness"])
+                    else:
+                        raise ValueError()
+            return web.json_response(entertainment.status())
+        except EntertainmentError as error:
+            return web.json_response({"error": error.code}, status=error.status)
+        except (KeyError, TypeError, ValueError):
+            return web.json_response({"error": "invalid_effect"}, status=400)
+        except connection_errors:
+            return web.json_response({"error": "connection_failed"}, status=503)
+
     async def certificate(request):
         if scan_lock.locked():
             return web.json_response({"error": "scan_busy"}, status=409)
@@ -217,6 +262,10 @@ def install(app, store=None, controller=None):
             except (ValueError, KeyError, TypeError, OSError, TimeoutError):
                 return web.json_response({"error": "certificate_unavailable"}, status=400)
 
+    app.router.add_get("/providers/hue/entertainment", entertainment_areas)
+    app.router.add_get("/providers/hue/entertainment/status", entertainment_status)
+    app.router.add_post("/providers/hue/entertainment/control", entertainment_control)
+    app.cleanup_ctx.append(entertainment.cleanup)
     app.router.add_get("/providers/hue/collections", hue_collections)
     app.router.add_post("/providers/hue/collections/control", control_hue_collection)
     app.router.add_post("/providers/hue/certificate", certificate)
@@ -267,6 +316,8 @@ def install(app, store=None, controller=None):
                     if provider != brand:
                         raise ValueError()
                     if brand == "hue":
+                        if entertainment.active_bridge == identifier:
+                            return web.json_response({"error": "hue_bridge_busy"}, status=409)
                         if not re.fullmatch(r"[0-9a-fA-F-]{36}", light_id):
                             raise ValueError()
                     elif light_id != identifier:

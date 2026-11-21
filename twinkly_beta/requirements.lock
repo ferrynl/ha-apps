@@ -13,6 +13,7 @@ click-log==0.4.0
 colorama==0.4.6 ; platform_system == "Windows"
 cryptography==50.0.2
 frozenlist==1.8.0
+hue-entertainment==0.6.0
 idna==3.18
 ifaddr==0.2.0
 multidict==6.9.1
