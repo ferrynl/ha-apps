@@ -1,3 +1,7 @@
+## 2.0.0-beta.45
+
+- Laad transparante Hue-productfoto’s automatisch op basis van de modelcode uit de ingebouwde catalogus met 552 transparante foto’s. De foto verschijnt op de Hue-pagina en in Mijn Huis in 2D en 3D. Een eigen upload blijft mogelijk en krijgt voorrang.
+
 ## 2.0.0-beta.44
 
 - Voeg productfoto’s toe via de zichtbare knop op de Hue-lampkaart of rechtstreeks bij de geselecteerde Hue-lamp in Mijn Huis. Als de Bridge geen modelcode levert, legt de app uit waarom uploaden voor die lamp niet beschikbaar is.

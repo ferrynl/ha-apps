@@ -3,6 +3,7 @@ import asyncio
 import base64
 from hashlib import sha256
 from io import BytesIO
+import json
 from pathlib import Path
 import re
 from tempfile import NamedTemporaryFile
@@ -13,6 +14,9 @@ from PIL import Image
 
 MAX_BYTES = 160_000
 MAX_IMAGES = 128
+HUE_CATALOG = Path(__file__).resolve().parent.parent / "images" / "HUE"
+MODEL_CODE = re.compile(r"[A-Za-z0-9_-]{1,32}")
+CATALOG_FILENAME = re.compile(r"[A-Za-z0-9_-]{1,64}\.png")
 
 
 def scene_image_path(directory, bridge, scene):
@@ -36,7 +40,7 @@ def encode_image(raw):
 
 
 def product_image_path(directory, model):
-    if not isinstance(model, str) or not re.fullmatch(r"[A-Za-z0-9-]{1,32}", model):
+    if not isinstance(model, str) or not MODEL_CODE.fullmatch(model):
         raise ValueError("Invalid Hue model")
     return directory / (model.upper() + ".png")
 
@@ -58,14 +62,16 @@ def encode_product_image(raw):
         return output.getvalue()
 
 
-def install_images(app, directory, route, path_for, encode, extension):
+def install_images(app, directory, route, path_for, encode, extension, fallback=None):
     write_lock = asyncio.Lock()
     headers = {"Cache-Control": "no-cache", "X-Content-Type-Options": "nosniff"}
 
     async def read(request):
         path = path_for(request)
         if not path.is_file():
-            raise web.HTTPNotFound()
+            path = fallback(request.match_info["model"]) if fallback else None
+            if path is None or not path.is_file():
+                raise web.HTTPNotFound()
         return web.FileResponse(path, headers=headers)
 
     async def write(request):
@@ -125,4 +131,16 @@ def install_product_images(app, store):
         except ValueError as error:
             raise web.HTTPNotFound() from error
 
-    return install_images(app, directory, "/providers/hue/product-image/{model}", path_for, encode_product_image, ".png")
+    index = json.loads((HUE_CATALOG / "models.json").read_text(encoding="utf-8"))
+
+    def catalog_photo(model):
+        if not isinstance(model, str):
+            return None
+        filename = index.get(model.upper())
+        if filename and CATALOG_FILENAME.fullmatch(filename):
+            return HUE_CATALOG / filename
+        return None
+
+    install_images(app, directory, "/providers/hue/product-image/{model}", path_for,
+                   encode_product_image, ".png", fallback=catalog_photo)
+    return directory, catalog_photo

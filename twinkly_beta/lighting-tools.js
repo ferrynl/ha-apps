@@ -2,13 +2,13 @@ const hueProductImageRevisions = new Map();
 
 function hueProductImagePath(light) {
   const model = light.model;
-  return typeof model === "string" && /^[A-Za-z0-9-]{1,32}$/.test(model)
+  return typeof model === "string" && /^[A-Za-z0-9_-]{1,32}$/.test(model)
     ? "providers/hue/product-image/" + model.toUpperCase() : null;
 }
 
 function hueProductImage(light, fallback) {
   const path = hueProductImagePath(light);
-  if (!path || !light.has_product_image) return fallback;
+  if (!path || !(light.has_product_image || light.has_catalog_image)) return fallback;
   const image = Object.assign(document.createElement("img"), {
     className: "hue-product-photo", alt: "", decoding: "async", draggable: false,
   });
@@ -1363,7 +1363,7 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, pr
     inventory = data;
     const nextSignature = JSON.stringify([language(), data.groups, data.scenes, data.spatial_groups,
       (data.lights || []).map(light => [light.id, light.name, light.product_code, light.model, light.product_name, light.archetype,
-        light.has_product_image, hueProductImageRevisions.get(hueProductImagePath(light))])]);
+        light.has_product_image, light.has_catalog_image, hueProductImageRevisions.get(hueProductImagePath(light))])]);
     if (initialized && signature !== nextSignature) {
       signature = nextSignature;
       renderShows();

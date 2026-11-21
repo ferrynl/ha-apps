@@ -34,7 +34,7 @@ def install(app, store=None, controller=None, govee_key=None):
     collection_lock = asyncio.Lock()
     entertainment = HueEntertainment()
     scene_images = install_hue_scene_images(app, store)
-    product_images = install_product_images(app, store)
+    product_images, catalog_photo = install_product_images(app, store)
     connection_errors = (ClientError, TimeoutError, ValueError, OSError, RuntimeError)
 
     def adapter(provider, identifier, record):
@@ -93,12 +93,16 @@ def install(app, store=None, controller=None, govee_key=None):
             return results
 
         def with_photo(profile):
+            model = profile.get("model")
+            result = dict(profile)
             try:
-                if product_image_path(product_images, profile.get("model")).is_file():
-                    return dict(profile, has_product_image=True)
+                if product_image_path(product_images, model).is_file():
+                    result["has_product_image"] = True
             except (ValueError, OSError):
                 pass
-            return profile
+            if catalog_photo(model) is not None:
+                result["has_catalog_image"] = True
+            return result
 
         async def bridge(identifier, record):
             row = {"id": identifier, "address": record["address"]}
