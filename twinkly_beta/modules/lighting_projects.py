@@ -21,6 +21,7 @@ MAX_STEPS = 20
 MAX_WALLS = 8
 PROJECT_LIMIT = 8 * 1024 * 1024
 DEFAULT_WALL = "default"
+RADIAL_EFFECTS = {"outward": 1, "inward": -1}
 DIRECTIONS = {"right": (0, 1), "left": (0, -1), "down": (1, 1), "up": (1, -1)}
 HEADERS = {
     "Cache-Control": "private, no-store",
@@ -94,6 +95,14 @@ def show_settings(data):
     return {"name": name.strip(), "group": group, "steps": normalized}
 
 
+def spatial_position(point, direction, effect):
+    radial = RADIAL_EFFECTS.get(effect)
+    if radial is not None:
+        return radial * ((point[0] - 50) ** 2 + (point[1] - 50) ** 2)
+    axis, sign = DIRECTIONS[direction]
+    return sign * point[axis]
+
+
 def spatial_steps(eligible, lights, axis, sign, color, delay, end_color):
     if not eligible:
         return []
@@ -137,7 +146,7 @@ class Playback:
 
         self.schedule("show", show["steps"], apply, show["id"])
 
-    def start_spatial(self, points, direction, color, delay, end_color=None):
+    def start_spatial(self, points, direction, color, delay, end_color=None, effect=None):
         axis, sign = DIRECTIONS[direction]
         async def plan():
             lights, _ = await self.lighting.lights()
@@ -156,7 +165,7 @@ class Playback:
             eligible = []
             targets = {}
             claimed = set()
-            for key, point in sorted(placements.items(), key=lambda item: sign * item[1][axis]):
+            for key, point in sorted(placements.items(), key=lambda item: spatial_position(item[1], direction, effect)):
                 members = groups.get(key, {}).get("members", [key])
                 active = {}
                 for member in members:
@@ -178,7 +187,7 @@ class Playback:
             return {key: {"color": result}}
 
         self.schedule("spatial", [], apply, prepare=plan)
-        self.status["effect"] = "gradient" if end_color is not None else "sweep"
+        self.status["effect"] = effect or ("gradient" if end_color is not None else "sweep")
 
     def schedule(self, kind, steps, apply, identifier=None, prepare=None):
         if self.task is not None:
@@ -468,16 +477,19 @@ def install(app, lighting):
                     playback.start(shows[identifier(body["id"])])
                     return response(data, wall_id)
                 elif action == "spatial":
-                    direction, color, delay = body["direction"], rgb(body["color"]), body["delay"]
-                    if (direction not in DIRECTIONS or not any(color) or type(delay) is not int
+                    effect = body.get("effect")
+                    direction = body.get("direction", "right") if effect is not None else body["direction"]
+                    color, delay = rgb(body["color"]), body["delay"]
+                    if ((effect is not None and effect not in RADIAL_EFFECTS) or direction not in DIRECTIONS
+                            or not any(color) or type(delay) is not int
                             or not 250 <= delay <= 2000 or not layout["points"]):
                         raise ValueError("Invalid spatial effect")
                     if body["revision"] != layout["revision"]:
                         raise web.HTTPConflict()
                     end_color = rgb(body["end_color"]) if "end_color" in body else None
-                    if end_color is not None and not any(end_color):
+                    if end_color is not None and (effect or not any(end_color)):
                         raise ValueError("Invalid end color")
-                    playback.start_spatial(layout["points"], direction, color, delay, end_color)
+                    playback.start_spatial(layout["points"], direction, color, delay, end_color, effect)
                     return response(data, wall_id)
                 elif action == "stop":
                     playback.request_stop()

@@ -230,6 +230,41 @@ class LightingProjectsTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual((await removed.json())["layout"]["points"], [POINT])
         self.assertEqual((await restarted.get("/lighting/projects/photo", params={"wall": wall})).status, 404)
 
+    async def test_radial_effects_dispatch_from_centre_and_edges(self):
+        points = [
+            ['["hue","bridge","near"]', [52, 50]],
+            ['["hue","bridge","far"]', [15, 15]],
+            ['["hue","bridge","middle"]', [52, 25, 10, 0]],
+        ]
+        self.lighting.lights = AsyncMock(return_value=({
+            key: {"status": "online", "state": {"on": True}, "capabilities": {"rgb": True}}
+            for key, _ in points
+        }, {}))
+        dispatch = asyncio.Queue()
+
+        async def color(key, light, value, stop):
+            dispatch.put_nowait(key)
+            return "accepted"
+
+        self.lighting.send_spatial_color = color
+        result = await self.change("layout", revision=None, photo=self.image(), points=points)
+        revision = (await result.json())["layout"]["revision"]
+        for effect, order in (("outward", [0, 2, 1]), ("inward", [1, 2, 0])):
+            with self.subTest(effect=effect):
+                result = await self.change("spatial", revision=revision, effect=effect, color=[255, 20, 1], delay=250)
+                self.assertEqual(result.status, 200)
+                self.assertEqual((await result.json())["playback"]["effect"], effect)
+                self.assertEqual([await asyncio.wait_for(dispatch.get(), 2) for _ in order],
+                                 [points[i][0] for i in order])
+                stopped = await self.change("stop")
+                self.assertEqual(stopped.status, 200)
+                for _ in range(20):
+                    state = await (await self.client.get("/lighting/projects")).json()
+                    if state["playback"]["state"] in ("complete", "stopped"):
+                        break
+                    await asyncio.sleep(.01)
+                self.assertIn(state["playback"]["state"], ("complete", "stopped"))
+
     async def test_plan_slots_swap_persist_and_reject_a_stale_edit(self):
         first = await self.change("layout", revision=None, photo=self.image(), points=[POINT])
         self.assertEqual(first.status, 200)
