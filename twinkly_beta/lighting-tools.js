@@ -49,6 +49,13 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language}) =
     de: ["Breite (m)", "Höhe (m)", "Wandmaße speichern", "Leere Wand"],
     es: ["Ancho (m)", "Altura (m)", "Guardar medidas de la pared", "Pared sin foto"],
   };
+  const placementLabels = {
+    nl: ["Links/rechts (m)", "Voor/achter (m)", "Muurhoek (°)", "Wandzijde herstellen", "Draaihoek lamp (°)", "Kamernaam"],
+    en: ["Left/right (m)", "Front/back (m)", "Wall angle (°)", "Reset to wall side", "Light angle (°)", "Room name"],
+    de: ["Links/rechts (m)", "Vorne/hinten (m)", "Wandwinkel (°)", "Wandseite wiederherstellen", "Lampenwinkel (°)", "Raumname"],
+    es: ["Izquierda/derecha (m)", "Delante/detrás (m)", "Ángulo de pared (°)", "Restablecer lado", "Ángulo de luz (°)", "Nombre de habitación"],
+  };
+  const placementLabel = index => (placementLabels[language()] || placementLabels.nl)[index];
   const wallGuide = {
     nl: ["Handleiding Mijn Huis", "Maak één foto per muur.", "Fotografeer de muur recht van voren, in goed licht. Zorg dat de hele muur en de plekken voor je lampen zichtbaar zijn.",
       "Voeg een muur toe, geef hem een naam en upload de bijbehorende foto.", "Kies een lamp uit de lijst en tik op de plek waar die hangt. Versleep de markering om de positie aan te passen en gebruik de hoekgreep of schuifregelaar voor de grootte.",
@@ -78,6 +85,8 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language}) =
   const spatialKey = "christmas-spatial-layout-v1";
   const maxSteps = 20;
   const maxShows = 20;
+  const maxWalls = 24;
+  const planSlots = 8 * 4;
   const showSection = node("section", "", "lighting-tool");
   const spatialSection = node("section", "", "lighting-tool");
   const showStatus = node("p");
@@ -187,7 +196,7 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language}) =
     const form = node("form", "", "lighting-controls");
     const addButton = node("button", add);
     addButton.type = "submit";
-    addButton.disabled = Boolean(requestedWall) || walls.length >= 8;
+    addButton.disabled = Boolean(requestedWall) || walls.length >= maxWalls;
     form.onsubmit = event => {
       event.preventDefault();
       if (name.value.trim()) change({action: "add_wall", name: name.value}, wallStatus);
@@ -490,8 +499,9 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language}) =
 
   function setPosition(id, x, y, size = defaultSize, focusId = id) {
     const point = [clamp(x, 0, 100), clamp(y, 0, 100), clamp(size, 4, 40)];
-    const advance = wallPoints().get(id)?.[3];
-    if (advance) point.push(advance);
+    const [, , , advance = 0, angle = 0] = wallPoints().get(id) || [];
+    if (advance || angle) point.push(advance);
+    if (angle) point.push(angle);
     return saveWallPoint(id, point, focusId);
   }
 
@@ -591,8 +601,14 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language}) =
   let movingWall = false;
   const camera = {yaw: 28, pitch: -15, zoom: null};
   const planPath = "lighting/projects/overview";
-  const roomLabel = room => v(12) + " " + (room + 1);
+  const roomLabel = (room, names) => names?.[room] || v(12) + " " + (room + 1);
   const wallPixelsPerMeter = 65;
+
+  function wallTransform(slot, placement) {
+    if (!placement) return "rotateY(" + (slot % 4) * 90 + "deg) translateZ(130px)";
+    return "translate3d(" + placement.x_m * wallPixelsPerMeter + "px,0," + placement.z_m * wallPixelsPerMeter +
+      "px) rotateY(" + placement.angle + "deg)";
+  }
 
   function showDimensions(dimensions) {
     const format = new Intl.NumberFormat(language(), {maximumFractionDigits: 2});
@@ -604,16 +620,62 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language}) =
     const wallNames = walls.map(wall => [wall.id, wall.name || (wallLabels[language()] || wallLabels.nl)[1]]);
     if (!walls.some(wall => wall.id === planWall)) planWall = walls.find(wall => wall.id === wallId)?.id || walls[0].id;
     const selectWall = dropdown(wallNames, planWall);
-    const slots = Array.from({length: 8}, (_, slot) => [String(slot), roomLabel(Math.floor(slot / 4)) + " · " + v(13 + slot % 4)]);
-    const currentSlot = () => String(walls.find(wall => wall.id === planWall).slot);
-    const destination = dropdown(slots, currentSlot());
+    const slots = Array.from({length: planSlots}, (_, slot) => [String(slot),
+      roomLabel(Math.floor(slot / 4), snapshot.room_names) + " · " + v(13 + slot % 4)]);
+    const currentWall = () => walls.find(wall => wall.id === planWall);
+    const destination = dropdown(slots, String(currentWall().slot));
+    const coordinate = (limit, step) => Object.assign(node("input"),
+      {type: "number", min: -limit, max: limit, step, required: true});
+    const x = coordinate(20, .01), z = coordinate(20, .01), angle = coordinate(180, 1);
+    const roomName = Object.assign(node("input"), {type: "text", maxLength: 60});
+    const destinationRoom = () => Math.floor(Number(destination.value) / 4);
+    const savedRoomName = () => snapshot.room_names?.[destinationRoom()] || "";
+    const fillRoomName = () => {
+      roomName.value = savedRoomName();
+      roomName.placeholder = roomLabel(destinationRoom());
+    };
+    let custom;
+    const transform = () => ({x_m: x.valueAsNumber, z_m: z.valueAsNumber, angle: angle.valueAsNumber});
+    const inputs = [x, z, angle];
+    const validCoordinates = () => inputs.every(input => input.validity.valid);
+    const preview = () => {
+      for (const face of plan.querySelectorAll(".house-3d-wall")) {
+        const original = walls.find(wall => wall.id === face.dataset.wall);
+        if (!original) continue;
+        const editing = original.id === planWall && original.slot === Number(destination.value) && validCoordinates();
+        face.style.transform = wallTransform(original.slot, editing ? (custom ? transform() : null) : original.placement);
+      }
+    };
+    const fill = placement => {
+      custom = Boolean(placement);
+      const side = Number(destination.value) % 4;
+      x.value = placement?.x_m ?? [0, 2, 0, -2][side];
+      z.value = placement?.z_m ?? [2, 0, -2, 0][side];
+      angle.value = placement?.angle ?? [0, 90, 180, -90][side];
+      preview();
+    };
+    for (const input of inputs) input.oninput = () => { custom = true; preview(); };
+    destination.onchange = () => {
+      fill(Number(destination.value) === currentWall().slot ? currentWall().placement : null);
+      fillRoomName();
+    };
     const feedback = node("p");
     feedback.setAttribute("role", "status");
-    const save = action(t(8), async () => {
+    const form = node("form", "", "house-3d-placement");
+    const save = node("button", t(8));
+    save.type = "submit";
+    const reset = action(placementLabel(3), () => fill(null));
+    form.onsubmit = async event => {
+      event.preventDefault();
       if (movingWall) return;
-      movingWall = selectWall.disabled = destination.disabled = save.disabled = true;
+      movingWall = true;
+      const body = {wall: planWall, slot: Number(destination.value), revision: snapshot.revision};
+      if (custom || currentWall().placement) body.placement = custom ? transform() : null;
+      if (roomName.value.trim() !== savedRoomName()) body.room_name = roomName.value.trim();
+      const controls = [selectWall, destination, ...inputs, roomName, save, reset];
+      controls.forEach(control => { control.disabled = true; });
       try {
-        const updated = await api(planPath, {wall: planWall, slot: Number(destination.value), revision: snapshot.revision});
+        const updated = await api(planPath, body);
         if (!plan.hidden) renderHouse3d(updated, v(21));
       } catch (error) {
         if (error.message === "project_conflict" && !plan.hidden) {
@@ -622,18 +684,23 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language}) =
           feedback.textContent = t(25);
         }
       } finally {
-        movingWall = selectWall.disabled = destination.disabled = save.disabled = false;
+        movingWall = false;
+        controls.forEach(control => { control.disabled = false; });
       }
-    });
+    };
     selectWall.onchange = () => {
       planWall = selectWall.value;
-      destination.value = currentSlot();
+      destination.value = String(currentWall().slot);
+      fill(currentWall().placement);
+      fillRoomName();
     };
     const row = node("div", "", "lighting-controls");
-    row.append(field(v(10), selectWall), field(v(11), destination), save);
-    const panel = node("div", "", "house-3d-placement");
-    panel.append(row, node("p", v(20)), feedback);
-    return panel;
+    row.append(field(v(10), selectWall), field(v(11), destination), field(placementLabel(5), roomName),
+      field(placementLabel(0), x), field(placementLabel(1), z), field(placementLabel(2), angle), save, reset);
+    fill(currentWall().placement);
+    fillRoomName();
+    form.append(row, node("p", v(20)), feedback);
+    return form;
   }
 
   async function renderHouse3d(snapshot, message) {
@@ -669,15 +736,25 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language}) =
       const visibleWalls = layoutWalls.filter(wall => visibleRooms.includes(Math.floor(wall.slot / 4)));
       const roomSpan = Math.max(260, ...visibleWalls.map(wall => (wall.dimensions?.width_m || 0) * wallPixelsPerMeter));
       const heightSpan = Math.max(160, ...visibleWalls.map(wall => (wall.dimensions?.height_m || 0) * wallPixelsPerMeter));
-      const fit = Math.min(1, 260 / roomSpan, 290 / heightSpan);
+      const positionSpan = Math.max(roomSpan, ...visibleWalls.map(wall => wall.placement
+        ? wallPixelsPerMeter * 2 * Math.hypot(wall.placement.x_m, wall.placement.z_m) + (wall.dimensions?.width_m ?? 4) * wallPixelsPerMeter
+        : 0));
+      const columns = Math.ceil(Math.sqrt(roomCount));
+      const rows = Math.ceil(roomCount / columns);
+      const fit = Math.min(1, 260 / positionSpan, 520 / (columns * positionSpan),
+        520 / (rows * positionSpan), 290 / heightSpan);
       for (const [index, roomId] of visibleRooms.entries()) {
         const room = node("div", "", "house-3d-room");
-        room.style.transform = "translateX(" + (index - (roomCount - 1) / 2) * (roomSpan + 22) + "px)";
+        const row = Math.floor(index / columns);
+        const roomsInRow = Math.min(columns, roomCount - row * columns);
+        const x = (index % columns - (roomsInRow - 1) / 2) * (positionSpan + 22);
+        const z = (row - (rows - 1) / 2) * (positionSpan + 22);
+        room.style.transform = "translate3d(" + x + "px,0," + z + "px)";
         room.append(node("div", "", "house-3d-floor"));
         for (const wall of layoutWalls.filter(wall => Math.floor(wall.slot / 4) === roomId)) {
           const face = node("div", "", "house-3d-wall");
           face.dataset.wall = wall.id;
-          face.style.transform = "rotateY(" + (wall.slot % 4) * 90 + "deg) translateZ(130px)";
+          face.style.transform = wallTransform(wall.slot, wall.placement);
           const name = wall.name || (wallLabels[language()] || wallLabels.nl)[1];
           if (wall.dimensions) {
             const width = wall.dimensions.width_m * wallPixelsPerMeter;
@@ -697,7 +774,7 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language}) =
           const caption = wall.dimensions ? name + " · " + showDimensions(wall.dimensions) : name;
           face.append(node("span", caption, "house-3d-name"));
           if (inventory) {
-            for (const [id, [x, y, size = defaultSize]] of wallPoints(wall.points)) {
+            for (const [id, [x, y, size = defaultSize, , angle = 0]] of wallPoints(wall.points)) {
               const light = lights.get(id);
               if (!light) continue;
               const marker = node("span", "", "house-3d-light");
@@ -705,7 +782,7 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language}) =
               marker.style.left = x + "%";
               marker.style.top = y + "%";
               marker.style.width = size + "%";
-              marker.append(lampImage(light));
+              marker.append(rotatedLampImage(light, angle));
               face.append(marker);
             }
           }
@@ -742,7 +819,7 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language}) =
       };
       const controls = node("div", "", "lighting-controls");
       if (rooms.length > 1) {
-        const roomFilter = dropdown([["", v(17)], ...rooms.map(room => [String(room), roomLabel(room)])], planRoom);
+        const roomFilter = dropdown([["", v(17)], ...rooms.map(room => [String(room), roomLabel(room, snapshot.room_names)])], planRoom);
         roomFilter.onchange = () => {
           planRoom = roomFilter.value;
           renderHouse3d(snapshot);
@@ -781,8 +858,14 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language}) =
     return illustration;
   }
 
+  function rotatedLampImage(light, angle) {
+    const image = lampImage(light);
+    if (angle) image.style.rotate = angle + "deg";
+    return image;
+  }
+
   function lampMarker(photo, light, point) {
-    const [x, y, size = defaultSize] = point;
+    const [x, y, size = defaultSize, , angle = 0] = point;
     const item = node("div", "", "house-marker");
     item.dataset.lamp = light.id;
     const marker = action("", () => {
@@ -790,7 +873,7 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language}) =
       renderSpatial(light.id);
     });
     marker.className = "house-marker-lamp";
-    marker.append(lampImage(light));
+    marker.append(rotatedLampImage(light, angle));
     marker.setAttribute("aria-label", light.name + " · " + t(32) + " " + Math.round(x) + "%, " + Math.round(y) + "%");
     marker.setAttribute("aria-pressed", String(light.id === selected));
     item.classList.toggle("is-selected", light.id === selected);
@@ -1088,19 +1171,26 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language}) =
       settings.append(field(h(2), range), action(t(21), () => {
         return saveWallPoint(selected, null);
       }));
+      const angle = Object.assign(node("input"), {type: "number", min: -180, max: 180, step: 1,
+        required: true, value: selectedPoint[4] || 0});
       const advance = node("input");
       Object.assign(advance, {type: "number", min: 0, max: 1000, step: 1, required: true,
         value: selectedPoint[3] || 0, title: g(4)});
       const lampId = selected;
-      advance.onchange = () => {
-        if (!advance.reportValidity()) return;
+      const saveSettings = focus => {
+        if (!advance.reportValidity() || !angle.reportValidity()) return;
         const [x, y, size = defaultSize] = placements.get(lampId);
-        const point = advance.valueAsNumber ? [x, y, size, advance.valueAsNumber] : [x, y, size];
-        return saveWallPoint(lampId, point, "advance");
+        const point = [x, y, size];
+        if (advance.valueAsNumber || angle.valueAsNumber) point.push(advance.valueAsNumber);
+        if (angle.valueAsNumber) point.push(angle.valueAsNumber);
+        return saveWallPoint(lampId, point, focus);
       };
-      settings.append(field(g(3), advance), node("small", g(4)));
+      advance.onchange = () => saveSettings("advance");
+      angle.onchange = () => saveSettings("angle");
+      settings.append(field(placementLabel(4), angle), field(g(3), advance), node("small", g(4)));
       if (focusId === "range") focus = range;
       if (focusId === "advance") focus = advance;
+      if (focusId === "angle") focus = angle;
     } else if (lights.has(selected)) {
       settings.append(action(t(20), () => setPosition(selected, 50, 50)));
     }

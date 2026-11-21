@@ -13,7 +13,10 @@
 - **Spatial Light Studio.** Open Mijn Huis om lampen op een 2D-foto te plaatsen, te verslepen en groter of kleiner te maken. Bewaar meerdere muren met eigen maten en lampplaatsingen op de Home Assistant-server. Per muur kun je een foto toevoegen. De 3D-weergave gebruikt de opgegeven maten. Speel een kleurverloop of kleurveeg in vier richtingen, vanuit het midden of vanaf de buitenkant. Bekijk de volgorde vooraf op de foto. Geef trager reagerende lampen per lamp een handmatige timingcorrectie. Kies per muur een kamer en wandzijde en bekijk je muurfoto’s en lampen in een draaibaar 3D-model.
 - **Beveiliging.** Netwerkkaart in het Security Center, een Python-lockfile, bijgewerkte afhankelijkheden en een SBOM per bèta-containerarchitectuur. GitHub scant beide containerarchitecturen en maakt per bètaversie een beveiligingsrapport. Het Security Center toont broncode en release, de actieve Python-bibliotheken en lokale controles op Ingress en sleutelbestanden. Open per architectuur het GitHub-rapport van de geïnstalleerde bèta en bekijk de bevindingen en de SBOM.
 
+- **3D-plattegrond.** Plaats tot 24 muren in acht kamers. Geef kamers een naam, verplaats muren op twee assen in meters en draai muren en lampen.
+
 ## Open voor stabiel
+- **Mijn Huis.** Transparante Philips Hue-productafbeeldingen per model en een plaatsbare 3D-kerstboom.
 - **Govee.** Scènes en segmenten in de praktijk testen met een Govee-account en geschikte modellen.
 - **Spatial Light Studio.** Praktijktests voor de timingcorrectie.
 - **Security Center.** Aikido-audit voor stabiel. Het auditresultaat moet nog worden beoordeeld.
