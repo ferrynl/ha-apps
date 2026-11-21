@@ -20,7 +20,7 @@ function hueProductImage(light, fallback) {
   return image;
 }
 
-window.createLightingTools = ({mount, house, nav, api, node, field, language}) => {
+window.createLightingTools = ({mount, house, nav, api, node, field, language, productPhotoSettings}) => {
   const labels = {
     nl: ["Showbouwer", "Shownaam", "Scène", "Wachttijd (sec.)", "Stap toevoegen", "Omhoog", "Omlaag", "Verwijderen", "Opslaan", "Afspelen", "Stoppen", "Maak eerst een scène voor een gemengde groep op Home.", "Stap", "Show klaar", "Show gestopt", "Show onderbroken", "Geen bevestiging", "Spatial Light Studio", "Kies een foto", "Kies een lamp", "Plaats in het midden", "Verwijder plaatsing", "Klik op de foto om de gekozen lamp te plaatsen. Verplaats een markering met de pijltjestoetsen.", "Foto wissen", "Kies een geldige JPG, PNG of WebP van maximaal 15 MB.", "Opslaan op de server is mislukt.", "Shows en foto-indeling staan op je Home Assistant-server. Een show loopt door als je de pagina sluit.", "Groep", "Nieuwe show", "Bewerken", "Definieer minimaal één geldige stap.", "Onbekende lamp", "Locatie", "Foto van de ruimte", "Scène of groep ontbreekt", "Opdrachten gedeeltelijk uitgevoerd"],
     en: ["Show builder", "Show name", "Scene", "Hold (sec.)", "Add step", "Move up", "Move down", "Remove", "Save", "Play", "Stop", "First create a scene for a mixed group on Home.", "Step", "Show complete", "Show stopped", "Show interrupted", "Unconfirmed", "Spatial Light Studio", "Choose a photo", "Choose a light", "Place in the centre", "Remove placement", "Click the photo to place the selected light. Move a marker with the arrow keys.", "Clear photo", "Choose a valid JPG, PNG or WebP up to 15 MB.", "Could not save to the server.", "Shows and photo layouts are saved on your Home Assistant server. Playback continues when you close this page.", "Group", "New show", "Edit", "Add at least one valid step.", "Unknown light", "Position", "Photo of the space", "Scene or group missing", "Some commands did not complete"],
@@ -1289,6 +1289,8 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language}) =
     if (!lights.size) cards.append(node("p", h(3)));
     const panel = node("aside", "", "house-lamp-panel");
     panel.append(node("h3", h(1)), cards);
+    const selectedLight = lights.get(selected);
+    if (selectedLight?.provider === "hue") panel.append(productPhotoSettings(selectedLight));
     if (layout.photoVersion) toolbar.append(action(t(23), () => {
       if (window.confirm(t(23) + "?")) return updateLayout(new Map(), {photo: null});
     }));

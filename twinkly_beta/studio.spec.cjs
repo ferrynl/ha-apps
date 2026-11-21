@@ -950,10 +950,15 @@ test('Hue product photo is shared with the 2D and 3D walls in My Home', async ({
    body:'<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"><circle cx="8" cy="8" r="5"/></svg>'});
  });
  await page.goto('http://127.0.0.1:8765/index.html#hue');
- const settings = page.locator('.hue-product-settings');
- await settings.locator('summary').click();
+ await expect(page.getByText('Productfoto toevoegen',{exact:true})).toBeVisible();
+ await page.locator('#nav-house').click();
+ await page.locator('.house-lamp-choice').filter({hasText:'Bureau'}).click();
+ const settings = page.locator('#house-page .hue-product-settings');
+ await settings.getByText('Productfoto toevoegen',{exact:true}).click();
  const png = await page.evaluate(() => document.createElement('canvas').toDataURL('image/png').split(',')[1]);
  await settings.locator('input').setInputFiles({name:'strip.png',mimeType:'image/png',buffer:Buffer.from(png,'base64')});
+ await expect(settings.getByText('Productfoto wijzigen',{exact:true})).toBeVisible();
+ await page.locator('#nav-hue').click();
  await expect(page.locator('.lighting-card-head .hue-product-photo')).toBeVisible();
  await page.locator('#nav-house').click();
  await expect(page.locator('.house-lamp-choice .hue-product-photo')).toBeVisible();

@@ -334,7 +334,7 @@
     card.append(row);
   }
 
-  function productPhotoSettings(light, path) {
+  function productPhotoSettings(light) {
     const labels = {
       nl: ["Productfoto", "Kies een transparante PNG (max. 480 × 480 px, 480 kB)", "Verwijder productfoto", "Deze foto geldt voor alle Hue-lampen van dit model, ook in Mijn Huis.", "Foto opslaan mislukt. Controleer formaat, afmetingen en transparantie."],
       en: ["Product photo", "Choose a transparent PNG (max. 480 × 480 px, 480 kB)", "Remove product photo", "This photo applies to all Hue lights of this model, including in My Home.", "Could not save the photo. Check its format, dimensions and transparency."],
@@ -342,7 +342,20 @@
       es: ["Foto del producto", "Elige un PNG transparente (máx. 480 × 480 px, 480 kB)", "Quitar foto del producto", "La foto se aplica a todas las luces Hue de este modelo, también en Mi casa.", "No se pudo guardar la foto. Comprueba el formato, el tamaño y la transparencia."],
     };
     const [title, choose, remove, help, invalid] = labels[el("language").value] || labels.nl;
+    const extra = {
+      nl: ["Productfoto toevoegen", "Productfoto wijzigen", "De Bridge heeft geen modelcode voor deze lamp doorgegeven."],
+      en: ["Add product photo", "Change product photo", "The Bridge did not report a model code for this light."],
+      de: ["Produktfoto hinzufügen", "Produktfoto ändern", "Die Bridge hat keinen Modellcode für diese Lampe gemeldet."],
+      es: ["Añadir foto del producto", "Cambiar foto del producto", "El puente no ha informado del código de modelo de esta luz."],
+    };
+    const [add, change, missing] = extra[el("language").value] || extra.nl;
+    const path = hueProductImagePath(light);
     const details = node("details", "", "hue-product-settings");
+    details.append(node("summary", !path ? title : light.has_product_image ? change : add));
+    if (!path) {
+      details.append(node("p", missing));
+      return details;
+    }
     const file = Object.assign(node("input"), {type: "file", accept: "image/png"});
     const result = node("p");
     result.setAttribute("role", "status");
@@ -374,7 +387,7 @@
         }
       });
     });
-    details.append(node("summary", title), node("p", help), field(choose, file), result);
+    details.append(node("p", help), field(choose, file), result);
     if (light.has_product_image) details.append(button(remove, () => update(null)));
     return details;
   }
@@ -397,7 +410,7 @@
     head.append(mark, title);
     card.append(head, node("p", status(light), "lighting-state"));
     controls(card, [light], {id: light.id}, light.state);
-    if (path) card.append(productPhotoSettings(light, path));
+    if (light.provider === "hue") card.append(productPhotoSettings(light));
     return card;
   }
 
@@ -946,7 +959,7 @@
 
   const renderTools = window.createLightingTools({
     mount: el("lighting-tools"), house: el("house-page"), nav: el("nav-house"), api, node, field,
-    language: () => el("language").value,
+    language: () => el("language").value, productPhotoSettings,
   });
 
   function openDialog(title, content, opener) {

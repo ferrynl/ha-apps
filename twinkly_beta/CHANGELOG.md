@@ -1,3 +1,7 @@
+## 2.0.0-beta.44
+
+- Voeg productfoto’s toe via de zichtbare knop op de Hue-lampkaart of rechtstreeks bij de geselecteerde Hue-lamp in Mijn Huis. Als de Bridge geen modelcode levert, legt de app uit waarom uploaden voor die lamp niet beschikbaar is.
+
 ## 2.0.0-beta.43
 
 - Voeg op de Hue-pagina per lampmodel een transparante PNG toe. De foto verschijnt op de Hue-kaart en in Mijn Huis, op de muur en in 3D. Zonder foto toont Mijn Huis zo mogelijk de herkenbare lampvorm.
