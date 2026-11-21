@@ -83,8 +83,8 @@ def main():
     manifest.update({key: next(iter(files)) for key, files in aliases.items() if len(files) == 1 and key not in manifest})
     (DEST / "models.json").write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     missing = [f"| {key} | {reason} |" for key, _, reason in results if reason]
-    descriptions = {item["model"]: item["name"] or "" for item in entries}
-    descriptions.update({code: item["name"] or "" for item in entries for code in item["white"] if code not in descriptions})
+    descriptions = {item["model"]: item.get("name") or "" for item in entries}
+    descriptions.update({code: item.get("name") or "" for item in entries for code in item["white"] if code not in descriptions})
     rows = [f"| {key} | {descriptions.get(key, '').replace('|', '/')} | [{filename}]({filename}) |"
             for key, filename in sorted(photos.items())]
     notes = [
