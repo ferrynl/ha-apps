@@ -1,6 +1,7 @@
 """Shared lighting projects and mixed-show playback behind Home Assistant Ingress."""
 import asyncio
 import base64
+from hashlib import sha256
 from io import BytesIO
 import json
 import logging
@@ -264,6 +265,25 @@ def update_wall_layout(data, wall_id, layout):
         data["walls"][wall_id] = {**data["walls"][wall_id], **layout}
 
 
+def plan_slots(data):
+    walls = (DEFAULT_WALL, *data["walls"])
+    saved = data.get("plan_slots", {})
+    assigned = {}
+    for wall_id in walls:
+        slot = saved.get(wall_id)
+        if type(slot) is int and 0 <= slot < MAX_WALLS and slot not in assigned.values():
+            assigned[wall_id] = slot
+    free = iter(sorted(set(range(MAX_WALLS)) - set(assigned.values())))
+    for wall_id in walls:
+        if wall_id not in assigned:
+            assigned[wall_id] = next(free)
+    return assigned
+
+
+def plan_revision(slots):
+    return sha256(json.dumps(slots, sort_keys=True).encode()).hexdigest()
+
+
 def install(app, lighting):
     store = lighting.store
     path = store.path.parent / "lighting-projects.json"
@@ -309,17 +329,48 @@ def install(app, lighting):
         except (ValueError, OSError):
             raise web.HTTPServiceUnavailable()
 
+    def overview_response(data):
+        slots = plan_slots(data)
+        result = []
+        for wall_id, slot in sorted(slots.items(), key=lambda item: item[1]):
+            layout = wall_layout(data, wall_id)
+            result.append({"id": wall_id, "name": layout.get("name", ""), "slot": slot,
+                           "photo_version": layout["photo_version"], "points": layout["points"]})
+        return web.json_response({"revision": plan_revision(slots), "walls": result}, headers=HEADERS)
+
     async def overview(request):
         try:
-            data = await current()
-            result = []
-            for wall_id in (DEFAULT_WALL, *data["walls"]):
-                layout = wall_layout(data, wall_id)
-                result.append({"id": wall_id, "name": layout.get("name", ""),
-                               "photo_version": layout["photo_version"], "points": layout["points"]})
-            return web.json_response({"walls": result}, headers=HEADERS)
+            return overview_response(await current())
         except (ValueError, OSError):
             raise web.HTTPServiceUnavailable()
+
+    async def move_wall(request):
+        nonlocal state
+        try:
+            body = await request.json()
+            wall_id, slot, revision = body["wall"], body["slot"], body["revision"]
+            if not isinstance(wall_id, str) or type(slot) is not int or not 0 <= slot < MAX_WALLS:
+                raise ValueError("Invalid wall position")
+            async with lock:
+                latest = await load()
+                slots = plan_slots(latest)
+                if wall_id not in slots or revision != plan_revision(slots):
+                    return web.json_response({"error": "project_conflict"}, status=409, headers=HEADERS)
+                previous = slots[wall_id]
+                if previous == slot:
+                    return overview_response(latest)
+                occupant = next((other for other, value in slots.items() if value == slot), None)
+                if occupant is not None:
+                    slots[occupant] = previous
+                slots[wall_id] = slot
+                data = {**latest, "plan_slots": slots}
+                await asyncio.to_thread(store.write, path, data, PROJECT_LIMIT)
+                state = data
+                return overview_response(data)
+        except invalid:
+            return web.json_response({"error": "invalid_project"}, status=400, headers=HEADERS)
+        except OSError:
+            return web.json_response({"error": "project_storage_unavailable"}, status=503, headers=HEADERS)
 
     async def photo(request):
         try:
@@ -347,7 +398,7 @@ def install(app, lighting):
                     raise web.HTTPConflict()
                 shows = latest["shows"].copy()
                 layout = wall_layout(latest, wall_id)
-                data = {"shows": shows, "layout": latest["layout"], "walls": walls}
+                data = {**latest, "shows": shows, "walls": walls}
                 if action == "add_wall":
                     if len(walls) >= MAX_WALLS - 1:
                         raise web.HTTPConflict()
@@ -359,6 +410,9 @@ def install(app, lighting):
                     if action == "rename_wall":
                         update_wall_layout(data, wall_id, {**layout, "name": wall_name(body), "revision": uuid.uuid4().hex})
                     elif wall_id != DEFAULT_WALL:
+                        saved = plan_slots(latest)
+                        del saved[wall_id]
+                        data["plan_slots"] = saved
                         del walls[wall_id]
                         wall_id = DEFAULT_WALL
                     else:
@@ -444,4 +498,5 @@ def install(app, lighting):
     app.router.add_post("/lighting/projects", change)
     app.router.add_get("/lighting/projects/photo", photo)
     app.router.add_get("/lighting/projects/overview", overview)
+    app.router.add_post("/lighting/projects/overview", move_wall)
     app.cleanup_ctx.append(playback.cleanup)
