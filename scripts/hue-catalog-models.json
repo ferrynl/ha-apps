@@ -497,6 +497,15 @@
    "white": []
   },
   {
+   "model": "929003047501",
+   "name": "Centura recessed spotlight",
+   "ids": [
+    "929003047501"
+   ],
+   "extra": [],
+   "white": []
+  },
+  {
    "model": "915005996401",
    "name": "Hue white ambiance ceiling light Enrave S with Bluetooth",
    "ids": [
@@ -1344,6 +1353,15 @@
    "white": []
   },
   {
+   "model": "1746630V7",
+   "name": "Amarant linear outdoor light",
+   "ids": [
+    "1746630V7"
+   ],
+   "extra": [],
+   "white": []
+  },
+  {
    "model": "4090531P7",
    "name": "Hue Flourish white and color ambiance ceiling light",
    "ids": [
@@ -2080,6 +2098,15 @@
    "white": []
   },
   {
+   "model": "915005988501",
+   "name": "Play gradient light tube large",
+   "ids": [
+    "915005988501"
+   ],
+   "extra": [],
+   "white": []
+  },
+  {
    "model": "464800",
    "name": "Hue white ambiance BR30 flood light",
    "ids": [
@@ -2139,6 +2166,22 @@
    "name": "Hue white ambiance GU10 with Bluetooth",
    "ids": [
     "LTG005"
+   ],
+   "extra": [],
+   "white": []
+  },
+  {
+   "model": "5995111U5",
+   "ids": [
+    "LTD005"
+   ],
+   "extra": [],
+   "white": []
+  },
+  {
+   "model": "929003134801",
+   "ids": [
+    "LTD008"
    ],
    "extra": [],
    "white": []
@@ -2342,6 +2385,46 @@
    "name": "Hue white ambiance Muscari pendant light",
    "ids": [
     "LTD003"
+   ],
+   "extra": [],
+   "white": []
+  },
+  {
+   "model": "801480",
+   "ids": [
+    "LTD004"
+   ],
+   "extra": [],
+   "white": []
+  },
+  {
+   "model": "5996311U5",
+   "ids": [
+    "LTD009"
+   ],
+   "extra": [],
+   "white": []
+  },
+  {
+   "model": "5996411U5",
+   "ids": [
+    "LTD010"
+   ],
+   "extra": [],
+   "white": []
+  },
+  {
+   "model": "5996511U5",
+   "ids": [
+    "LCD001"
+   ],
+   "extra": [],
+   "white": []
+  },
+  {
+   "model": "5996611U5",
+   "ids": [
+    "LCD002"
    ],
    "extra": [],
    "white": []
@@ -4743,6 +4826,30 @@
    "white": []
   },
   {
+   "model": "9290031345",
+   "ids": [
+    "LCD005"
+   ],
+   "extra": [],
+   "white": []
+  },
+  {
+   "model": "9290031346",
+   "ids": [
+    "LCD006"
+   ],
+   "extra": [],
+   "white": []
+  },
+  {
+   "model": "579573",
+   "ids": [
+    "LCD007"
+   ],
+   "extra": [],
+   "white": []
+  },
+  {
    "model": "9290037121",
    "name": "Hue White and Color Ambiance slim downlight 90mm",
    "ids": [
@@ -5170,6 +5277,22 @@
    "name": "Hue white E27 1100lm with Bluetooth",
    "ids": [
     "8719514288232"
+   ],
+   "extra": [],
+   "white": []
+  },
+  {
+   "model": "9290031347",
+   "ids": [
+    "LTD016"
+   ],
+   "extra": [],
+   "white": []
+  },
+  {
+   "model": "578526",
+   "ids": [
+    "LTD017"
    ],
    "extra": [],
    "white": []
@@ -5855,6 +5978,15 @@
     "929004610902",
     "929004611102"
    ]
+  },
+  {
+   "model": "929003812301",
+   "name": "Runner single spotlight (White)",
+   "ids": [
+    "929003812301"
+   ],
+   "extra": [],
+   "white": []
   },
   {
    "model": "929004291501",
