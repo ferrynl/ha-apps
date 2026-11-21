@@ -17,6 +17,7 @@ from .govee_discovery import discover as govee_discover, statuses as govee_statu
 from .lighting import Lighting
 from .lighting_projects import install as install_projects
 from .hue_scene_images import install as install_hue_scene_images, scene_image_path
+from .hue_scene_images import install_product_images, product_image_path
 from .hue_tests import LampTest, TESTS as HUE_TESTS, test_plan as hue_test_plan
 from . import govee_tests
 from .govee_cloud import CloudError, install as install_govee_cloud
@@ -33,6 +34,7 @@ def install(app, store=None, controller=None, govee_key=None):
     collection_lock = asyncio.Lock()
     entertainment = HueEntertainment()
     scene_images = install_hue_scene_images(app, store)
+    product_images = install_product_images(app, store)
     connection_errors = (ClientError, TimeoutError, ValueError, OSError, RuntimeError)
 
     def adapter(provider, identifier, record):
@@ -90,14 +92,22 @@ def install(app, store=None, controller=None, govee_key=None):
                 results.append(row)
             return results
 
+        def with_photo(profile):
+            try:
+                if product_image_path(product_images, profile.get("model")).is_file():
+                    return dict(profile, has_product_image=True)
+            except (ValueError, OSError):
+                pass
+            return profile
+
         async def bridge(identifier, record):
             row = {"id": identifier, "address": record["address"]}
             client = adapter(provider, identifier, record)
             try:
                 client.last_profiles = await client.profiles()
-                return dict(row, lights=client.last_profiles, status="online")
+                return dict(row, lights=[with_photo(profile) for profile in client.last_profiles], status="online")
             except connection_errors:
-                lights = [{**profile, "status": "unavailable"} for profile in client.last_profiles]
+                lights = [dict(with_photo(profile), status="unavailable") for profile in client.last_profiles]
                 return dict(row, lights=lights, status="unavailable")
 
         return await asyncio.gather(*(bridge(identifier, record) for identifier, record in records.items()))

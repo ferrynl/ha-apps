@@ -929,3 +929,35 @@ test('Home mixer sends color while the picker is open and keeps room settings on
  await expect(fader).toHaveValue('73');
  await expect(home.locator('.mixer-fader output')).toHaveText('73%');
 });
+
+test('Hue product photo is shared with the 2D and 3D walls in My Home', async ({page}) => {
+ const id = '["hue","bridge","strip"]';
+ const light = {id,name:'Bureau',provider:'hue',model:'LST002',capabilities:{},state:{},status:'online'};
+ await page.route('**/lighting', route => route.fulfill({json:{
+  lights:[light],groups:{},scenes:{},connections:{},
+ }}));
+ const wall = {id:'default',name:'Wand',slot:0,photo_version:null,dimensions:{width_m:3,height_m:2.5},points:[[id,[50,50,20,0,45]]]};
+ await page.route('**/lighting/projects', route => route.fulfill({json:{
+  shows:[],layout:{...wall,revision:'room'}, walls:[wall], playback:{state:'idle'},
+ }}));
+ await page.route('**/lighting/projects/overview', route => route.fulfill({json:{walls:[wall]}}));
+ await page.route('**/providers/hue/product-image/LST002*', route => {
+  if (route.request().method() === 'POST') {
+   light.has_product_image = Boolean(route.request().postDataJSON().image);
+   return route.fulfill({json:{ok:true}});
+  }
+  return route.fulfill({contentType:'image/svg+xml',
+   body:'<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"><circle cx="8" cy="8" r="5"/></svg>'});
+ });
+ await page.goto('http://127.0.0.1:8765/index.html#hue');
+ const settings = page.locator('.hue-product-settings');
+ await settings.locator('summary').click();
+ const png = await page.evaluate(() => document.createElement('canvas').toDataURL('image/png').split(',')[1]);
+ await settings.locator('input').setInputFiles({name:'strip.png',mimeType:'image/png',buffer:Buffer.from(png,'base64')});
+ await expect(page.locator('.lighting-card-head .hue-product-photo')).toBeVisible();
+ await page.locator('#nav-house').click();
+ await expect(page.locator('.house-lamp-choice .hue-product-photo')).toBeVisible();
+ await expect(page.locator('.house-marker .hue-product-photo')).toHaveCSS('rotate','45deg');
+ await page.getByRole('button',{name:'3D-weergave',exact:true}).click();
+ await expect(page.locator('.house-3d-light .hue-product-photo')).toHaveCSS('rotate','45deg');
+});
