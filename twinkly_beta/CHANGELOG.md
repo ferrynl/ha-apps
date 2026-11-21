@@ -1,3 +1,7 @@
+## 2.0.0-beta.41
+
+- Open de handleiding onder Govee → Govee-cloud om te zien waar je de API-sleutel invult. De stappen bevatten schermafbeeldingen van de configuratie, de YAML-editor en de knop voor het ophalen van cloudlampen.
+
 ## 2.0.0-beta.40
 
 - Geef in Mijn Huis elke muur een breedte en hoogte in meters. De 3D-weergave toont de maten en gebruikt ze voor de schaal van de muur.
