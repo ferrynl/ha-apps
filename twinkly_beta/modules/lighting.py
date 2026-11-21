@@ -14,10 +14,25 @@ CAPABILITY = {"power": "power", "brightness": "brightness", "color": "rgb", "tem
 MAX_MEMBERS = 128
 MAX_GROUPS = 40
 MAX_SCENES = 40
+PROVIDERS = ("twinkly", "hue", "govee")
 
 
 def light_key(*parts):
     return json.dumps(parts, separators=(",", ":"))
+
+
+def selected_provider(body):
+    provider = body.get("provider", "all")
+    if provider not in (*PROVIDERS, "all"):
+        raise ValueError("Invalid lighting provider")
+    return provider
+
+
+def provider_members(members, provider):
+    if provider == "all":
+        return members
+    prefix = json.dumps([provider])[:-1] + ","
+    return [member for member in members if member.startswith(prefix)]
 
 
 def scene_settings(body):
@@ -133,8 +148,20 @@ class Lighting:
                     raise web.HTTPNotFound()
                 if body.get("delete") is True and identifier:
                     del groups[identifier]
+                elif identifier and "member" in body:
+                    member = body["member"]
+                    known, _ = await self.lights()
+                    if not isinstance(member, str) or member not in known:
+                        raise ValueError("Unknown lamp")
+                    members = list(dict.fromkeys([*groups[identifier]["members"], member]))
+                    if len(members) > MAX_MEMBERS:
+                        raise ValueError("Too many members")
+                    groups[identifier]["members"] = members
                 else:
                     name, members = body.get("name"), body.get("members")
+                    kind = body.get("kind", groups.get(identifier, {}).get("kind", "group"))
+                    if kind not in ("group", "room"):
+                        raise ValueError("Invalid group type")
                     if (not isinstance(name, str) or not 1 <= len(name.strip()) <= 60
                             or not isinstance(members, list) or not 1 <= len(members) <= MAX_MEMBERS
                             or any(not isinstance(member, str) or len(member) > 512 for member in members)
@@ -146,6 +173,8 @@ class Lighting:
                         raise ValueError()
                     identifier = identifier or uuid.uuid4().hex
                     groups[identifier] = {"name": name.strip(), "members": list(dict.fromkeys(members))}
+                    if kind == "room":
+                        groups[identifier]["kind"] = kind
                 self.store.save_groups(groups)
             async with self.control_lock:
                 if self.music.group == identifier:
@@ -190,7 +219,7 @@ class Lighting:
             scenes.get(step["scene"], {}).get("group") == group for step in show["steps"]
         )
 
-    async def run_scene(self, identifier, expected_group=None):
+    async def run_scene(self, identifier, expected_group=None, provider="all"):
         async with self.control_lock:
             scene = self.store.load_scenes().get(identifier)
             if scene is None:
@@ -201,7 +230,7 @@ class Lighting:
             group = self.store.load_groups().get(scene["group"])
             if group is None:
                 raise web.HTTPConflict()
-            members = group["members"]
+            members = provider_members(group["members"], provider)
             if self.lamp_test and self.lamp_test.target in members:
                 await self.lamp_test.stop()
             if self.music.members.intersection(members):
@@ -218,7 +247,14 @@ class Lighting:
 
     async def apply_scene(self, request):
         try:
-            return web.json_response({"results": await self.run_scene(request.match_info["id"])})
+            body = await request.json() if request.can_read_body else {}
+            if not isinstance(body, dict):
+                raise ValueError()
+            provider = selected_provider(body)
+        except (ValueError, TypeError):
+            raise web.HTTPBadRequest()
+        try:
+            return web.json_response({"results": await self.run_scene(request.match_info["id"], provider=provider)})
         except (ValueError, KeyError, TypeError, OSError):
             raise web.HTTPServiceUnavailable()
 
@@ -308,6 +344,7 @@ class Lighting:
             if not isinstance(body, dict):
                 raise ValueError()
             action, value = body["action"], body["value"]
+            provider = selected_provider(body)
             if action == "power" and type(value) is bool:
                 pass
             elif action == "brightness":
@@ -316,7 +353,7 @@ class Lighting:
                 value = rgb(value)
                 if not any(value):
                     raise ValueError()
-            elif (action == "temperature" and type(value) is int and "group" not in body
+            elif (action == "temperature" and type(value) is int and isinstance(body.get("id"), str) and "group" not in body
                   and (1 <= value <= 1000 or 2000 <= value <= 9000)):
                 pass
             else:
@@ -325,6 +362,8 @@ class Lighting:
                 members = self.store.load_groups()[body["group"]]["members"]
             elif isinstance(body.get("id"), str):
                 members = [body["id"]]
+            elif "provider" in body:
+                members = None
             else:
                 raise ValueError()
         except (ValueError, KeyError, TypeError):
@@ -332,11 +371,17 @@ class Lighting:
         except OSError:
             raise web.HTTPServiceUnavailable()
         async with self.control_lock:
+            lights = None
+            if members is None:
+                lights, _ = await self.lights()
+                members = list(lights)
+            members = provider_members(members, provider)
             if self.lamp_test and self.lamp_test.target in members:
                 await self.lamp_test.stop()
             if self.music.members.intersection(members):
                 await self.music.stop()
-            lights, _ = await self.lights()
+            if lights is None:
+                lights, _ = await self.lights()
             results = await asyncio.gather(*(self.send(key, lights.get(key), action, value) for key in members))
         return web.json_response({"results": dict(zip(members, results))})
 

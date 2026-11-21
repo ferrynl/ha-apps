@@ -1,3 +1,8 @@
+## 2.0.0-beta.37
+
+- Bedien lampen, kamers en groepen vanaf de nieuwe DJ-lichtmengtafel met verticale helderheidsfader, kleurknop en verlichte scènepads. Kies alle merken samen of bedien Twinkly, Philips Hue of Govee afzonderlijk.
+- Zoek en koppel lampen vanuit Home en deel ze direct in bij een kamer of groep. Maak en bewerk scènes in een popup. Bestaande gemengde scènes, Twinkly-scènes, muziekbediening en de showbouwer zijn beschikbaar vanaf Home.
+
 ## 2.0.0-beta.36
 
 - Speel in Mijn Huis een kleurveeg van het midden van de muurfoto naar buiten of van buiten naar het midden. Bekijk vooraf de volgorde op de foto. De voorvertoning houdt bij beide effecten rekening met de ingestelde timingcorrectie per lamp.

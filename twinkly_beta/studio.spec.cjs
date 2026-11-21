@@ -9,6 +9,7 @@ for(const viewport of [{width:1440,height:900},{width:390,height:844}]){
   await expect(page).toHaveTitle('Christmas Control Center');
   await expect(page.locator('h1')).toHaveAttribute('aria-label','Christmas Control Center');
   await expect(page.locator('#lighting-panel')).toBeVisible();
+  await expect(page.getByRole('heading',{name:'Lichtmengtafel'})).toBeVisible();
   expect(await page.locator('.workspace-nav a').evaluateAll(links => links.map(link => link.id))).toEqual([
    'nav-home','nav-house','nav-control','nav-hue','nav-govee','nav-tests','nav-network','nav-settings',
   ]);
@@ -100,9 +101,14 @@ test('Home combines providers and keeps pairing in Settings', async ({page}) => 
   connections:{hue:[{id:'bridge',address:'192.168.1.2',status:'online'}],govee:[]}, groups, scenes, music,
  }}));
  await page.route('**/lighting/groups', route => {
-  const {name,members}=route.request().postDataJSON();
-  groups.mixed={name,members};
-  return route.fulfill({json:{id:'mixed'}});
+  const {id,name,members,member,kind}=route.request().postDataJSON();
+  if (member) {
+   groups[id].members.push(member);
+   return route.fulfill({json:{id}});
+  }
+  const key=kind==='room'?'room':'mixed';
+  groups[key]={name,members,kind};
+  return route.fulfill({json:{id:key}});
  });
  await page.route('**/lighting/control', route => {
   const command=route.request().postDataJSON();
@@ -128,9 +134,14 @@ test('Home combines providers and keeps pairing in Settings', async ({page}) => 
   scenes.christmas=scene;
   return route.fulfill({json:{id:'christmas'}});
  });
- await page.route('**/lighting/scenes/christmas/apply', route => route.fulfill({json:{results:{
-  t:{power:'accepted',brightness:'accepted'}, h:{power:'accepted',brightness:'skipped'},
- }}}));
+ const sceneRequests=[];
+ await page.route('**/lighting/scenes/christmas/apply', route => {
+  sceneRequests.push(route.request().postDataJSON());
+  return route.fulfill({json:{results:{
+   h:{power:'accepted',brightness:'skipped'},
+   ...(!sceneRequests.at(-1).provider && {t:{power:'accepted',brightness:'accepted'}}),
+  }}});
+ });
  let goveeTest={result:null};
  await page.route('**/lighting/govee-test', route => {
   if (route.request().method()==='POST') {
@@ -161,25 +172,30 @@ test('Home combines providers and keeps pairing in Settings', async ({page}) => 
  await page.setViewportSize({width:390,height:844});
  await page.goto('http://127.0.0.1:8765/index.html',{waitUntil:'domcontentloaded'});
  const home=page.locator('#lighting-panel');
- await expect(home.locator('article')).toHaveCount(3);
- await expect.poll(() => home.locator('.lighting-brand-mark img').evaluateAll(images =>
-  images.filter(image => image.complete && image.naturalWidth > 0).length,
- )).toBe(3);
- await expect(home.locator('[data-provider=hue] input[type=color]')).toHaveCount(0);
+ await expect(home.locator('.mixer-target')).toHaveCount(4);
+ await home.getByRole('button',{name:/^Living room/}).click();
+ await expect(home.locator('.mixer-center input[type=color]')).toHaveCount(0);
  const white = home.getByRole('slider',{name:'Wittemperatuur'});
  await expect(white).toHaveValue('370');
  await expect(white).toHaveAttribute('aria-valuetext','2703 K');
  await white.fill('400');
  await expect.poll(() => temperature).toEqual({id:'h',action:'temperature',value:400});
- await expect(home.locator('[data-provider=govee]')).toContainText('onbevestigd');
- await expect(home.locator('[data-provider=govee] button')).toHaveCount(2);
+ await home.getByRole('button',{name:'Philips Hue',exact:true}).click();
+ await expect(home.getByRole('button',{name:/^Tree/})).toHaveCount(0);
+ await home.getByRole('button',{name:'Alles',exact:true}).click();
+ await expect(home.locator('.mixer-target').filter({hasText:'Strip'})).toContainText('onbevestigd');
  await expect(page.getByText('Certificaat ophalen')).toHaveCount(0);
- await home.getByLabel('Groepsnaam').fill('Together');
- await home.getByLabel('Tree · Twinkly').check();
- await home.getByLabel('Living room · Philips Hue').check();
- await home.getByLabel('Strip · Govee').check();
- await home.getByRole('button',{name:'Opslaan'}).click();
- const group=home.locator('article').filter({hasText:'Together'});
+ await home.getByRole('button',{name:'Groepen',exact:true}).click();
+ await home.getByRole('button',{name:'Groep toevoegen'}).click();
+ const popup = page.getByRole('dialog',{name:'Groep toevoegen'});
+ await popup.getByLabel('Groepsnaam').fill('Together');
+ await popup.getByLabel('Tree · Twinkly').check();
+ await popup.getByLabel('Living room · Philips Hue').check();
+ await popup.getByLabel('Strip · Govee').check();
+ await popup.getByRole('button',{name:'Opslaan'}).click();
+ await expect(popup).toBeHidden();
+ const group=home.locator('.mixer-center');
+ await expect(group.getByRole('heading')).toHaveText('Together');
  await group.getByRole('button',{name:'Aan',exact:true}).click();
  await expect(page.locator('#lighting-feedback')).toContainText('Onbevestigd · 1');
  expect(groupControl).toEqual({group:'mixed',action:'power',value:true});
@@ -191,11 +207,34 @@ test('Home combines providers and keeps pairing in Settings', async ({page}) => 
  await expect.poll(() => music.level).toBe(45);
  await group.getByRole('button',{name:'Muziek stoppen'}).click();
  await expect(group.getByRole('button',{name:'Muziek starten'})).toBeVisible();
- const sceneForm=home.locator('.lighting-scene-form');
+ await home.getByRole('button',{name:'Scène toevoegen'}).click();
+ const sceneForm=page.locator('.lighting-scene-form');
  await sceneForm.getByLabel('Scènenaam').fill('Kerstavond');
  await sceneForm.getByLabel('Helderheid').fill('45');
  await sceneForm.getByRole('button',{name:'Opslaan'}).click();
- await home.locator('article').filter({hasText:'Kerstavond'}).getByRole('button',{name:'Afspelen'}).click();
+ const scenePad=home.getByRole('button',{name:'Kerstavond',exact:true});
+ await scenePad.click();
+ await expect(scenePad).toHaveAttribute('aria-pressed','true');
+ await home.getByRole('button',{name:'Philips Hue',exact:true}).click();
+ await scenePad.click();
+ await expect(scenePad).toHaveAttribute('aria-pressed','true');
+ expect(sceneRequests).toEqual([{}, {provider:'hue'}]);
+ await home.getByRole('button',{name:'Alles',exact:true}).click();
+ await home.getByRole('button',{name:'Kamers',exact:true}).click();
+ await home.getByRole('button',{name:'Kamer toevoegen'}).click();
+ const room = page.getByRole('dialog',{name:'Kamer toevoegen'});
+ await room.getByLabel('Naam',{exact:true}).fill('Woonkamer');
+ await room.getByLabel('Living room · Philips Hue').check();
+ await room.getByRole('button',{name:'Opslaan'}).click();
+ await expect(room).toBeHidden();
+ await expect(home.locator('.mixer-screen h3')).toHaveText('Woonkamer');
+ await home.getByRole('button',{name:'Lamp toevoegen'}).click();
+ const add = page.getByRole('dialog',{name:'Lamp toevoegen'});
+ await add.getByLabel('Kies een lamp').selectOption('t');
+ await add.getByLabel('Kies een kamer of groep').selectOption('room');
+ await add.getByRole('button',{name:'Lamp indelen'}).click();
+ await expect(add).toBeHidden();
+ expect(groups.room.members).toEqual(['h','t']);
  await expect(page.locator('#lighting-feedback')).toContainText('Living room · Aan Gelukt, Helderheid Overgeslagen');
  await page.locator('#nav-hue').click();
  await expect(home.locator('article')).toHaveCount(1);
