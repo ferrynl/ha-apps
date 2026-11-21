@@ -70,6 +70,18 @@
   let collectionsStatus = "loading";
   let collectionsRead = 0;
   const sceneImageRevisions = new Map();
+  const entertainment = node("section", "", "lighting-section");
+  entertainment.hidden = true;
+  hueCollections.after(entertainment);
+  const entertainmentPath = "providers/hue/entertainment";
+  const entertainmentWords = {
+    nl: ["Maak een Entertainment-zone in de Philips Hue-app en kies die hieronder.", "Entertainment-zone", "Regenboog", "Zonsondergang", "Start effect", "Stop effect", "Effect actief", "Geen Entertainment-zones gevonden.", "Koppel de Bridge opnieuw via Instellingen om effecten te streamen.", "De Bridge is niet bereikbaar.", "Stop de actieve stream, Hue-test of gemengde muziek en probeer opnieuw.", "De verbinding met de Hue-stream is verbroken.", "De Bridge heeft het stoppen niet bevestigd.", "Effect starten mislukt. Controleer de Bridge en vernieuw de zones."],
+    en: ["Create an entertainment area in the Philips Hue app, then select it below.", "Entertainment area", "Rainbow", "Sunset", "Start effect", "Stop effect", "Effect running", "No entertainment areas found.", "Reconnect the Bridge in Settings to stream effects.", "The Bridge is unavailable.", "Stop the active stream, Hue test or mixed music and try again.", "The Hue stream disconnected.", "The Bridge did not confirm that streaming stopped.", "Could not start the effect. Check the Bridge and refresh the areas."],
+    de: ["Erstelle in der Philips Hue App einen Entertainment-Bereich und wähle ihn hier aus.", "Entertainment-Bereich", "Regenbogen", "Sonnenuntergang", "Effekt starten", "Effekt stoppen", "Effekt läuft", "Keine Entertainment-Bereiche gefunden.", "Verbinde die Bridge in den Einstellungen erneut, um Effekte zu streamen.", "Die Bridge ist nicht erreichbar.", "Beende den aktiven Stream, Hue-Test oder die gemischte Musik und versuche es erneut.", "Die Verbindung zum Hue-Stream wurde unterbrochen.", "Die Bridge hat das Beenden nicht bestätigt.", "Der Effekt konnte nicht gestartet werden. Prüfe die Bridge und aktualisiere die Bereiche."],
+    es: ["Crea un área de entretenimiento en la aplicación Philips Hue y selecciónala aquí.", "Área de entretenimiento", "Arcoíris", "Atardecer", "Iniciar efecto", "Detener efecto", "Efecto activo", "No se encontraron áreas de entretenimiento.", "Vuelve a vincular el puente en Ajustes para transmitir efectos.", "El puente no está disponible.", "Detén la transmisión activa, la prueba Hue o la música mixta y vuelve a intentarlo.", "Se perdió la conexión con la transmisión Hue.", "El puente no confirmó que la transmisión se detuviera.", "No se pudo iniciar el efecto. Comprueba el puente y actualiza las áreas."],
+  };
+  let entertainmentRead = 0;
+  let entertainmentControls;
 
   function node(tag, text, className) {
     const item = document.createElement(tag);
@@ -804,6 +816,111 @@
     }
   }
 
+  async function loadEntertainment() {
+    const revision = ++entertainmentRead;
+    entertainmentControls = null;
+    const labels = entertainmentWords[el("language").value] || entertainmentWords.nl;
+    const reload = node("button", t(2));
+    reload.type = "button";
+    reload.addEventListener("click", loadEntertainment);
+    entertainment.replaceChildren(node("h2", "Hue Entertainment"), node("p", labels[0]), reload);
+    const loading = node("p", t(36));
+    entertainment.append(loading);
+    try {
+      const result = await api(entertainmentPath);
+      if (revision !== entertainmentRead || context !== "hue") return;
+      loading.remove();
+      const area = node("select");
+      const choices = [];
+      for (const bridge of result.bridges) {
+        if (!bridge.has_client_key || bridge.unavailable) {
+          entertainment.append(node("p", bridge.address + " · " + labels[bridge.unavailable ? 9 : 8]));
+          continue;
+        }
+        for (const choice of bridge.areas) {
+          const option = node("option", choice.name + " · " + bridge.address);
+          option.value = choices.length;
+          choices.push({bridge: bridge.bridge, area: choice.id, name: choice.name});
+          area.append(option);
+        }
+      }
+      if (!choices.length) entertainment.append(node("p", labels[7]));
+      const effect = node("select");
+      for (const [value, caption] of [["rainbow", labels[2]], ["sunset", labels[3]]]) {
+        const option = node("option", caption);
+        option.value = value;
+        effect.append(option);
+      }
+      effect.setAttribute("aria-label", "Hue Entertainment");
+      const brightness = node("input");
+      Object.assign(brightness, {type: "number", min: 1, max: 100, value: 40, required: true});
+      const start = node("button", labels[4]);
+      const stop = node("button", labels[5]);
+      start.type = stop.type = "button";
+      const status = node("p");
+      status.setAttribute("role", "status");
+      const row = node("div", "", "lighting-controls");
+      if (choices.length) row.append(field(labels[1], area), effect, field(t(9) + " (%)", brightness), start);
+      row.append(stop);
+      entertainment.append(row, status);
+
+      let active;
+      let busy = false;
+      let error;
+      let requestRevision = 0;
+      const errors = {pair_again: 8, busy: 10, stream_lost: 11, stop_failed: 12};
+      function update(state) {
+        active = state.active;
+        error = state.error;
+        paint();
+      }
+      function paint() {
+        start.disabled = busy || Boolean(active);
+        stop.disabled = busy;
+        stop.hidden = !active;
+        reload.disabled = busy;
+        const running = choices.find(choice => choice.bridge === active?.bridge && choice.area === active?.area);
+        status.textContent = error ? labels[errors[error] ?? 13] :
+          active ? labels[6] + (running ? " · " + running.name : "") : "";
+      }
+      async function control(action) {
+        busy = true;
+        requestRevision++;
+        paint();
+        try {
+          const body = action === "stop" ? {action} : {
+            action, bridge: choices[Number(area.value)].bridge, area: choices[Number(area.value)].area,
+            effect: effect.value, brightness: brightness.valueAsNumber,
+          };
+          update(await api(entertainmentPath + "/control", body));
+        } catch (failure) {
+          error = failure.message;
+        } finally {
+          busy = false;
+          paint();
+        }
+      }
+      start.addEventListener("click", () => {
+        if (brightness.reportValidity()) control("start");
+      });
+      stop.addEventListener("click", () => control("stop"));
+      entertainmentControls = async () => {
+        if (busy) return;
+        const request = requestRevision;
+        const state = await api(entertainmentPath + "/status");
+        if (revision === entertainmentRead && request === requestRevision && !busy &&
+            (state.error || JSON.stringify(state.active) !== JSON.stringify(active))) update(state);
+      };
+      update(result);
+    } catch {
+      if (revision === entertainmentRead) loading.textContent = labels[9];
+    }
+  }
+
+  setInterval(() => {
+    if (context === "hue" && !document.hidden) entertainmentControls?.().catch(() => {});
+  }, 3000);
+
   window.addEventListener("lighting-page", event => {
     const previous = context;
     context = event.detail;
@@ -814,7 +931,9 @@
     }
     el("nav-home").textContent = t(0);
     render();
+    entertainment.hidden = context !== "hue";
     if (previous !== context && context === "hue") {
+      loadEntertainment();
       collectionsStatus = "loading";
       loadCollections();
     }

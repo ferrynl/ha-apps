@@ -1,3 +1,7 @@
+## 2.0.0-beta.32
+
+- Start op de Hue-pagina een realtime regenboog of zonsondergang in een Entertainment-zone uit de Hue-app. Kies de helderheid en stop het effect vanaf dezelfde pagina. De app gebruikt de bestaande Bridge-koppeling en toont wanneer een Entertainment-sleutel ontbreekt.
+
 ## 2.0.0-beta.31
 
 - Controleer in het Security Center of er een nieuwere Christmas Control Center-bèta of Python-bibliotheekversie beschikbaar is. De app toont de gevonden versies en vermeldt wanneer een bibliotheek een andere Python-versie vereist. De controle installeert geen updates.

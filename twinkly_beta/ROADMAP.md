@@ -2,6 +2,7 @@
 
 ## In de bèta
 - **Home en merkpagina’s.** Eén bediening voor de drie merken, met aparte merkpagina’s en verbindingsbeheer in Instellingen.
+- **Hue Entertainment.** Realtime regenboog en zonsondergang op de Hue-pagina. De gebruiker kiest een Entertainment-zone en helderheid. Een praktijktest met een fysieke Bridge staat nog open.
 - **Hue-kamers, zones en scènes.** Bedien kamers en zones per Bridge en activeer opgeslagen Hue-scènes op de merkpagina. Basisbediening is in de praktijk bevestigd. Bij scènes zie je een automatische preview op basis van kleur, wittemperatuur of helderheid. Je kunt ook een eigen afbeelding toevoegen.
 - **Gemengde groepen en scènes.** Aan/uit, helderheid en kleur voor ondersteunde lampen, met resultaat per lamp.
 - **LedFX.** Twinkly krijgt pixeleffecten. Ondersteunde Hue- en Govee-lampen volgen dezelfde muziek met maximaal één kleurupdate per seconde. De masterfader regelt het niveau van de gemengde muziekgroep.
@@ -12,7 +13,6 @@
 - **Beveiliging.** Netwerkkaart in het Security Center, een Python-lockfile, bijgewerkte afhankelijkheden en een SBOM per bèta-containerarchitectuur. GitHub scant beide containerarchitecturen en maakt per bètaversie een beveiligingsrapport. Het Security Center toont broncode en release, de actieve Python-bibliotheken en lokale controles op Ingress en sleutelbestanden.
 
 ## Open voor stabiel
-- **Philips Hue.** Realtime effecten via Hue Entertainment.
 - **Govee.** Ondersteuning per model verder uitwerken, inclusief scènes, segmenten en de optionele officiële cloud-API.
 - **Spatial Light Studio.** Meer effecten op basis van gedeelde coördinaten en praktijktests voor de timingcorrectie. Een 3D-weergave is optioneel.
 - **Security Center.** Aikido-audit voor stabiel.
