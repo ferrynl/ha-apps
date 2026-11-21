@@ -230,6 +230,40 @@ class LightingProjectsTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual((await removed.json())["layout"]["points"], [POINT])
         self.assertEqual((await restarted.get("/lighting/projects/photo", params={"wall": wall})).status, 404)
 
+    async def test_plan_slots_swap_persist_and_reject_a_stale_edit(self):
+        first = await self.change("layout", revision=None, photo=self.image(), points=[POINT])
+        self.assertEqual(first.status, 200)
+        added = await self.change("add_wall", name="Zijwand")
+        wall = (await added.json())["wall_id"]
+        url = "/lighting/projects/overview"
+        initial = await (await self.client.get(url)).json()
+        self.assertEqual([(row["id"], row["slot"]) for row in initial["walls"]],
+                         [("default", 0), (wall, 1)])
+
+        moved = await self.client.post(url, json={"wall": "default", "slot": 1,
+                                                   "revision": initial["revision"]})
+        self.assertEqual(moved.status, 200)
+        changed = await moved.json()
+        self.assertEqual([(row["id"], row["slot"]) for row in changed["walls"]],
+                         [(wall, 0), ("default", 1)])
+        self.assertEqual(changed["walls"][1]["points"], [POINT])
+        stale = await self.client.post(url, json={"wall": wall, "slot": 5,
+                                                   "revision": initial["revision"]})
+        self.assertEqual(stale.status, 409)
+        invalid = await self.client.post(url, json={"wall": wall, "slot": True,
+                                                     "revision": changed["revision"]})
+        self.assertEqual(invalid.status, 400)
+
+        restarted = await self.connect()
+        self.assertEqual(await (await restarted.get(url)).json(), changed)
+        wall_data = await (await restarted.get("/lighting/projects", params={"wall": wall})).json()
+        response = await restarted.post("/lighting/projects", params={"wall": wall}, json={
+            "action": "delete_wall", "revision": wall_data["layout"]["revision"]
+        })
+        self.assertEqual(response.status, 200)
+        remaining = await (await restarted.get(url)).json()
+        self.assertEqual(remaining["walls"], [changed["walls"][1]])
+
     async def test_spatial_groups_play_once_with_individual_results_inside_the_group(self):
         group = '["group","twinkly:native:wall"]'
         members = ['["twinkly","a"]', '["twinkly","b"]']

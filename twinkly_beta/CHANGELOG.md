@@ -1,3 +1,7 @@
+## 2.0.0-beta.34
+
+- Kies in Mijn Huis voor elke muur een kamer en wandzijde in de 3D-weergave. De indeling wordt op de Home Assistant-server bewaard. Bekijk de kamers samen of afzonderlijk en zet de camera met één knop terug naar de beginstand.
+
 ## 2.0.0-beta.33
 
 - Zoek in het Security Center de GitHub-containerscans van de geïnstalleerde bèta op. Per architectuur zie je of er een rapport beschikbaar is, met een link naar de bevindingen en de SBOM.

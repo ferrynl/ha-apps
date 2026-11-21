@@ -651,3 +651,40 @@ test('Security Center links the installed beta reports and shows missing archite
   .toHaveAttribute('href','https://github.com/ferrynl/ha-apps/actions/runs/44869747693');
  await expect(card.getByText('aarch64 · Geen bewaard rapport gevonden')).toBeVisible();
 });
+
+test('Mijn Huis assigns a wall to a second room and filters the 3D view', async ({page}) => {
+ await page.setViewportSize({width:390,height:844});
+ await page.route('**/lighting', route => route.fulfill({json:{lights:[],groups:{},scenes:{},connections:{}}}));
+ await page.route('**/lighting/projects', route => route.fulfill({json:{
+  walls:[{id:'default',name:'Voorwand'},{id:'side',name:'Zijwand'}], wall_id:'default',
+  shows:[],layout:{revision:'layout',photo_version:null,points:[]},playback:{state:'idle'}
+ }}));
+ const walls = [{id:'default',name:'Voorwand',slot:0,photo_version:null,points:[]},
+  {id:'side',name:'Zijwand',slot:1,photo_version:null,points:[]}];
+ let revision = 'initial';
+ await page.route('**/lighting/projects/overview', route => {
+  if (route.request().method() === 'POST') {
+   expect(route.request().postDataJSON()).toEqual({wall:'side',slot:7,revision:'initial'});
+   walls[1].slot = 7;
+   revision = 'moved';
+  }
+  return route.fulfill({json:{revision,walls}});
+ });
+ await page.goto('http://127.0.0.1:8765/index.html#mijn-huis');
+ await page.getByRole('button',{name:'3D-weergave',exact:true}).click();
+ const plan = page.locator('.house-3d');
+ await plan.getByLabel('Muur plaatsen').selectOption('side');
+ await plan.getByLabel('Kamer en wandzijde').selectOption({label:'Kamer 2 · Links'});
+ await plan.getByRole('button',{name:'Opslaan',exact:true}).click();
+ await expect(plan.getByText(/Plek opgeslagen/)).toBeVisible();
+ await expect(plan.locator('.house-3d-room')).toHaveCount(2);
+ const side = plan.locator('.house-3d-wall[data-wall=side]');
+ await expect(side).toHaveAttribute('style', /rotateY\(270deg\)/);
+ await plan.getByRole('combobox',{name:'Kamer',exact:true}).selectOption({label:'Kamer 2'});
+ await expect(plan.locator('.house-3d-room')).toHaveCount(1);
+ await expect(plan.locator('.house-3d-wall')).toHaveCount(1);
+ await expect(side).toBeVisible();
+ await plan.getByRole('button',{name:'Rechts draaien'}).click();
+ await plan.getByRole('button',{name:'Beginstand'}).click();
+ await expect(plan.locator('.house-3d-world')).toHaveAttribute('style', /rotateY\(28deg\)/);
+});

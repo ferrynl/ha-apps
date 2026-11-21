@@ -25,10 +25,10 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language}) =
   };
   const directions = {right: [0, 1], left: [0, -1], down: [1, 1], up: [1, -1]};
   const planLabels = {
-    nl: ["3D-weergave", "Sluiten", "Sleep om te draaien. Gebruik de pijltjes of schuifknop om te draaien en te zoomen.", "Zoom", "Links draaien", "Rechts draaien", "Upload eerst een muurfoto.", "Echte ledposities", "Ledmapping ontbreekt", "Ledmapping ophalen…", "De muren staan in opslagvolgorde in kamers van maximaal vier muren."],
-    en: ["3D view", "Close", "Drag to orbit. Use the arrow keys to turn and the slider to zoom.", "Zoom", "Turn left", "Turn right", "Upload a wall photo first.", "Physical LED positions", "LED mapping unavailable", "Loading LED mapping…", "Walls are arranged in saved order in rooms of up to four walls."],
-    de: ["3D-Ansicht", "Schließen", "Zum Drehen ziehen. Pfeiltasten drehen, der Schieberegler zoomt.", "Zoom", "Nach links drehen", "Nach rechts drehen", "Lade zuerst ein Wandfoto hoch.", "Physische LED-Positionen", "LED-Mapping fehlt", "LED-Mapping wird geladen…", "Die Wände werden in ihrer Speicherreihenfolge zu Räumen mit bis zu vier Wänden zusammengefasst."],
-    es: ["Vista 3D", "Cerrar", "Arrastra para girar. Usa las flechas para girar y el control deslizante para ampliar.", "Zoom", "Girar a la izquierda", "Girar a la derecha", "Sube primero una foto de pared.", "Posiciones físicas de los LED", "Mapa LED no disponible", "Cargando mapa LED…", "Las paredes se colocan por orden de guardado en habitaciones de hasta cuatro paredes."],
+    nl: ["3D-weergave", "Sluiten", "Sleep om te draaien. Gebruik de pijltjes of schuifknop om te draaien en te zoomen.", "Zoom", "Links draaien", "Rechts draaien", "Upload eerst een muurfoto.", "Echte ledposities", "Ledmapping ontbreekt", "Ledmapping ophalen…", "Muur plaatsen", "Kamer en wandzijde", "Kamer", "Voor", "Rechts", "Achter", "Links", "Alle kamers", "Beginstand", "Vernieuwen", "Bij een bezette plek wisselen de twee muren van plaats.", "Plek opgeslagen", "Open 3D-weergave en kies voor elke muur de kamer en wandzijde."],
+    en: ["3D view", "Close", "Drag to orbit. Use the arrow keys to turn and the slider to zoom.", "Zoom", "Turn left", "Turn right", "Upload a wall photo first.", "Physical LED positions", "LED mapping unavailable", "Loading LED mapping…", "Place wall", "Room and wall side", "Room", "Front", "Right", "Back", "Left", "All rooms", "Reset view", "Refresh", "If a spot is occupied, the two walls swap positions.", "Position saved", "Open the 3D view and select a room and side for each wall."],
+    de: ["3D-Ansicht", "Schließen", "Zum Drehen ziehen. Pfeiltasten drehen, der Schieberegler zoomt.", "Zoom", "Nach links drehen", "Nach rechts drehen", "Lade zuerst ein Wandfoto hoch.", "Physische LED-Positionen", "LED-Mapping fehlt", "LED-Mapping wird geladen…", "Wand platzieren", "Raum und Wandseite", "Raum", "Vorne", "Rechts", "Hinten", "Links", "Alle Räume", "Ansicht zurücksetzen", "Aktualisieren", "Ist ein Platz belegt, tauschen die beiden Wände ihre Position.", "Position gespeichert", "Öffne die 3D-Ansicht und wähle für jede Wand einen Raum und eine Seite."],
+    es: ["Vista 3D", "Cerrar", "Arrastra para girar. Usa las flechas para girar y el control deslizante para ampliar.", "Zoom", "Girar a la izquierda", "Girar a la derecha", "Sube primero una foto de pared.", "Posiciones físicas de los LED", "Mapa LED no disponible", "Cargando mapa LED…", "Colocar pared", "Habitación y lado de la pared", "Habitación", "Delante", "Derecha", "Detrás", "Izquierda", "Todas las habitaciones", "Restablecer vista", "Actualizar", "Si el lugar está ocupado, las dos paredes intercambian posiciones.", "Posición guardada", "Abre la vista 3D y elige una habitación y un lado para cada pared."],
   };
   const wallLabels = {
     nl: ["Muur", "Muur 1", "Naam muur", "Muur toevoegen", "Naam wijzigen", "Muur verwijderen", "Deze muur met foto en lampplaatsingen verwijderen?"],
@@ -103,7 +103,7 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language}) =
     const steps = node("ol");
     const firstStep = node("li");
     firstStep.append(node("strong", first), document.createTextNode(" " + photo));
-    steps.append(firstStep, node("li", upload), node("li", place), node("li", effect));
+    steps.append(firstStep, node("li", upload), node("li", place), node("li", effect), node("li", v(22)));
     guide.replaceChildren(node("summary", title), steps, node("p", limit));
   }
 
@@ -199,6 +199,7 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language}) =
     renderWallPicker();
     const showsChanged = !initialized || JSON.stringify(shows) !== JSON.stringify(data.shows);
     const layoutChanged = !initialized || switched || layout.revision !== data.layout.revision;
+    const refreshPlan = initialized && layoutChanged && !plan.hidden && !movingWall;
     const runningChanged = !initialized || isPlaying() !== ["playing", "stopping"].includes(data.playback.state)
       || playback.state !== data.playback.state;
     initialized = true;
@@ -218,6 +219,7 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language}) =
     }
     if (inventory && (showsChanged || runningChanged)) renderShows();
     if (inventory && layoutChanged) renderSpatial(focusId);
+    if (refreshPlan && activePage === "house") renderHouse3d();
   }
 
   function updatePlaybackStatus() {
@@ -567,22 +569,68 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language}) =
   }
 
   let planGeneration = 0;
-  async function renderHouse3d() {
+  let planWall;
+  let planRoom = "";
+  let movingWall = false;
+  const camera = {yaw: 28, pitch: -15, zoom: null};
+  const planPath = "lighting/projects/overview";
+  const roomLabel = room => v(12) + " " + (room + 1);
+
+  function planPlacement(snapshot, walls) {
+    if (!snapshot.revision) return undefined;
+    const wallNames = walls.map(wall => [wall.id, wall.name || (wallLabels[language()] || wallLabels.nl)[1]]);
+    if (!walls.some(wall => wall.id === planWall)) planWall = walls.find(wall => wall.id === wallId)?.id || walls[0].id;
+    const selectWall = dropdown(wallNames, planWall);
+    const slots = Array.from({length: 8}, (_, slot) => [String(slot), roomLabel(Math.floor(slot / 4)) + " · " + v(13 + slot % 4)]);
+    const currentSlot = () => String(walls.find(wall => wall.id === planWall).slot);
+    const destination = dropdown(slots, currentSlot());
+    const feedback = node("p");
+    feedback.setAttribute("role", "status");
+    const save = action(t(8), async () => {
+      if (movingWall) return;
+      movingWall = selectWall.disabled = destination.disabled = save.disabled = true;
+      try {
+        const updated = await api(planPath, {wall: planWall, slot: Number(destination.value), revision: snapshot.revision});
+        if (!plan.hidden) renderHouse3d(updated, v(21));
+      } catch (error) {
+        if (error.message === "project_conflict" && !plan.hidden) {
+          renderHouse3d(undefined, msg(5));
+        } else {
+          feedback.textContent = t(25);
+        }
+      } finally {
+        movingWall = selectWall.disabled = destination.disabled = save.disabled = false;
+      }
+    });
+    selectWall.onchange = () => {
+      planWall = selectWall.value;
+      destination.value = currentSlot();
+    };
+    const row = node("div", "", "lighting-controls");
+    row.append(field(v(10), selectWall), field(v(11), destination), save);
+    const panel = node("div", "", "house-3d-placement");
+    panel.append(row, node("p", v(20)), feedback);
+    return panel;
+  }
+
+  async function renderHouse3d(snapshot, message) {
     const request = ++planGeneration;
     const close = action(v(1), () => { plan.hidden = true; openPlan.setAttribute("aria-expanded", "false"); openPlan.focus(); });
     const header = node("div", "", "lighting-controls");
-    header.append(node("h3", v(0)), close);
+    header.append(node("h3", v(0)), action(v(19), () => renderHouse3d()), close);
     const status = node("p");
     status.setAttribute("role", "status");
     plan.replaceChildren(header, status);
     try {
-      const snapshot = await api("lighting/projects/overview");
+      snapshot ??= await api(planPath);
       if (request !== planGeneration || plan.hidden) return;
-      const photos = snapshot.walls.filter(wall => wall.photo_version);
-      if (!photos.length) {
+      const layoutWalls = snapshot.walls.map((wall, index) => ({...wall, slot: wall.slot ?? index}));
+      if (!layoutWalls.length) {
         status.textContent = v(6);
         return;
       }
+      const placement = planPlacement(snapshot, layoutWalls);
+      if (placement) plan.append(placement);
       const scene = node("div", "", "house-3d-scene");
       scene.tabIndex = 0;
       scene.setAttribute("aria-label", v(0));
@@ -591,19 +639,29 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language}) =
       const groups = inventory?.spatial_groups || {};
       const lights = new Map((inventory?.lights || []).map(light => [light.id, light]));
       for (const [id, group] of Object.entries(groups)) lights.set(id, {...group, id});
-      const roomCount = Math.ceil(photos.length / 4);
-      for (let index = 0; index < roomCount; index++) {
+      const rooms = [...new Set(layoutWalls.map(wall => Math.floor(wall.slot / 4)))].sort();
+      if (planRoom && !rooms.includes(Number(planRoom))) planRoom = "";
+      const visibleRooms = planRoom ? rooms.filter(room => room === Number(planRoom)) : rooms;
+      const roomCount = visibleRooms.length;
+      for (const [index, roomId] of visibleRooms.entries()) {
         const room = node("div", "", "house-3d-room");
         room.style.transform = "translateX(" + (index - (roomCount - 1) / 2) * 282 + "px)";
         room.append(node("div", "", "house-3d-floor"));
-        for (const [side, wall] of photos.slice(index * 4, index * 4 + 4).entries()) {
+        for (const wall of layoutWalls.filter(wall => Math.floor(wall.slot / 4) === roomId)) {
           const face = node("div", "", "house-3d-wall");
-          face.style.transform = "rotateY(" + side * 90 + "deg) translateZ(130px)";
-          const image = node("img");
-          image.alt = wall.name || (wallLabels[language()] || wallLabels.nl)[1];
-          image.src = roomPhotoPath(wall.id, wall.photo_version);
-          image.draggable = false;
-          face.append(image, node("span", image.alt, "house-3d-name"));
+          face.dataset.wall = wall.id;
+          face.style.transform = "rotateY(" + (wall.slot % 4) * 90 + "deg) translateZ(130px)";
+          const name = wall.name || (wallLabels[language()] || wallLabels.nl)[1];
+          if (wall.photo_version) {
+            const image = node("img");
+            image.alt = name;
+            image.src = roomPhotoPath(wall.id, wall.photo_version);
+            image.draggable = false;
+            face.append(image);
+          } else {
+            face.classList.add("house-3d-wall-empty");
+          }
+          face.append(node("span", name, "house-3d-name"));
           if (inventory) {
             for (const [id, [x, y, size = defaultSize]] of wallPoints(wall.points)) {
               const light = lights.get(id);
@@ -621,24 +679,24 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language}) =
         }
         world.append(room);
       }
-      let yaw = 28, pitch = -15;
       const zoom = node("input");
-      Object.assign(zoom, {type: "range", min: 35, max: 125, value: roomCount === 1 ? 76 : 54});
+      const initialZoom = roomCount === 1 ? 76 : 54;
+      Object.assign(zoom, {type: "range", min: 35, max: 125, value: camera.zoom ?? initialZoom});
       const rotate = () => {
-        pitch = clamp(pitch, -75, 75);
-        world.style.transform = "rotateX(" + pitch + "deg) rotateY(" + yaw + "deg) scale(" + Number(zoom.value) / 100 + ")";
+        camera.pitch = clamp(camera.pitch, -75, 75);
+        world.style.transform = "rotateX(" + camera.pitch + "deg) rotateY(" + camera.yaw + "deg) scale(" + Number(zoom.value) / 100 + ")";
       };
-      zoom.oninput = rotate;
+      zoom.oninput = () => { camera.zoom = Number(zoom.value); rotate(); };
       let drag;
       scene.onpointerdown = event => {
         if (event.button !== 0) return;
-        drag = [event.clientX, event.clientY, yaw, pitch];
+        drag = [event.clientX, event.clientY, camera.yaw, camera.pitch];
         scene.setPointerCapture(event.pointerId);
       };
       scene.onpointermove = event => {
         if (!drag) return;
-        yaw = drag[2] + (event.clientX - drag[0]) * .5;
-        pitch = drag[3] - (event.clientY - drag[1]) * .5;
+        camera.yaw = drag[2] + (event.clientX - drag[0]) * .5;
+        camera.pitch = drag[3] - (event.clientY - drag[1]) * .5;
         rotate();
       };
       scene.onlostpointercapture = () => { drag = undefined; };
@@ -646,13 +704,29 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language}) =
         const offset = {ArrowLeft: [-12, 0], ArrowRight: [12, 0], ArrowUp: [0, -12], ArrowDown: [0, 12]}[event.key];
         if (!offset) return;
         event.preventDefault();
-        yaw += offset[0]; pitch += offset[1]; rotate();
+        camera.yaw += offset[0]; camera.pitch += offset[1]; rotate();
       };
       const controls = node("div", "", "lighting-controls");
-      controls.append(action(v(4), () => { yaw -= 30; rotate(); }), action(v(5), () => { yaw += 30; rotate(); }), field(v(3), zoom));
-      status.textContent = v(2) + " " + v(10);
+      if (rooms.length > 1) {
+        const roomFilter = dropdown([["", v(17)], ...rooms.map(room => [String(room), roomLabel(room)])], planRoom);
+        roomFilter.onchange = () => {
+          planRoom = roomFilter.value;
+          renderHouse3d(snapshot);
+          plan.querySelector(".house-3d-room-filter")?.focus();
+        };
+        roomFilter.className = "house-3d-room-filter";
+        controls.append(field(v(12), roomFilter));
+      }
+      controls.append(action(v(4), () => { camera.yaw -= 30; rotate(); }), action(v(5), () => { camera.yaw += 30; rotate(); }),
+        field(v(3), zoom), action(v(18), () => {
+          Object.assign(camera, {yaw: 28, pitch: -15, zoom: null});
+          zoom.value = initialZoom;
+          rotate();
+        }));
+      status.textContent = [message, v(2), !layoutWalls.some(wall => wall.photo_version) && v(6)].filter(Boolean).join(" ");
       plan.append(controls, scene);
       rotate();
+      if (message) placement?.querySelector("button")?.focus();
     } catch {
       if (request === planGeneration && !plan.hidden) status.textContent = msg(1);
     }
@@ -991,6 +1065,7 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language}) =
       signature = nextSignature;
       renderShows();
       renderSpatial();
+      if (page === "house" && !plan.hidden && !movingWall) renderHouse3d();
       updatePlaybackStatus();
     }
     if (page === "house") refreshEffectButtons?.();

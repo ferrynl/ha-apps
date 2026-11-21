@@ -176,3 +176,8 @@
   color: #fff; background: #141c26dd; border-radius: 4px; transform: translateZ(2px); }
 .house-3d-light { position: absolute; transform: translate3d(-50%, -50%, 2px); aspect-ratio: 1; }
 .house-3d-light .house-lamp-art { transform: scale(.65); }
+.house-3d-placement { margin-block: .75rem; }
+.house-3d-placement .lighting-controls { flex-wrap: wrap; align-items: end; }
+.house-3d-placement p { margin-block: .35rem; }
+.house-3d-placement p:empty { display: none; }
+.house-3d-wall-empty { border-style: dashed; background: #26384a99; }
