@@ -1,3 +1,25 @@
+const hueProductImageRevisions = new Map();
+
+function hueProductImagePath(light) {
+  const model = light.model;
+  return typeof model === "string" && /^[A-Za-z0-9-]{1,32}$/.test(model)
+    ? "providers/hue/product-image/" + model.toUpperCase() : null;
+}
+
+function hueProductImage(light, fallback) {
+  const path = hueProductImagePath(light);
+  if (!path || !light.has_product_image) return fallback;
+  const image = Object.assign(document.createElement("img"), {
+    className: "hue-product-photo", alt: "", decoding: "async", draggable: false,
+  });
+  image.addEventListener("error", () => {
+    fallback.style.rotate = image.style.rotate;
+    image.replaceWith(fallback);
+  }, {once: true});
+  image.src = path + "?v=" + (hueProductImageRevisions.get(path) || 0);
+  return image;
+}
+
 window.createLightingTools = ({mount, house, nav, api, node, field, language}) => {
   const labels = {
     nl: ["Showbouwer", "Shownaam", "Scène", "Wachttijd (sec.)", "Stap toevoegen", "Omhoog", "Omlaag", "Verwijderen", "Opslaan", "Afspelen", "Stoppen", "Maak eerst een scène voor een gemengde groep op Home.", "Stap", "Show klaar", "Show gestopt", "Show onderbroken", "Geen bevestiging", "Spatial Light Studio", "Kies een foto", "Kies een lamp", "Plaats in het midden", "Verwijder plaatsing", "Klik op de foto om de gekozen lamp te plaatsen. Verplaats een markering met de pijltjestoetsen.", "Foto wissen", "Kies een geldige JPG, PNG of WebP van maximaal 15 MB.", "Opslaan op de server is mislukt.", "Shows en foto-indeling staan op je Home Assistant-server. Een show loopt door als je de pagina sluit.", "Groep", "Nieuwe show", "Bewerken", "Definieer minimaal één geldige stap.", "Onbekende lamp", "Locatie", "Foto van de ruimte", "Scène of groep ontbreekt", "Opdrachten gedeeltelijk uitgevoerd"],
@@ -949,7 +971,13 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language}) =
     if (light.provider === "twinkly") return ledDrawing(light, showStatus);
     const archetype = typeof light.archetype === "string" ? light.archetype : "";
     let shape = "device";
+    const model = light.provider === "hue" ? String(light.model || "").toUpperCase() : "";
     if (light.members) shape = "group";
+    else if (model === "LCT024" || archetype === "hue_play") shape = "play";
+    else if (model === "LCT026" || archetype === "hue_go") shape = "go";
+    else if (model === "LST002") shape = "strip";
+    else if (model === "LCG002") shape = "spot";
+    else if (model === "LCT015") shape = "bulb";
     else if (/strip|tube/.test(archetype)) shape = "strip";
     else if (/spot/.test(archetype)) shape = "spot";
     else if (/bulb|candle/.test(archetype)) shape = "bulb";
@@ -957,7 +985,7 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language}) =
     const illustration = node("span", "", "house-lamp-art house-art-" + shape);
     illustration.setAttribute("aria-hidden", "true");
     illustration.append(node("span"));
-    return illustration;
+    return light.provider === "hue" ? hueProductImage(light, illustration) : illustration;
   }
 
   function rotatedLampImage(light, angle) {
@@ -1332,7 +1360,8 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language}) =
     if (!data || gesture) return;
     inventory = data;
     const nextSignature = JSON.stringify([language(), data.groups, data.scenes, data.spatial_groups,
-      (data.lights || []).map(light => [light.id, light.name, light.product_code, light.model, light.product_name, light.archetype])]);
+      (data.lights || []).map(light => [light.id, light.name, light.product_code, light.model, light.product_name, light.archetype,
+        light.has_product_image, hueProductImageRevisions.get(hueProductImagePath(light))])]);
     if (initialized && signature !== nextSignature) {
       signature = nextSignature;
       renderShows();

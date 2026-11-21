@@ -334,6 +334,51 @@
     card.append(row);
   }
 
+  function productPhotoSettings(light, path) {
+    const labels = {
+      nl: ["Productfoto", "Kies een transparante PNG (max. 480 × 480 px, 480 kB)", "Verwijder productfoto", "Deze foto geldt voor alle Hue-lampen van dit model, ook in Mijn Huis.", "Foto opslaan mislukt. Controleer formaat, afmetingen en transparantie."],
+      en: ["Product photo", "Choose a transparent PNG (max. 480 × 480 px, 480 kB)", "Remove product photo", "This photo applies to all Hue lights of this model, including in My Home.", "Could not save the photo. Check its format, dimensions and transparency."],
+      de: ["Produktfoto", "Transparentes PNG wählen (max. 480 × 480 px, 480 kB)", "Produktfoto entfernen", "Das Foto gilt für alle Hue-Lampen dieses Modells, auch in Mein Zuhause.", "Foto konnte nicht gespeichert werden. Prüfe Format, Größe und Transparenz."],
+      es: ["Foto del producto", "Elige un PNG transparente (máx. 480 × 480 px, 480 kB)", "Quitar foto del producto", "La foto se aplica a todas las luces Hue de este modelo, también en Mi casa.", "No se pudo guardar la foto. Comprueba el formato, el tamaño y la transparencia."],
+    };
+    const [title, choose, remove, help, invalid] = labels[el("language").value] || labels.nl;
+    const details = node("details", "", "hue-product-settings");
+    const file = Object.assign(node("input"), {type: "file", accept: "image/png"});
+    const result = node("p");
+    result.setAttribute("role", "status");
+    const update = async image => {
+      await api(path, {image});
+      hueProductImageRevisions.set(path, Date.now());
+      for (const item of data.lights) {
+        if (item.provider === "hue" && hueProductImagePath(item) === path) item.has_product_image = image !== null;
+      }
+      render();
+    };
+    file.addEventListener("change", () => {
+      if (!file.files.length) return;
+      task(file, async () => {
+        const png = file.files[0];
+        try {
+          if (png.size > 480000) throw new Error();
+          const encoded = await new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result.split(",")[1]);
+            reader.onerror = reject;
+            reader.readAsDataURL(png);
+          });
+          await update(encoded);
+        } catch {
+          result.textContent = invalid;
+        } finally {
+          file.value = "";
+        }
+      });
+    });
+    details.append(node("summary", title), node("p", help), field(choose, file), result);
+    if (light.has_product_image) details.append(button(remove, () => update(null)));
+    return details;
+  }
+
   function lightCard(light) {
     const card = node("article", "", "lighting-card");
     card.dataset.provider = light.provider;
@@ -342,7 +387,8 @@
     const logo = node("img", "", "brand-wordmark brand-wordmark-" + light.provider);
     logo.src = wordmarks[light.provider];
     logo.alt = "";
-    mark.append(logo);
+    const path = light.provider === "hue" && hueProductImagePath(light);
+    mark.append(path ? hueProductImage(light, logo) : logo);
     const color = stateColor(light.state?.color);
     if (color && light.state.on !== false) mark.style.setProperty("--lamp-color", color);
     mark.setAttribute("aria-hidden", "true");
@@ -351,6 +397,7 @@
     head.append(mark, title);
     card.append(head, node("p", status(light), "lighting-state"));
     controls(card, [light], {id: light.id}, light.state);
+    if (path) card.append(productPhotoSettings(light, path));
     return card;
   }
 
@@ -1181,7 +1228,16 @@
     reload.addEventListener("click", loadEntertainment);
     entertainment.replaceChildren(node("h2", "Hue Entertainment"), node("p", labels[0]), reload);
     const loading = node("p", t(36));
-    entertainment.append(loading);
+    const check = {
+      nl: ["Praktijktest op je Hue Bridge", "Zet de lampen van de Entertainmentruimte aan en start Regenboog. Verlaag de helderheid en stop het effect. Controleer in de Hue-app of de ruimte weer vrij is. Herhaal met LedFX-muziek op Home, met alle lampen van die Entertainmentruimte in dezelfde groep."],
+      en: ["Test on your Hue Bridge", "Turn on the lights in the Entertainment area and start Rainbow. Lower brightness and stop the effect. Check the Hue app to see if the area is free again. Repeat with LedFX music on Home, with all lights from the Entertainment area in the same group."],
+      de: ["Test auf deiner Hue Bridge", "Schalte die Lampen des Entertainment-Bereichs ein und starte Regenbogen. Dimme das Licht und stoppe den Effekt. Prüfe in der Hue-App, ob der Bereich wieder frei ist. Wiederhole den Test auf der Startseite mit LedFX und allen Lampen des Bereichs in einer Gruppe."],
+      es: ["Prueba en tu puente Hue", "Enciende las luces de la zona de entretenimiento e inicia Arcoíris. Baja el brillo y detén el efecto. Comprueba en la app Hue si la zona vuelve a estar libre. Repite con LedFX en Inicio y con todas las luces de la zona en el mismo grupo."],
+    };
+    const [checkTitle, steps] = check[el("language").value] || check.nl;
+    const guide = node("details");
+    guide.append(node("summary", checkTitle), node("p", steps));
+    entertainment.append(guide, loading);
     try {
       const result = await api(entertainmentPath);
       if (revision !== entertainmentRead || context !== "hue") return;

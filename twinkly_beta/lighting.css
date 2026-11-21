@@ -367,3 +367,13 @@
   transform-style: preserve-3d; transform-origin: 50% 100%; }
 .house-3d-tree[hidden] { display: none; }
 .house-3d-tree img { position: absolute; inset: 0; width: 100%; height: 100%; }
+
+.hue-product-photo { display: block; width: 100%; height: 100%; aspect-ratio: 1; object-fit: contain; }
+.house-marker .hue-product-photo, .house-3d-light .hue-product-photo { pointer-events: none; }
+.house-lamp-choice .hue-product-photo { height: 32px; }
+.lighting-brand-mark img.hue-product-photo { width: 100%; height: 100%; max-height: none; }
+.hue-product-settings label { display: grid; gap: .35rem; }
+.hue-product-settings input { width: 100%; min-width: 0; }
+.house-art-play > span { width: 80%; height: 24%; border-radius: 12px; transform: rotate(-16deg); background: #edf4ff; border: 2px solid #718093; }
+.house-art-go > span { width: 72%; height: 48%; border-radius: 45% 45% 50% 50%; transform: rotate(-12deg); background: linear-gradient(160deg,#fff9df 32%,#bbcce8); border: 2px solid #8495ab; }
+.house-art-play > span::after, .house-art-go > span::after { content: none; }

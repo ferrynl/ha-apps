@@ -1,3 +1,8 @@
+## 2.0.0-beta.43
+
+- Voeg op de Hue-pagina per lampmodel een transparante PNG toe. De foto verschijnt op de Hue-kaart en in Mijn Huis, op de muur en in 3D. Zonder foto toont Mijn Huis zo mogelijk de herkenbare lampvorm.
+- Op de Hue-pagina staat een korte praktijktest voor Entertainment, helderheid, LedFX en het vrijgeven van de Entertainmentruimte.
+
 ## 2.0.0-beta.42
 
 - Plaats in Mijn Huis → 3D-weergave een verlichte kerstboom per kamer. Stel de positie in meters, draaihoek en hoogte in en bekijk het resultaat direct. De app bewaart de plaatsing samen met de plattegrond.

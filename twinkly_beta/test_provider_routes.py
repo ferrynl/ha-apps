@@ -207,3 +207,30 @@ class RouteTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.status, 200)
         response = await self.client.get(path)
         self.assertEqual(response.status, 404)
+
+    async def test_product_photo_validates_alpha_and_is_shared_by_model(self):
+        path = "/providers/hue/product-image/lst002"
+        for mode, color, expected in (("RGB", "red", 400), ("RGBA", (0, 0, 0, 0), 200)):
+            image = Image.new(mode, (16, 12), color)
+            image.putpixel((2, 2), (255, 0, 0, 255) if mode == "RGBA" else (255, 0, 0))
+            buffer = BytesIO()
+            image.save(buffer, "PNG")
+            encoded = base64.b64encode(buffer.getvalue()).decode("ascii")
+            response = await self.client.post(path, json={"image": encoded})
+            self.assertEqual(response.status, expected)
+        response = await self.client.get("/providers/hue/product-image/LST002")
+        self.assertEqual(response.status, 200)
+        self.assertEqual(response.content_type, "image/png")
+        with Image.open(BytesIO(await response.read())) as saved:
+            self.assertEqual(saved.mode, "RGBA")
+            self.assertEqual(saved.getchannel("A").getextrema(), (0, 255))
+
+        self.store.save({"version": 1, "govee": {}, "hue": {"bridge": {
+            "address": "192.168.1.2", "application_key": "abcdefghij", "certificate_sha256": "ab" * 32,
+        }}})
+        with patch("modules.provider_routes.Hue.profiles", new=AsyncMock(return_value=[{"model": "LST002"}])):
+            response = await self.client.get("/providers/hue/inventory")
+            self.assertTrue((await response.json())["devices"][0]["lights"][0]["has_product_image"])
+        response = await self.client.post(path, json={"image": None})
+        self.assertEqual(response.status, 200)
+        self.assertEqual((await self.client.get(path)).status, 404)
