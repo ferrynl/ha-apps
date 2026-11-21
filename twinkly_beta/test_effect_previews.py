@@ -36,7 +36,9 @@ class EffectPreviewTests(unittest.IsolatedAsyncioTestCase):
 
             effect["id"] = 4
             query["index"] = "4"
-            self.assertIsInstance(await controller.effect_image(SimpleNamespace(query=query, method="GET")), web.FileResponse)
+            preview = await controller.effect_image(SimpleNamespace(query=query, method="GET"))
+            self.assertEqual(preview.content_type, "image/gif")
+            self.assertEqual(preview.body, original)
             effect["unique_id"] = "different-movie"
             with self.assertRaises(web.HTTPNotFound):
                 await controller.effect_image(SimpleNamespace(query=query, method="GET"))
@@ -72,14 +74,16 @@ class EffectPreviewTests(unittest.IsolatedAsyncioTestCase):
             custom = controller.effect_gif_path("lamp", effect)
             query = {"id": "lamp", "kind": "movie", "index": "1", "ref": custom.stem}
             default = await controller.effect_image(SimpleNamespace(query=query, method="GET"))
-            self.assertEqual(default._path.name, "cotton-candy.gif")
-            custom.write_bytes(default._path.read_bytes())
+            self.assertEqual(default.body, (EFFECT_PREVIEWS / "cotton-candy.gif").read_bytes())
+            thumbnail = io.BytesIO()
+            Image.new("RGB", (4, 4), "blue").save(thumbnail, format="GIF")
+            custom.write_bytes(thumbnail.getvalue())
             override = await controller.effect_image(SimpleNamespace(query=query, method="GET"))
-            self.assertEqual(override._path, custom)
+            self.assertEqual(override.body, thumbnail.getvalue())
 
             async def body():
                 return {"image": None}
 
             await controller.effect_image(SimpleNamespace(query=query, method="POST", json=body))
             restored = await controller.effect_image(SimpleNamespace(query=query, method="GET"))
-            self.assertEqual(restored._path, default._path)
+            self.assertEqual(restored.body, default.body)
