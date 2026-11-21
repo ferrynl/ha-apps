@@ -770,8 +770,8 @@ test('Mijn Huis assigns a wall to a second room and filters the 3D view', async 
  await expect(plan.locator('.house-3d-room')).toHaveCount(1);
  await expect(plan.locator('.house-3d-wall')).toHaveCount(1);
  await expect(side).toBeVisible();
- await plan.getByLabel('Links/rechts (m)').fill('1.5');
- await plan.getByLabel('Voor/achter (m)').fill('-0.5');
+ await plan.getByLabel('Links/rechts (m)',{exact:true}).fill('1.5');
+ await plan.getByLabel('Voor/achter (m)',{exact:true}).fill('-0.5');
  await plan.getByLabel('Muurhoek (°)').fill('35');
  await expect(side).toHaveAttribute('style', /rotateY\(35deg\)/);
  await plan.getByRole('button',{name:'Opslaan',exact:true}).click();
