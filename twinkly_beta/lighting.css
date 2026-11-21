@@ -377,3 +377,8 @@
 .house-art-play > span { width: 80%; height: 24%; border-radius: 12px; transform: rotate(-16deg); background: #edf4ff; border: 2px solid #718093; }
 .house-art-go > span { width: 72%; height: 48%; border-radius: 45% 45% 50% 50%; transform: rotate(-12deg); background: linear-gradient(160deg,#fff9df 32%,#bbcce8); border: 2px solid #8495ab; }
 .house-art-play > span::after, .house-art-go > span::after { content: none; }
+
+.hue-product-settings { margin-top: .35rem; }
+.hue-product-settings summary { display: list-item; width: fit-content; max-width: 100%; cursor: pointer;
+  border: 1px solid var(--studio-gold); border-radius: .5rem; padding: .45rem .65rem; }
+.hue-product-settings summary:focus-visible { outline: 2px solid var(--studio-gold); outline-offset: 3px; }
