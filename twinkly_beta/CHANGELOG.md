@@ -1,3 +1,8 @@
+## 2.0.0-beta.37
+
+- Beperk de toegang tot opgeslagen GIF’s, effectpreviews en productfoto’s tot hun eigen mappen. Synchroniseer bestanden met de schijf vóór vervanging.
+- Neem beschikbare Debian-beveiligingsupdates mee in de containerbuild.
+
 ## 2.0.0-beta.36
 
 - Speel in Mijn Huis een kleurveeg van het midden van de muurfoto naar buiten of van buiten naar het midden. Bekijk vooraf de volgorde op de foto. De voorvertoning houdt bij beide effecten rekening met de ingestelde timingcorrectie per lamp.
