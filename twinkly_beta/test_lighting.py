@@ -312,3 +312,24 @@ class LightingTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(self.controller.mixed_music_levels, {})
             self.control.assert_any_await(self.hue_id, level=80)
             govee.assert_awaited_with(60)
+
+    async def test_home_room_assignment_and_filtered_scene_preserve_other_brands(self):
+        response = await self.client.post("/lighting/groups", json={
+            "kind": "room", "name": "Living room", "members": [self.twinkly],
+        })
+        self.assertEqual(response.status, 200)
+        room = (await response.json())["id"]
+        response = await self.client.post("/lighting/groups", json={"id": room, "member": self.hue})
+        self.assertEqual(response.status, 200)
+        self.assertEqual(self.store.load_groups()[room], {
+            "kind": "room", "name": "Living room", "members": [self.twinkly, self.hue],
+        })
+        response = await self.client.post("/lighting/scenes", json={"name": "Evening", "group": room, "on": True})
+        scene = (await response.json())["id"]
+        response = await self.client.post(f"/lighting/scenes/{scene}/apply", json={"provider": "hue"})
+        self.assertEqual((await response.json())["results"], {self.hue: {"power": "accepted"}})
+        response = await self.client.post("/lighting/control", json={
+            "group": room, "provider": "hue", "action": "power", "value": False,
+        })
+        self.assertEqual((await response.json())["results"], {self.hue: "accepted"})
+        self.controller.apply_control.assert_not_awaited()

@@ -1254,6 +1254,7 @@ function renderShow() {
     }
     pads.append(pad);
   }
+  window.dispatchEvent(new Event("twinkly-studio-update"));
 }
 byId('scene-form').onsubmit = event => {
   event.preventDefault();

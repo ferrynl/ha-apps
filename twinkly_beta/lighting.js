@@ -52,6 +52,12 @@
     es: ["Elige una luz Govee", "Identificar", "Prueba de encendido", "Prueba de brillo", "Prueba RGB", "Arcoíris", "", "Detener prueba Govee", "Prueba Govee en curso", "Estado anterior restaurado", "La prueba Govee falló. Comprueba el control LAN y el estado.", "No se pudo restaurar el estado anterior.", "Las pruebas se aplican a toda la luz Govee. La disponibilidad depende del estado LAN.", "La luz no confirmó la restauración."],
   };
   const brands = {twinkly: "Twinkly", hue: "Philips Hue", govee: "Govee"};
+  const homeWords = {
+    nl: ["Lichtmengtafel", "Alles", "Lampen", "Kamers", "Groepen", "Scènes", "Lamp toevoegen", "Kamer toevoegen", "Groep toevoegen", "Scène toevoegen", "Kies een doel", "Naam", "Actie", "Sluiten", "Aan/uit", "Lamp indelen", "Kies een lamp", "Kies een kamer of groep", "Geen kamers", "Geen groepen", "Geen scènes", "Twinkly-scènes", "Apparaten vernieuwen", "Actieve scène"],
+    en: ["Light mixer", "All", "Lights", "Rooms", "Groups", "Scenes", "Add light", "Add room", "Add group", "Add scene", "Select a target", "Name", "Action", "Close", "Power", "Assign light", "Select a light", "Select a room or group", "No rooms", "No groups", "No scenes", "Twinkly scenes", "Refresh lights", "Active scene"],
+    de: ["Lichtmischpult", "Alle", "Lampen", "Räume", "Gruppen", "Szenen", "Lampe hinzufügen", "Raum hinzufügen", "Gruppe hinzufügen", "Szene hinzufügen", "Ziel wählen", "Name", "Aktion", "Schließen", "Ein/Aus", "Lampe zuordnen", "Lampe wählen", "Raum oder Gruppe wählen", "Keine Räume", "Keine Gruppen", "Keine Szenen", "Twinkly-Szenen", "Lampen aktualisieren", "Aktive Szene"],
+    es: ["Mesa de luces", "Todo", "Luces", "Habitaciones", "Grupos", "Escenas", "Añadir luz", "Añadir habitación", "Añadir grupo", "Añadir escena", "Elige un destino", "Nombre", "Acción", "Cerrar", "Encendido", "Asignar luz", "Elige una luz", "Elige una habitación o un grupo", "Sin habitaciones", "Sin grupos", "Sin escenas", "Escenas de Twinkly", "Actualizar luces", "Escena activa"],
+  };
   const wordmarks = {twinkly: "twinkly-nav-logo.svg", hue: "hue-app-icon.webp", govee: "govee-logo.png"};
   const el = id => document.getElementById(id);
   const panel = el("lighting-panel");
@@ -60,10 +66,14 @@
   const hueCollections = el("hue-collections");
   const feedback = el("lighting-feedback");
   const t = i => (words[el("language").value] || words.nl)[i];
+  const h = i => (homeWords[el("language").value] || homeWords.nl)[i];
+  let homeBrand = "all";
+  let homeView = "lights";
+  let homeSelection = "all";
+  let activeScene;
+  let homeDialog;
   let data;
   let pending;
-  let editing;
-  let editingScene;
   let context = "";
   let groupBusy = false;
   let collections = [];
@@ -101,9 +111,10 @@
     item.disabled = true;
     item.dataset.running = "";
     try {
-      await callback();
+      await callback(item);
     } catch (error) {
-      feedback.textContent = error.message === "hue_bridge_busy"
+      const message = item.closest("dialog[open]")?.querySelector("[role=status]") || feedback;
+      message.textContent = error.message === "hue_bridge_busy"
         ? (collectionWords[el("language").value] || collectionWords.nl)[5]
         : t(error.message === "pairing_permission" ? 21 : 32);
     } finally {
@@ -136,17 +147,30 @@
     return label;
   }
 
-  function controls(card, lights, target, state = {}) {
+  function controls(card, lights, target, state = {}, mixer = false) {
     const available = lights.filter(light => light.status !== "unavailable");
     const capable = key => available.some(light => light.capabilities[key]);
     const row = node("div", "", "lighting-controls");
     const send = async (action, value) => {
+      if (target.twinklyGroup) {
+        const mode = action === "power" ? (value ? "on" : "off") : action;
+        feedback.textContent = controlResult(await request("control", {
+          group: target.twinklyGroup, action: mode, value: action === "color" ? stateColor(value) : value,
+        }));
+        await refresh(false);
+        return;
+      }
       const result = await api("lighting/control", {...target, action, value});
       const outcomes = ["accepted", "unconfirmed", "skipped", "failed"];
       feedback.textContent = outcomes.map((outcome, i) => {
         const count = Object.values(result.results).filter(value => value === outcome).length;
         return count ? t(29 + i) + " · " + count : "";
       }).filter(Boolean).join(" / ");
+      if (mixer) {
+        activeScene = undefined;
+        panel.querySelector(".mixer-active")?.replaceChildren();
+        panel.querySelectorAll(".mixer-pad [aria-pressed]").forEach(pad => pad.setAttribute("aria-pressed", "false"));
+      }
       await refresh(false);
     };
     if (capable("power")) {
@@ -163,7 +187,16 @@
       input.max = 100;
       input.value = state.brightness ?? 50;
       input.addEventListener("change", () => task(input, () => send("brightness", Number(input.value))));
-      row.append(field(t(9) + (state.brightness == null ? "" : " · " + Math.round(state.brightness) + "%"), input));
+      if (mixer) {
+        const label = field(t(9), input);
+        const value = node("output", state.brightness == null ? "–" : input.value + "%");
+        input.addEventListener("input", () => { value.textContent = input.value + "%"; });
+        label.classList.add("mixer-fader");
+        label.append(value);
+        row.append(label);
+      } else {
+        row.append(field(t(9) + (state.brightness == null ? "" : " · " + Math.round(state.brightness) + "%"), input));
+      }
     }
     if (capable("rgb")) {
       const input = node("input");
@@ -171,7 +204,9 @@
       input.value = stateColor(state.color) || "#ffffff";
       input.addEventListener("change", () => task(input, () => send("color",
         input.value.slice(1).match(/../g).map(channel => parseInt(channel, 16)))));
-      row.append(field(t(10), input));
+      const label = field(t(10), input);
+      if (mixer) label.classList.add("mixer-color");
+      row.append(label);
     }
     if (target.id && capable("temperature") && lights[0].provider === "hue") {
       const {min, max} = lights[0].temperature_mirek;
@@ -240,21 +275,12 @@
     return card;
   }
 
-  function groupList() {
-    const section = node("section", "", "lighting-groups");
-    section.append(node("h3", t(23)));
-    if (!data.groups) {
-      section.append(node("p", t(32)));
-      return section;
-    }
-    const lights = new Map(data.lights.map(light => [light.id, light]));
-    const grid = node("div", "", "lighting-grid");
+  function groupCard(id, members, target) {
     const [startMusic, stopMusic, waitingMusic, activeMusic, participating, skippedMusic] =
       musicWords[el("language").value] || musicWords.nl;
-    for (const [id, group] of Object.entries(data.groups)) {
-      const card = node("article", "", "lighting-card");
-      card.append(node("h3", group.name), node("p", group.members.map(key => lights.get(key)?.name || t(37)).join(" · ")));
-      controls(card, group.members.map(key => lights.get(key)).filter(Boolean), {group: id});
+    const card = node("article", "", "mixer-group");
+    controls(card, members, target, {}, true);
+    if (homeBrand === "all" && data.groups?.[id]) {
       const music = data.music?.group === id;
       if (music) {
         card.append(node("p", data.music.live ? activeMusic : waitingMusic));
@@ -299,22 +325,20 @@
           participating + " · " + result.eligible.length + " / " + skippedMusic + " · " + result.skipped.length;
         await refresh();
       }));
-      card.append(button(t(26), () => {
-        editing = id;
-        render();
-        panel.querySelector(".lighting-group-form input").focus();
-      }));
-      grid.append(card);
     }
-    section.append(grid);
-    if (!data.lights.length && editing === undefined) return section;
-    const group = data.groups[editing];
+    return card;
+  }
+
+  function editGroup(kind, id, opener) {
+    const group = data.groups?.[id];
+    const lights = new Map(data.lights.map(light => [light.id, light]));
     const form = node("form", "", "lighting-group-form");
     const name = node("input");
     name.required = true;
     name.maxLength = 60;
     name.value = group?.name || "";
-    form.append(field(t(24), name));
+    name.autofocus = true;
+    form.append(field(kind === "room" ? h(11) : t(24), name));
     const choices = node("fieldset");
     choices.append(node("legend", t(34)));
     for (const key of new Set([...lights.keys(), ...(group?.members || [])])) {
@@ -328,57 +352,70 @@
     }
     const save = node("button", t(25));
     form.append(choices, save);
+    const dialog = openDialog(group ? t(26) + " · " + group.name : h(kind === "room" ? 7 : 8), form, opener);
     form.addEventListener("submit", event => {
       event.preventDefault();
       const members = new FormData(form).getAll("members");
       if (!members.length) {
-        feedback.textContent = t(34);
+        dialog.querySelector("[role=status]").textContent = t(34);
         return;
       }
       task(save, async () => {
         groupBusy = true;
         try {
-          await api("lighting/groups", {id: editing, name: name.value, members});
-          editing = undefined;
-          await refresh();
+          const result = await api("lighting/groups", {id, name: name.value, members, ...(kind === "room" && {kind})});
+          homeSelection = result.id;
+          await refresh().finally(() => dialog.close());
         } finally {
           groupBusy = false;
         }
       });
     });
     if (group) {
-      form.append(button(t(28), () => { editing = undefined; render(); }),
-        button(t(27), async () => {
+      form.append(button(t(27), async () => {
           if (!window.confirm(t(27) + " · " + group.name + "?")) return;
-          await api("lighting/groups", {id: editing, delete: true});
-          editing = undefined;
-          await refresh();
+          await api("lighting/groups", {id, delete: true});
+          await refresh().finally(() => dialog.close());
         }));
     }
-    section.append(form);
-    return section;
+
   }
 
-  function sceneList() {
+  function sceneList(lights) {
     const [title, nameLabel, groupLabel, applyLabel, missingGroup, needsGroup] =
       sceneWords[el("language").value] || sceneWords.nl;
-    const section = node("section", "", "lighting-scenes");
-    section.append(node("h3", title));
+    const section = node("section", "", "mixer-deck mixer-scenes");
+    const header = node("header");
+    header.append(node("h3", title));
+    section.append(header);
     if (!data.scenes || !data.groups) {
       section.append(node("p", t(32)));
       return section;
     }
-    const grid = node("div", "", "lighting-grid");
-    const groups = Object.entries(data.groups);
+    if (Object.keys(data.groups).length) {
+      header.append(mixerButton(h(9), "add-scene", item => editScene(undefined, item)));
+    } else {
+      section.append(node("p", needsGroup));
+    }
+    const grid = node("div", "", "mixer-pads");
+    const keys = new Set(lights.map(light => light.id));
     for (const [id, scene] of Object.entries(data.scenes)) {
-      const card = node("article", "", "lighting-card");
       const group = data.groups[scene.group];
+      if (homeBrand !== "all" && !group?.members.some(key => keys.has(key))) continue;
+      const card = node("article", "", "mixer-pad");
       const options = [group?.name || missingGroup, t(scene.on ? 7 : 8)];
       if (scene.brightness != null) options.push(scene.brightness + "%");
       if (scene.color) options.push(stateColor(scene.color));
-      const apply = button(applyLabel, async () => {
+      const apply = mixerButton(scene.name, "scene-" + id, async () => {
         const names = new Map(data.lights.map(light => [light.id, light.name]));
-        const {results} = await api("lighting/scenes/" + encodeURIComponent(id) + "/apply", {});
+        const filter = homeBrand === "all" ? {} : {provider: homeBrand};
+        const {results} = await api("lighting/scenes/" + encodeURIComponent(id) + "/apply", filter);
+        if (Object.values(results).some(actions => Object.values(actions).some(result => ["accepted", "unconfirmed"].includes(result)))) {
+          activeScene = id;
+          grid.querySelectorAll("[aria-pressed]").forEach(pad => pad.setAttribute("aria-pressed", String(pad === apply)));
+          const reading = panel.querySelector(".mixer-active");
+          if (reading) reading.textContent = h(23) + " · " + scene.name;
+        }
         const outcomes = {accepted: 29, unconfirmed: 30, skipped: 31, failed: 32};
         const actions = {power: t(scene.on ? 7 : 8), brightness: t(9), color: t(10)};
         feedback.textContent = Object.entries(results).map(([key, commands]) => {
@@ -387,28 +424,38 @@
           return (names.get(key) || t(37)) + " · " + resultsText;
         }).join(" / ");
         await refresh(false);
-      });
+      }, activeScene === id);
       apply.disabled = !group;
-      card.append(node("h4", scene.name), node("p", options.join(" · ")), apply,
-        button(t(26), () => {
-          editingScene = id;
-          render();
-          panel.querySelector(".lighting-scene-form input").focus();
-        }));
+      apply.title = applyLabel + " · " + options.join(" · ");
+      if (scene.color) card.style.setProperty("--pad-accent", stateColor(scene.color));
+      const edit = mixerButton(t(26), "scene-edit-" + id, item => editScene(id, item));
+      edit.setAttribute("aria-label", t(26) + " · " + scene.name);
+      card.append(apply, edit);
       grid.append(card);
     }
     section.append(grid);
-    if (!groups.length && editingScene === undefined) {
-      section.append(node("p", needsGroup));
-      return section;
+    if (lights.some(light => light.provider === "twinkly")) {
+      const legacy = node("div", "", "mixer-pads mixer-pads-legacy");
+      legacy.append(node("h4", h(21)));
+      const pads = el("scene-pads");
+      for (const [index, original] of [...pads.querySelectorAll(".scene-pad > button:first-child")].entries()) {
+        legacy.append(mixerButton(original.textContent, "twinkly-scene-" + index, () => original.click()));
+      }
+      section.append(legacy);
     }
+    return section;
+  }
 
-    const scene = data.scenes[editingScene];
+  function editScene(id, opener) {
+    const [, nameLabel, groupLabel, , missingGroup] = sceneWords[el("language").value] || sceneWords.nl;
+    const groups = Object.entries(data.groups);
+    const scene = data.scenes[id];
     const form = node("form", "", "lighting-form lighting-scene-form");
     const name = node("input");
     name.required = true;
     name.maxLength = 60;
     name.value = scene?.name || "";
+    name.autofocus = true;
     const group = node("select");
     group.required = true;
     const placeholder = node("option", missingGroup);
@@ -452,32 +499,29 @@
     const save = node("button", t(25));
     form.append(field(nameLabel, name), field(groupLabel, group), field(t(7) + " / " + t(8), power),
       field(t(9), level), field(t(10), useColor), color, save);
+    const dialog = openDialog(scene ? t(26) + " · " + scene.name : h(9), form, opener);
     form.addEventListener("submit", event => {
       event.preventDefault();
       task(save, async () => {
         const on = power.value === "on";
-        const payload = {id: editingScene, name: name.value, group: group.value, on};
+        const payload = {id, name: name.value, group: group.value, on};
         if (on && level.value) payload.brightness = Number(level.value);
         if (on && useColor.checked) payload.color = color.value.slice(1).match(/../g).map(channel => parseInt(channel, 16));
         await api("lighting/scenes", payload);
-        editingScene = undefined;
-        await refresh();
+        await refresh().finally(() => dialog.close());
       });
     });
     if (scene) {
-      form.append(button(t(28), () => { editingScene = undefined; render(); }),
-        button(t(27), async () => {
+      form.append(button(t(27), async () => {
           if (!window.confirm(t(27) + " · " + scene.name + "?")) return;
-          await api("lighting/scenes", {id: editingScene, delete: true});
-          editingScene = undefined;
-          await refresh();
+          await api("lighting/scenes", {id, delete: true});
+          if (activeScene === id) activeScene = undefined;
+          await refresh().finally(() => dialog.close());
         }));
     }
-    section.append(form);
-    return section;
   }
 
-  function connectionCard(brand) {
+  function connectionCard(brand, onConnected) {
     const card = node("article", "", "lighting-card");
     card.dataset.provider = brand;
     card.append(node("h3", brands[brand]));
@@ -540,8 +584,9 @@
         await api("providers/" + brand + "/connect",
           {id: id.value, address: address.value, certificate_sha256: pin.value});
         pin.value = "";
-        feedback.textContent = t(38);
+        (card.closest("dialog[open]")?.querySelector("[role=status]") || feedback).textContent = t(38);
         await refresh();
+        onConnected?.();
       });
     });
     setup.append(form);
@@ -763,6 +808,215 @@
     language: () => el("language").value,
   });
 
+  function openDialog(title, content, opener) {
+    const dialog = node("dialog", "", "mixer-dialog");
+    const heading = node("h2", title);
+    heading.id = "mixer-dialog-title";
+    dialog.setAttribute("aria-labelledby", heading.id);
+    const message = node("p", "", "mixer-dialog-message");
+    message.setAttribute("role", "status");
+    const close = button(h(13), () => dialog.close());
+    const header = node("header");
+    header.append(heading, close);
+    dialog.append(header, message, content);
+    document.querySelector("main").append(dialog);
+    homeDialog = dialog;
+    dialog.addEventListener("close", () => {
+      dialog.remove();
+      if (homeDialog === dialog) homeDialog = undefined;
+      if (context === "home") {
+        const fallback = [...panel.querySelectorAll("[data-mixer-key]")]
+          .find(item => item.dataset.mixerKey === opener?.dataset.mixerKey);
+        (opener?.isConnected ? opener : fallback || panel.querySelector("button"))?.focus();
+      }
+    }, {once: true});
+    dialog.showModal();
+    return dialog;
+  }
+
+  function addLight(opener) {
+    const content = node("div", "", "mixer-add-light");
+    const brand = node("select");
+    for (const [key, name] of Object.entries(brands)) brand.add(new Option(name, key));
+    brand.value = homeBrand === "all" ? "twinkly" : homeBrand;
+    brand.setAttribute("aria-label", h(6));
+    const setup = node("div");
+    const assignment = node("form", "", "lighting-form");
+    const light = node("select");
+    const collection = node("select");
+    const assign = node("button", h(15));
+    function updateAssignment() {
+      const before = light.value;
+      light.replaceChildren(new Option(h(16), ""));
+      for (const entry of data.lights.filter(item => item.provider === brand.value)) {
+        light.add(new Option(entry.name, entry.id));
+      }
+      if ([...light.options].some(option => option.value === before)) light.value = before;
+      collection.replaceChildren(new Option(h(17), ""));
+      for (const [kind, label] of [["rooms", h(3)], ["groups", h(4)]]) {
+        const options = node("optgroup");
+        options.label = label;
+        for (const [id, entry] of Object.entries(data.groups || {})) {
+          if ((entry.kind === "room") === (kind === "rooms")) options.append(new Option(entry.name, id));
+        }
+        if (options.children.length) collection.append(options);
+      }
+      assignment.hidden = light.options.length < 2 || collection.options.length < 2;
+    }
+    function showSetup() {
+      setup.replaceChildren();
+      if (brand.value === "twinkly") {
+        const ip = node("input");
+        ip.placeholder = "192.168.1.50";
+        ip.inputMode = "decimal";
+        const connect = async address => {
+          const result = await register(address);
+          dialog.querySelector("[role=status]").textContent = result;
+          await refresh();
+          updateAssignment();
+        };
+        setup.append(field(t(17), ip), button(t(14), () => {
+          if (ip.reportValidity()) return connect(ip.value.trim());
+        }), button(t(13), () => connect("")));
+        ip.required = true;
+      } else {
+        const card = connectionCard(brand.value, updateAssignment);
+        card.querySelector("details").open = true;
+        setup.append(card);
+      }
+      updateAssignment();
+    }
+    light.required = collection.required = true;
+    assignment.append(field(h(16), light), field(h(17), collection), assign);
+    content.append(brand, setup, assignment);
+    const dialog = openDialog(h(6), content, opener);
+    brand.addEventListener("change", showSetup);
+    assignment.addEventListener("submit", event => {
+      event.preventDefault();
+      task(assign, async () => {
+        await api("lighting/groups", {id: collection.value, member: light.value});
+        await refresh().finally(() => dialog.close());
+      });
+    });
+    showSetup();
+  }
+
+  function mixerButton(label, key, handler, pressed) {
+    const item = button(label, handler);
+    item.dataset.mixerKey = key;
+    if (pressed !== undefined) item.setAttribute("aria-pressed", String(pressed));
+    return item;
+  }
+
+  function renderMixer() {
+    const mixer = node("section", "", "home-mixer");
+    const header = node("header", "", "mixer-header");
+    const brandBar = node("div", "", "mixer-switches");
+    brandBar.setAttribute("role", "group");
+    brandBar.setAttribute("aria-label", h(0));
+    for (const [brand, label] of Object.entries({all: h(1), ...brands})) {
+      brandBar.append(mixerButton(label, "brand-" + brand, () => {
+        homeBrand = brand;
+        activeScene = undefined;
+        render();
+      }, homeBrand === brand));
+    }
+    const tools = node("div", "", "mixer-switches");
+    const add = mixerButton(h(6), "add-light", addLight);
+    add.className = "mixer-add";
+    add.disabled = !data;
+    tools.append(mixerButton(t(2), "refresh", () => refresh()), add);
+    header.append(node("h2", h(0)), brandBar, tools);
+    mixer.append(header);
+    if (!data) {
+      mixer.append(node("p", pending ? t(36) : t(32), "mixer-empty"));
+      return mixer;
+    }
+
+    const channels = node("div", "", "mixer-decks");
+    const targets = node("section", "", "mixer-deck");
+    const categories = node("div", "", "mixer-switches mixer-categories");
+    categories.setAttribute("role", "group");
+    categories.setAttribute("aria-label", h(10));
+    for (const [view, label] of [["lights", h(2)], ["rooms", h(3)], ["groups", h(4)]]) {
+      categories.append(mixerButton(label, "view-" + view, () => {
+        homeView = view;
+        homeSelection = view === "lights" ? "all" : undefined;
+        render();
+      }, homeView === view));
+    }
+    targets.append(categories);
+    const visibleLights = data.lights.filter(light => homeBrand === "all" || light.provider === homeBrand);
+    const byKey = new Map(visibleLights.map(light => [light.id, light]));
+    const rows = node("div", "", "mixer-targets");
+    const entries = [];
+    if (homeView === "lights") {
+      if (visibleLights.length) entries.push({id: "all", name: homeBrand === "all" ? t(1) : brands[homeBrand],
+        lights: visibleLights, target: {provider: homeBrand}});
+      for (const light of visibleLights) {
+        entries.push({id: light.id, name: light.name, detail: brands[light.provider] + " · " + status(light),
+          lights: [light], target: {id: light.id}, state: light.state});
+      }
+    } else {
+      for (const [id, entry] of Object.entries(data.groups || {})) {
+        if ((entry.kind === "room") !== (homeView === "rooms")) continue;
+        const lights = entry.members.map(key => byKey.get(key)).filter(Boolean);
+        if (!lights.length && homeBrand !== "all") continue;
+        entries.push({id, name: entry.name, lights, group: entry, editable: true,
+          target: homeBrand === "all" ? {group: id} : {group: id, provider: homeBrand}});
+      }
+      if (homeView === "groups" && ["all", "twinkly"].includes(homeBrand)) {
+        for (const [id, entry] of Object.entries(visibleGroups() || {})) {
+          const lights = entry.members.map(key => byKey.get(JSON.stringify(["twinkly", key]))).filter(Boolean);
+          entries.push({id: "twinkly-" + id, name: entry.name, detail: brands.twinkly, lights,
+            target: {twinklyGroup: id}});
+        }
+      }
+    }
+    const selected = entries.find(entry => entry.id === homeSelection) || entries[0];
+    for (const entry of entries) {
+      const row = node("div", "", "mixer-target");
+      const pick = mixerButton(entry.name, "target-" + entry.id, () => {
+        homeSelection = entry.id;
+        render();
+      }, entry === selected);
+      if (entry.detail) pick.append(node("small", entry.detail));
+      row.append(pick);
+      if (entry.editable) {
+        const edit = mixerButton(t(26), "edit-" + entry.id, item => editGroup(homeView === "rooms" ? "room" : "group", entry.id, item));
+        edit.setAttribute("aria-label", t(26) + " · " + entry.name);
+        row.append(edit);
+      }
+      rows.append(row);
+    }
+    if (!entries.length) rows.append(node("p", homeView === "lights" ? t(11) : h(homeView === "rooms" ? 18 : 19)));
+    targets.append(rows);
+    if (homeView !== "lights" && data.groups && visibleLights.length) {
+      const room = homeView === "rooms";
+      targets.append(mixerButton(h(room ? 7 : 8), "add-collection", item => editGroup(room ? "room" : "group", undefined, item)));
+    }
+
+    const center = node("section", "", "mixer-deck mixer-center");
+    const screen = node("div", "", "mixer-screen");
+    screen.append(node("h3", selected?.name || h(10)));
+    if (selected) {
+      const counts = Object.keys(brands).map(brand => {
+        const count = selected.lights.filter(light => light.provider === brand).length;
+        return count ? brands[brand] + " " + count : "";
+      }).filter(Boolean);
+      const selectedScene = data.scenes?.[activeScene];
+      screen.append(node("p", counts.join("  /  ") || t(11)));
+      screen.append(node("p", selectedScene ? h(23) + " · " + selectedScene.name : "", "mixer-active"));
+    }
+    center.append(screen);
+    if (selected?.group) center.append(groupCard(selected.id, selected.lights, selected.target));
+    else if (selected?.lights.length) controls(center, selected.lights, selected.target, selected.state, true);
+
+    channels.append(targets, center, sceneList(visibleLights));
+    mixer.append(channels);
+    return mixer;
+  }
+
   function render() {
     renderTools(context, data);
     panel.hidden = !["home", "hue", "govee"].includes(context);
@@ -773,8 +1027,15 @@
     }
     const mount = context === "control" ? studio : context === "settings" ? settings : panel;
     if (!["home", "hue", "govee", "control", "settings", "tests"].includes(context)) return;
+    if (context === "home") {
+      const focusKey = mount.contains(document.activeElement) && document.activeElement.dataset.mixerKey;
+      mount.replaceChildren(renderMixer());
+      if (focusKey && !homeDialog?.open) [...mount.querySelectorAll("[data-mixer-key]")]
+        .find(item => item.dataset.mixerKey === focusKey)?.focus();
+      return;
+    }
     mount.replaceChildren();
-    const title = context === "settings" ? t(12) : context === "home" ? t(1) : brands[context] || brands.twinkly;
+    const title = context === "settings" ? t(12) : brands[context] || brands.twinkly;
     const heading = node("div", "", "lighting-heading");
     heading.append(node("h2", title), button(t(2), () => refresh()));
     mount.append(heading);
@@ -787,7 +1048,7 @@
       grid.append(connectionCard("hue"), connectionCard("govee"));
     } else {
       const provider = context === "control" ? "twinkly" : context;
-      for (const light of data.lights.filter(light => provider === "home" || light.provider === provider)) {
+      for (const light of data.lights.filter(light => light.provider === provider)) {
         grid.append(lightCard(light));
       }
       if (!grid.childElementCount) grid.append(node("p", t(11)));
@@ -798,10 +1059,10 @@
       }
     }
     mount.append(grid);
-    if (context === "home") mount.append(groupList(), sceneList());
   }
 
   async function refresh(force = true) {
+    if (force && pending) await pending.catch(() => {});
     const previous = data;
     pending ||= api("lighting").then(value => { data = value; }).finally(() => { pending = null; });
     try {
@@ -809,7 +1070,7 @@
     } finally {
       renderTools(context, data);
       const settingsInUse = context === "settings" && settings.querySelector("details[open]");
-      const groupInUse = context === "home" && (groupBusy || panel.querySelector(".lighting-group-form:focus-within, .lighting-scene-form:focus-within"));
+      const groupInUse = context === "home" && (groupBusy || homeDialog?.open);
       if (force || (!settingsInUse && !groupInUse && JSON.stringify(previous) !== JSON.stringify(data))) {
         render();
       }
@@ -924,7 +1185,10 @@
   window.addEventListener("lighting-page", event => {
     const previous = context;
     context = event.detail;
-    if (previous !== context) feedback.textContent = "";
+    if (previous !== context) {
+      feedback.textContent = "";
+      if (homeDialog?.open) homeDialog.close();
+    }
     if (previous !== context && context === "tests") {
       hueTestPanel.update();
       goveeTestPanel.update();
@@ -943,10 +1207,14 @@
     }
   });
 
+  window.addEventListener("twinkly-studio-update", () => {
+    if (context === "home" && !homeDialog?.open && !panel.contains(document.activeElement)) render();
+  });
+
   // The existing studio's first synchronous page event may have fired before this script loaded.
   if (el("nav-home")) showPage();
   setInterval(() => {
-    if (document.hidden || pending || groupBusy || !["home", "house", "hue", "govee", "control"].includes(context)) return;
+    if (document.hidden || pending || groupBusy || homeDialog?.open || !["home", "house", "hue", "govee", "control"].includes(context)) return;
     const mount = context === "control" ? studio : panel;
     if (!mount.contains(document.activeElement) && !mount.querySelector(".lighting-group-form input:checked") &&
         !mount.querySelector("button[data-running]")) refresh(false).catch(() => {});
