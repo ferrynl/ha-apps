@@ -18,8 +18,9 @@ LOG = logging.getLogger(__name__)
 MAX_PHOTO = 470_000
 MAX_SHOWS = 20
 MAX_STEPS = 20
-MAX_WALLS = 8
-PROJECT_LIMIT = 8 * 1024 * 1024
+MAX_WALLS = 24
+PLAN_SLOTS = 8 * 4
+PROJECT_LIMIT = 18 * 1024 * 1024
 DEFAULT_WALL = "default"
 RADIAL_EFFECTS = {"outward": 1, "inward": -1}
 DIRECTIONS = {"right": (0, 1), "left": (0, -1), "down": (1, 1), "up": (1, -1)}
@@ -65,11 +66,12 @@ def positions(value):
                 or len(parts) != (2 if parts[0] in ("twinkly", "group") else 3)
                 or any(not isinstance(part, str) or not 1 <= len(part) <= 128 for part in parts)):
             raise ValueError("Invalid light")
-        if (not isinstance(coordinate, list) or len(coordinate) not in (2, 3, 4)
+        if (not isinstance(coordinate, list) or len(coordinate) not in (2, 3, 4, 5)
                 or any(type(n) not in (int, float) or not 0 <= n <= 100 for n in coordinate[:2])
                 or (len(coordinate) >= 3 and (type(coordinate[2]) not in (int, float)
                                              or not 4 <= coordinate[2] <= 40))
-                or (len(coordinate) == 4 and (type(coordinate[3]) is not int or not 0 <= coordinate[3] <= 1000))):
+                or (len(coordinate) >= 4 and (type(coordinate[3]) is not int or not 0 <= coordinate[3] <= 1000))
+                or (len(coordinate) == 5 and (type(coordinate[4]) is not int or not -180 <= coordinate[4] <= 180))):
             raise ValueError("Invalid position")
         points[json.dumps(parts, separators=(",", ":"))] = coordinate
     return list(points.items())
@@ -108,7 +110,7 @@ def spatial_steps(eligible, lights, axis, sign, color, delay, end_color):
         return []
     first = sign * eligible[0][1][axis]
     distance = sign * eligible[-1][1][axis] - first
-    advances = [point[3] if len(point) == 4 else 0 for _, point in eligible]
+    advances = [point[3] if len(point) >= 4 else 0 for _, point in eligible]
     calibrated = any(advances) or end_color is not None
     steps = []
     for index, ((key, point), advance) in enumerate(zip(eligible, advances)):
@@ -260,6 +262,13 @@ def wall_layout(data, wall_id):
     return data["layout"] if wall_id == DEFAULT_WALL else data["walls"][wall_id]
 
 
+def wall_dimensions(body):
+    width, height = body["width_m"], body["height_m"]
+    if any(type(value) not in (int, float) or not 0.25 <= value <= 20 for value in (width, height)):
+        raise ValueError("Invalid wall dimensions")
+    return {"width_m": round(width, 2), "height_m": round(height, 2)}
+
+
 def wall_name(data):
     name = data["name"]
     if not isinstance(name, str) or not 1 <= len(name.strip()) <= 60:
@@ -280,17 +289,25 @@ def plan_slots(data):
     assigned = {}
     for wall_id in walls:
         slot = saved.get(wall_id)
-        if type(slot) is int and 0 <= slot < MAX_WALLS and slot not in assigned.values():
+        if type(slot) is int and 0 <= slot < PLAN_SLOTS and slot not in assigned.values():
             assigned[wall_id] = slot
-    free = iter(sorted(set(range(MAX_WALLS)) - set(assigned.values())))
+    free = iter(sorted(set(range(PLAN_SLOTS)) - set(assigned.values())))
     for wall_id in walls:
         if wall_id not in assigned:
             assigned[wall_id] = next(free)
     return assigned
 
 
-def plan_revision(slots):
-    return sha256(json.dumps(slots, sort_keys=True).encode()).hexdigest()
+def wall_placement(value):
+    x, z, angle = (value[key] for key in ("x_m", "z_m", "angle"))
+    if (any(type(n) not in (int, float) or not -20 <= n <= 20 for n in (x, z))
+            or type(angle) is not int or not -180 <= angle <= 180):
+        raise ValueError("Invalid wall placement")
+    return {"x_m": round(x, 2), "z_m": round(z, 2), "angle": angle}
+
+
+def plan_revision(slots, placements, names):
+    return sha256(json.dumps([slots, placements, names], sort_keys=True).encode()).hexdigest()
 
 
 def install(app, lighting):
@@ -324,7 +341,7 @@ def install(app, lighting):
             "shows": list(data["shows"].values()),
             "walls": walls, "wall_id": wall_id,
             "layout": {"revision": layout["revision"], "photo_version": layout["photo_version"],
-                       "points": layout["points"]},
+                       "points": layout["points"], "dimensions": layout.get("dimensions")},
             "playback": playback.status, **extra,
         }, headers=HEADERS)
 
@@ -340,12 +357,19 @@ def install(app, lighting):
 
     def overview_response(data):
         slots = plan_slots(data)
+        placements = data.get("wall_placements", {})
+        names = data.get("room_names", {})
         result = []
         for wall_id, slot in sorted(slots.items(), key=lambda item: item[1]):
             layout = wall_layout(data, wall_id)
-            result.append({"id": wall_id, "name": layout.get("name", ""), "slot": slot,
-                           "photo_version": layout["photo_version"], "points": layout["points"]})
-        return web.json_response({"revision": plan_revision(slots), "walls": result}, headers=HEADERS)
+            wall = {"id": wall_id, "name": layout.get("name", ""), "slot": slot,
+                    "photo_version": layout["photo_version"], "points": layout["points"],
+                    "dimensions": layout.get("dimensions")}
+            if wall_id in placements:
+                wall["placement"] = placements[wall_id]
+            result.append(wall)
+        return web.json_response({"revision": plan_revision(slots, placements, names), "walls": result,
+                                  "room_names": names}, headers=HEADERS)
 
     async def overview(request):
         try:
@@ -358,21 +382,42 @@ def install(app, lighting):
         try:
             body = await request.json()
             wall_id, slot, revision = body["wall"], body["slot"], body["revision"]
-            if not isinstance(wall_id, str) or type(slot) is not int or not 0 <= slot < MAX_WALLS:
+            if not isinstance(wall_id, str) or type(slot) is not int or not 0 <= slot < PLAN_SLOTS:
                 raise ValueError("Invalid wall position")
+            placement = wall_placement(body["placement"]) if body.get("placement") is not None else None
+            if "room_name" in body:
+                name = body["room_name"]
+                if not isinstance(name, str) or len(name.strip()) > 60:
+                    raise ValueError("Invalid room name")
+                name = name.strip()
             async with lock:
                 latest = await load()
                 slots = plan_slots(latest)
-                if wall_id not in slots or revision != plan_revision(slots):
+                placements = latest.get("wall_placements", {}).copy()
+                names = latest.get("room_names", {}).copy()
+                if wall_id not in slots or revision != plan_revision(slots, placements, names):
                     return web.json_response({"error": "project_conflict"}, status=409, headers=HEADERS)
                 previous = slots[wall_id]
-                if previous == slot:
+                if (previous == slot and "room_name" not in body
+                        and ("placement" not in body or placement == placements.get(wall_id))):
                     return overview_response(latest)
-                occupant = next((other for other, value in slots.items() if value == slot), None)
-                if occupant is not None:
-                    slots[occupant] = previous
-                slots[wall_id] = slot
-                data = {**latest, "plan_slots": slots}
+                if previous != slot:
+                    occupant = next((other for other, value in slots.items() if value == slot), None)
+                    if occupant is not None:
+                        slots[occupant] = previous
+                    slots[wall_id] = slot
+                if "placement" in body:
+                    if placement is None:
+                        placements.pop(wall_id, None)
+                    else:
+                        placements[wall_id] = placement
+                if "room_name" in body:
+                    room = str(slot // 4)
+                    if name:
+                        names[room] = name
+                    else:
+                        names.pop(room, None)
+                data = {**latest, "plan_slots": slots, "wall_placements": placements, "room_names": names}
                 await asyncio.to_thread(store.write, path, data, PROJECT_LIMIT)
                 state = data
                 return overview_response(data)
@@ -422,6 +467,9 @@ def install(app, lighting):
                         saved = plan_slots(latest)
                         del saved[wall_id]
                         data["plan_slots"] = saved
+                        placements = latest.get("wall_placements", {}).copy()
+                        placements.pop(wall_id, None)
+                        data["wall_placements"] = placements
                         del walls[wall_id]
                         wall_id = DEFAULT_WALL
                     else:
@@ -443,6 +491,11 @@ def install(app, lighting):
                     if shows[show_id]["revision"] != body.get("revision"):
                         raise web.HTTPConflict()
                     del shows[show_id]
+                elif action == "wall_dimensions":
+                    if body["revision"] != layout["revision"]:
+                        raise web.HTTPConflict()
+                    update_wall_layout(data, wall_id, {**layout, "dimensions": wall_dimensions(body),
+                                                       "revision": uuid.uuid4().hex})
                 elif action == "layout":
                     if body["revision"] != layout["revision"]:
                         raise web.HTTPConflict()
@@ -452,8 +505,8 @@ def install(app, lighting):
                         current_photo = await asyncio.to_thread(photo_jpeg, encoded) if encoded is not None else None
                         photo_version = uuid.uuid4().hex if current_photo is not None else None
                     points = positions(body["points"])
-                    if points and current_photo is None:
-                        raise ValueError("Positions require a photo")
+                    if points and current_photo is None and not layout.get("dimensions"):
+                        raise ValueError("Positions require a photo or wall dimensions")
                     update_wall_layout(data, wall_id, {**layout, "revision": uuid.uuid4().hex,
                                       "photo_version": photo_version, "photo": current_photo, "points": points})
                 elif action == "import":

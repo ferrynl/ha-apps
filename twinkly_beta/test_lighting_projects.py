@@ -92,13 +92,42 @@ class LightingProjectsTest(unittest.IsolatedAsyncioTestCase):
         stale = await self.change("delete", id=show["id"], revision=show["revision"])
         self.assertEqual(stale.status, 409)
 
+    async def test_measured_wall_without_photo_persists_and_keeps_its_lamps_on_upload(self):
+        rejected = await self.change("layout", revision=None, points=[POINT])
+        self.assertEqual(rejected.status, 400)
+        for width in (True, None, "3.25", 0, 21):
+            invalid = await self.change("wall_dimensions", revision=None, width_m=width, height_m=2.6)
+            self.assertEqual(invalid.status, 400)
+        saved = await self.change("wall_dimensions", revision=None, width_m=3.25, height_m=2.6)
+        self.assertEqual(saved.status, 200)
+        layout = (await saved.json())["layout"]
+        dimensions = {"width_m": 3.25, "height_m": 2.6}
+        self.assertEqual(layout["dimensions"], dimensions)
+        stale = await self.change("wall_dimensions", revision=None, width_m=4, height_m=2.6)
+        self.assertEqual(stale.status, 409)
+        placed = await self.change("layout", revision=layout["revision"], points=[POINT])
+        self.assertEqual(placed.status, 200)
+        before = (await placed.json())["layout"]
+        restarted = await self.connect()
+        plan = await (await restarted.get("/lighting/projects/overview")).json()
+        self.assertEqual(plan["walls"][0]["dimensions"], dimensions)
+        self.assertEqual(plan["walls"][0]["points"], [POINT])
+        self.assertIsNone(plan["walls"][0]["photo_version"])
+        photo = await restarted.post("/lighting/projects", json={
+            "action": "layout", "revision": before["revision"], "points": before["points"], "photo": self.image(),
+        })
+        self.assertEqual(photo.status, 200)
+        self.assertEqual((await photo.json())["layout"]["dimensions"], dimensions)
+
     async def test_lamp_scale_is_validated_and_preserved_with_legacy_points(self):
-        other = ['["twinkly","strings"]', [12, 55, 24]]
+        other = ['["twinkly","strings"]', [12, 55, 24, 75, -35]]
         layout = await self.change("layout", revision=None, photo=self.image(), points=[POINT, other])
         self.assertEqual(layout.status, 200)
         before = (await layout.json())["layout"]
         self.assertEqual(before["points"], [POINT, other])
         invalid = await self.change("layout", revision=before["revision"], points=[[other[0], [12, 55, 41]]])
+        self.assertEqual(invalid.status, 400)
+        invalid = await self.change("layout", revision=before["revision"], points=[[other[0], [12, 55, 24, 75, 181]]])
         self.assertEqual(invalid.status, 400)
         status = await self.client.get("/lighting/projects")
         self.assertEqual((await status.json())["layout"], before)
@@ -184,7 +213,7 @@ class LightingProjectsTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual((await (await restarted.get("/lighting/projects")).json())["layout"]["points"], [[key, point]])
 
     def test_gradient_colors_and_correction_use_geometry_and_planned_dispatch(self):
-        points = [("left", [10, 0]), ("middle", [30, 0, 12, 50]), ("right", [90, 0, 12, 500])]
+        points = [("left", [10, 0]), ("middle", [30, 0, 12, 50]), ("right", [90, 0, 12, 500, -35])]
         lights = {key: {} for key, _ in points}
         steps = spatial_steps(points, lights, 0, 1, [255, 0, 0], 250, [0, 0, 255])
         self.assertEqual([step["lamp"] for step in steps], ["right", "middle", "left"])
@@ -298,6 +327,32 @@ class LightingProjectsTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.status, 200)
         remaining = await (await restarted.get(url)).json()
         self.assertEqual(remaining["walls"], [changed["walls"][1]])
+
+    async def test_plan_coordinates_and_room_names_persist_and_can_be_reset(self):
+        url = "/lighting/projects/overview"
+        initial = await (await self.client.get(url)).json()
+        body = {"wall": "default", "slot": 0, "revision": initial["revision"],
+                "placement": {"x_m": 1.257, "z_m": -2, "angle": 35}, "room_name": " Woonkamer "}
+        invalid = await self.client.post(url, json={**body, "placement": {**body["placement"], "x_m": True}})
+        self.assertEqual(invalid.status, 400)
+        saved = await self.client.post(url, json=body)
+        self.assertEqual(saved.status, 200)
+        changed = await saved.json()
+        self.assertEqual(changed["walls"][0]["placement"], {"x_m": 1.26, "z_m": -2, "angle": 35})
+        self.assertEqual(changed["room_names"], {"0": "Woonkamer"})
+        stale = await self.client.post(url, json={**body, "placement": None})
+        self.assertEqual(stale.status, 409)
+        restarted = await self.connect()
+        self.assertEqual(await (await restarted.get(url)).json(), changed)
+        reset = await restarted.post(url, json={**body, "revision": changed["revision"],
+                                                "placement": None, "room_name": ""})
+        self.assertEqual(await reset.json(), initial)
+        moved = await restarted.post(url, json={**body, "slot": 31})
+        last_room = await moved.json()
+        self.assertEqual(last_room["walls"][0]["slot"], 31)
+        self.assertEqual(last_room["room_names"], {"7": "Woonkamer"})
+        invalid = await restarted.post(url, json={**body, "slot": 32, "revision": last_room["revision"]})
+        self.assertEqual(invalid.status, 400)
 
     async def test_spatial_groups_play_once_with_individual_results_inside_the_group(self):
         group = '["group","twinkly:native:wall"]'

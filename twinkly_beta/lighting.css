@@ -77,6 +77,9 @@
 .house-canvas > .lighting-controls { margin-top: 10px; }
 .lighting-spatial-stage { position: relative; width: fit-content; max-width: 100%; overflow: hidden;
   background: var(--studio-inset); border-radius: 8px; isolation: isolate; }
+.house-dimensions { flex-wrap: wrap; align-items: end; margin-block: 0 .75rem; }
+.house-blank-wall { width: 100%; cursor: crosshair; background: #26384a;
+  border: 1px dashed #a7bbcf; border-radius: 8px; box-sizing: border-box; }
 .house-room-photo { display: block; max-width: 100%; max-height: 72vh; cursor: crosshair; }
 .house-lamp-panel { background: var(--studio-inset); border-radius: 8px; padding: 12px; }
 .house-lamp-panel h3 { margin-block: 0 8px; }
@@ -167,7 +170,7 @@
 .house-3d-world,.house-3d-room,.house-3d-wall { transform-style: preserve-3d; }
 .house-3d-world,.house-3d-room { position: relative; width: 260px; height: 160px; }
 .house-3d-room,.house-3d-wall,.house-3d-floor { position: absolute; inset: 0; }
-.house-3d-wall { border: 1px solid #a7bbcf; background: #26384a; backface-visibility: hidden; }
+.house-3d-wall { box-sizing: border-box; border: 1px solid #a7bbcf; background: #26384a; backface-visibility: hidden; }
 .house-3d-wall img { display: block; width: 100%; height: 100%; object-fit: fill; pointer-events: none; }
 .house-3d-floor { top: auto; width: 260px; height: 260px;
   transform-origin: 50% 100%; transform: translateZ(130px) rotateX(90deg);

@@ -408,7 +408,7 @@ function mockProjects(state) {
 const newProjects = () => ({shows:[], layout:{revision:0, points:[], photo_version:null}, playback:{state:'idle'}});
 
 
-test('Mijn Huis saves lamp moves and sizes across browser sessions', async ({browser}) => {
+test('Mijn Huis saves lamp moves, angles and sizes across browser sessions', async ({browser}) => {
  const state = newProjects();
  const light = {id:'["twinkly","lamp"]', provider:'twinkly', name:'Twinkly Strings', product_code:'TWS500SPP1', status:'online', capabilities:{}, state:{}};
  const setup = async () => {
@@ -450,6 +450,10 @@ test('Mijn Huis saves lamp moves and sizes across browser sessions', async ({bro
  await page.mouse.up();
  await expect(marker).toHaveAccessibleName('Twinkly Strings · Locatie 35%, 60%');
  const handle = house.getByRole('button',{name:'Grootte · Twinkly Strings'});
+ const angle = house.getByLabel('Draaihoek lamp (°)');
+ await angle.fill('-35');
+ await angle.press('Tab');
+ await expect(marker.locator('.house-led-map')).toHaveCSS('rotate','-35deg');
  const handleBounds = await handle.boundingBox();
  await page.mouse.move(handleBounds.x + handleBounds.width / 2, handleBounds.y + handleBounds.height / 2);
  await page.mouse.down();
@@ -461,6 +465,7 @@ test('Mijn Huis saves lamp moves and sizes across browser sessions', async ({bro
  await context.close();
  const second = await setup();
  await expect(second.page.locator('.house-marker-lamp')).toHaveAccessibleName('Twinkly Strings · Locatie 35%, 60%');
+ await expect(second.page.locator('.house-marker-lamp .house-led-map')).toHaveCSS('rotate','-35deg');
  const width = await second.page.locator('.house-marker').evaluate(marker => parseFloat(marker.style.width));
  expect(width).toBeCloseTo(22, 0);
  await second.context.close();
@@ -556,19 +561,29 @@ test('Mijn Huis previews the sweep order and displays the last command result', 
  await expect(effect.getByText('Van midden naar buiten · Kleurveeg klaar')).toBeVisible();
 });
 
-test('Mijn Huis adds walls and switches to the matching photo', async ({page}) => {
+test('Mijn Huis saves a measured wall without a photo and renders it to scale', async ({page}) => {
  const first = {revision:'first',photo_version:'photo-one',points:[]};
  const second = {revision:'second',photo_version:null,points:[]};
  const walls = [{id:'default',name:''}];
+ await page.route('**/lighting/projects/overview', route => route.fulfill({json:{walls:[
+  {...first,id:'default',name:'',slot:0}, {...second,id:'second',name:'Woonkamer',slot:1}
+ ]}}));
  await page.route('**/lighting', route => route.fulfill({json:{lights:[],groups:{},scenes:{},connections:{}}}));
  await page.route('**/lighting/projects/photo?*', route => route.fulfill({contentType:'image/svg+xml',
   body:'<svg xmlns="http://www.w3.org/2000/svg" width="480" height="240"></svg>'}));
  await page.route(/\/lighting\/projects(?:\?[^/]*)?$/, route => {
   let wall = new URL(route.request().url()).searchParams.get('wall') ?? 'default';
   if (route.request().method() === 'POST') {
-   expect(route.request().postDataJSON()).toEqual({action:'add_wall',name:'Woonkamer'});
-   walls.push({id:'second',name:'Woonkamer'});
-   wall = 'second';
+   const body = route.request().postDataJSON();
+   if (body.action === 'add_wall') {
+    expect(body).toEqual({action:'add_wall',name:'Woonkamer'});
+    walls.push({id:'second',name:'Woonkamer'});
+    wall = 'second';
+   } else {
+    expect(wall).toBe('second');
+    expect(body).toEqual({action:'wall_dimensions',revision:'second',width_m:3.25,height_m:2.5});
+    Object.assign(second,{revision:'measured',dimensions:{width_m:3.25,height_m:2.5}});
+   }
   }
   return route.fulfill({json:{wall_id:wall,walls,shows:[],layout:wall === 'default' ? first : second,
    playback:{state:'idle'}}});
@@ -585,6 +600,15 @@ test('Mijn Huis adds walls and switches to the matching photo', async ({page}) =
  await expect(photo).toHaveAttribute('src','lighting/projects/photo?v=photo-one');
  await picker.selectOption('second');
  await expect(photo).toHaveCount(0);
+ await page.getByLabel('Breedte (m)',{exact:true}).fill('3.25');
+ await page.getByLabel('Hoogte (m)',{exact:true}).fill('2.5');
+ await page.getByRole('button',{name:'Muurmaten opslaan'}).click();
+ await expect(page.getByRole('img',{name:'Lege muur · 3,25 × 2,5 m'})).toBeVisible();
+ await page.getByRole('button',{name:'3D-weergave',exact:true}).click();
+ const wall = page.locator('.house-3d-wall[data-wall=second]');
+ await expect(wall).toContainText('Woonkamer · 3,25 × 2,5 m');
+ await expect(wall).toHaveCSS('width','211.25px');
+ await expect(wall).toHaveCSS('height','162.5px');
 });
 
 test('Mijn Huis shows an existing Twinkly group as a single panel and identifies a Hue strip', async ({page}) => {
@@ -606,7 +630,7 @@ test('Mijn Huis shows an existing Twinkly group as a single panel and identifies
   members:[{points:[[0,0,0],[0,1,0]]},{points:[[1,1,0]]}]
  }}));
  await page.route('**/lighting/projects/overview', route => route.fulfill({json:{walls:[
-  {id:'default',name:'Voorwand',photo_version:'first',points:[[group,[50,50,20]]]},
+  {id:'default',name:'Voorwand',photo_version:'first',points:[[group,[50,50,20,0,45]]]},
   {id:'north',name:'Zijwand',photo_version:'second',points:[]}
  ]}}));
  await page.goto('http://127.0.0.1:8765/index.html#mijn-huis');
@@ -626,6 +650,7 @@ test('Mijn Huis shows an existing Twinkly group as a single panel and identifies
  const scene = page.locator('.house-3d-scene');
  await expect(scene.locator('.house-3d-wall')).toHaveCount(2);
  await expect(scene.locator('.house-led-map')).toHaveAttribute('data-led-count','3');
+ await expect(scene.locator('.house-led-map')).toHaveCSS('rotate','45deg');
  const world = scene.locator('.house-3d-world');
  const before = await world.evaluate(element=>element.style.transform);
  await page.getByRole('button',{name:'Rechts draaien'}).click();
@@ -713,28 +738,45 @@ test('Mijn Huis assigns a wall to a second room and filters the 3D view', async 
  const walls = [{id:'default',name:'Voorwand',slot:0,photo_version:null,points:[]},
   {id:'side',name:'Zijwand',slot:1,photo_version:null,points:[]}];
  let revision = 'initial';
+ let roomNames = {};
  await page.route('**/lighting/projects/overview', route => {
   if (route.request().method() === 'POST') {
-   expect(route.request().postDataJSON()).toEqual({wall:'side',slot:7,revision:'initial'});
-   walls[1].slot = 7;
-   revision = 'moved';
+   const body = route.request().postDataJSON();
+   if (revision === 'initial') {
+    expect(body).toEqual({wall:'side',slot:7,revision:'initial',room_name:'Woonkamer'});
+    walls[1].slot = 7;
+    roomNames = {1:'Woonkamer'};
+    revision = 'moved';
+   } else {
+    expect(body).toEqual({wall:'side',slot:7,revision:'moved',placement:{x_m:1.5,z_m:-.5,angle:35}});
+    walls[1].placement = body.placement;
+    revision = 'custom';
+   }
   }
-  return route.fulfill({json:{revision,walls}});
+  return route.fulfill({json:{revision,walls,room_names:roomNames}});
  });
  await page.goto('http://127.0.0.1:8765/index.html#mijn-huis');
  await page.getByRole('button',{name:'3D-weergave',exact:true}).click();
  const plan = page.locator('.house-3d');
  await plan.getByLabel('Muur plaatsen').selectOption('side');
  await plan.getByLabel('Kamer en wandzijde').selectOption({label:'Kamer 2 · Links'});
+ await plan.getByLabel('Kamernaam').fill('Woonkamer');
  await plan.getByRole('button',{name:'Opslaan',exact:true}).click();
  await expect(plan.getByText(/Plek opgeslagen/)).toBeVisible();
  await expect(plan.locator('.house-3d-room')).toHaveCount(2);
  const side = plan.locator('.house-3d-wall[data-wall=side]');
  await expect(side).toHaveAttribute('style', /rotateY\(270deg\)/);
- await plan.getByRole('combobox',{name:'Kamer',exact:true}).selectOption({label:'Kamer 2'});
+ await plan.getByRole('combobox',{name:'Kamer',exact:true}).selectOption({label:'Woonkamer'});
  await expect(plan.locator('.house-3d-room')).toHaveCount(1);
  await expect(plan.locator('.house-3d-wall')).toHaveCount(1);
  await expect(side).toBeVisible();
+ await plan.getByLabel('Links/rechts (m)').fill('1.5');
+ await plan.getByLabel('Voor/achter (m)').fill('-0.5');
+ await plan.getByLabel('Muurhoek (°)').fill('35');
+ await expect(side).toHaveAttribute('style', /rotateY\(35deg\)/);
+ await plan.getByRole('button',{name:'Opslaan',exact:true}).click();
+ await expect(plan.getByText(/Plek opgeslagen/)).toBeVisible();
+ await expect(side).toHaveAttribute('style', /rotateY\(35deg\)/);
  await plan.getByRole('button',{name:'Rechts draaien'}).click();
  await plan.getByRole('button',{name:'Beginstand'}).click();
  await expect(plan.locator('.house-3d-world')).toHaveAttribute('style', /rotateY\(28deg\)/);
