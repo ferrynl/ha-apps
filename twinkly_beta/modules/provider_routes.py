@@ -1,5 +1,6 @@
 """Ingress-protected provider endpoints. No credentials in responses."""
 import asyncio
+from contextlib import asynccontextmanager
 import json
 import re
 
@@ -18,9 +19,10 @@ from .lighting_projects import install as install_projects
 from .hue_scene_images import install as install_hue_scene_images, scene_image_path
 from .hue_tests import LampTest, TESTS as HUE_TESTS, test_plan as hue_test_plan
 from . import govee_tests
+from .govee_cloud import CloudError, install as install_govee_cloud
 
 
-def install(app, store=None, controller=None):
+def install(app, store=None, controller=None, govee_key=None):
     store = store or ProviderStore()
     scanners = {"hue": hue_discover, "govee": govee_discover}
     scan_lock = asyncio.Lock()
@@ -262,6 +264,21 @@ def install(app, store=None, controller=None):
             except (ValueError, KeyError, TypeError, OSError, TimeoutError):
                 return web.json_response({"error": "certificate_unavailable"}, status=400)
 
+    @asynccontextmanager
+    async def govee_cloud_context(identifier):
+        async with (lighting.control_lock if lighting else collection_lock):
+            if lighting:
+                testing = lamp_test.task is not None and not lamp_test.task.done()
+                active = lighting.music.members | ({lamp_test.target} if testing else set())
+                target = re.sub(r"[:-]", "", identifier).casefold()
+                for key in filter(None, active):
+                    parts = json.loads(key)
+                    if parts[0] == "govee" and re.sub(r"[:-]", "", parts[1]).casefold() == target:
+                        raise CloudError("device_busy", 409)
+            async with mutation_lock:
+                yield
+
+    install_govee_cloud(app, govee_key, govee_cloud_context)
     app.router.add_get("/providers/hue/entertainment", entertainment_areas)
     app.router.add_get("/providers/hue/entertainment/status", entertainment_status)
     app.router.add_post("/providers/hue/entertainment/control", entertainment_control)

@@ -688,3 +688,33 @@ test('Mijn Huis assigns a wall to a second room and filters the 3D view', async 
  await plan.getByRole('button',{name:'Beginstand'}).click();
  await expect(plan.locator('.house-3d-world')).toHaveAttribute('style', /rotateY\(28deg\)/);
 });
+
+test('Govee cloud shows each model and sends the selected segment only', async ({page}) => {
+ const calls = [];
+ await page.route('**/providers/govee/cloud**', route => {
+  const endpoint = new URL(route.request().url()).pathname.split('/').at(-1);
+  if (endpoint === 'cloud') return route.fulfill({json:{configured:true}});
+  calls.push([endpoint,route.request().postDataJSON()]);
+  if (endpoint === 'devices') return route.fulfill({json:{devices:[{id:'one',name:'Woonkamer',sku:'H605C'}]}});
+  if (endpoint === 'details') return route.fulfill({json:{
+   scenes:[{id:'rainbow',name:'Rainbow'}],segments:{color:{indices:[0,2],minimum:1,limit:1}},scene_error:null,
+  }});
+  return route.fulfill({json:{accepted:true}});
+ });
+ await page.goto('http://127.0.0.1:8765/index.html#govee');
+ const cloud = page.locator('#govee-cloud');
+ await expect(cloud.getByRole('heading',{name:'Govee-cloud'})).toBeVisible();
+ expect(calls).toEqual([]);
+ await cloud.getByRole('button',{name:'Cloudlampen ophalen'}).click();
+ await expect(cloud.getByRole('option',{name:'Woonkamer · H605C'})).toBeAttached();
+ await cloud.getByRole('button',{name:'Scène toepassen'}).click();
+ await expect(cloud.getByText('Govee heeft de opdracht geaccepteerd.')).toBeVisible();
+ const segments = cloud.getByRole('group',{name:'Segmentkleur'});
+ await segments.getByRole('checkbox',{name:'Segmenten 3'}).check();
+ await segments.getByRole('button',{name:'Toepassen',exact:true}).click();
+ await expect(cloud.getByText('Govee heeft de opdracht geaccepteerd.')).toBeVisible();
+ expect(calls).toEqual([
+  ['devices',{}],['details',{device:'one'}],['apply',{device:'one',action:'scene',scene:'rainbow'}],
+  ['apply',{device:'one',action:'color',segments:[2],value:[255,126,51]}],
+ ]);
+});

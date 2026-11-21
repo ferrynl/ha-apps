@@ -720,6 +720,7 @@ class Controller:
         self.source = local_ip(options["ddp_source"])
         self.ddp = DDP(self.source)
         self.fps = options["fps"]
+        self.govee_api_key = options.get("govee_api_key")
         self.broadcast = local_ip(options.get("discovery_broadcast", "255.255.255.255"))
         self.limit = asyncio.Semaphore(8)
         self.realtime_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -2345,13 +2346,13 @@ class Controller:
         install_security_center(app, Path(__file__).resolve().parent, DATA.parent, ingress_only)
         from modules.provider_routes import install
         app.cleanup_ctx.append(self.stream)
-        install(app, controller=self)
+        install(app, controller=self, govee_key=getattr(self, "govee_api_key", None))
         async def legacy_provider_page(request):
             raise web.HTTPFound("./#instellingen")
 
         app.router.add_get("/provider-studio", legacy_provider_page)
         for asset in (
-            "lighting.js", "lighting-tools.js", "lighting.css", "twinkly-nav-logo.svg", "hue-app-icon.webp", "govee-logo.png",
+            "lighting.js", "lighting-tools.js", "govee-cloud.js", "lighting.css", "twinkly-nav-logo.svg", "hue-app-icon.webp", "govee-logo.png",
             "project.html", "project.css", "project.js", "security-center.js", "CHANGELOG.md", "ROADMAP.md",
         ):
             app.router.add_get("/" + asset, lambda _, filename=asset: web.FileResponse(

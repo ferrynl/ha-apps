@@ -1,3 +1,7 @@
+## 2.0.0-beta.35
+
+- Open Govee → Govee-cloud voor de scènes en segmentbediening die jouw model via de officiële Govee-API beschikbaar stelt. Voeg optioneel een API-sleutel toe aan de appconfiguratie in Home Assistant. LAN-bediening heeft geen cloudkoppeling nodig.
+
 ## 2.0.0-beta.34
 
 - Kies in Mijn Huis voor elke muur een kamer en wandzijde in de 3D-weergave. De indeling wordt op de Home Assistant-server bewaard. Bekijk de kamers samen of afzonderlijk en zet de camera met één knop terug naar de beginstand.

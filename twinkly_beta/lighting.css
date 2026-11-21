@@ -181,3 +181,12 @@
 .house-3d-placement p { margin-block: .35rem; }
 .house-3d-placement p:empty { display: none; }
 .house-3d-wall-empty { border-style: dashed; background: #26384a99; }
+
+.govee-cloud-content { display: grid; gap: .75rem; justify-items: start; }
+.govee-cloud-content > div { max-width: 100%; }
+.govee-cloud-content select { max-width: 100%; }
+.govee-cloud-content fieldset { margin: .7rem 0; min-width: 0; border: 1px solid var(--studio-line); }
+.govee-cloud-content .lighting-controls { flex-wrap: wrap; align-items: end; margin-top: .5rem; }
+.govee-cloud-content p:empty, #govee-cloud p[role=status]:empty { display: none; }
+.govee-segments { display: flex; gap: .35rem .8rem; flex-wrap: wrap; max-height: 10rem; overflow: auto; }
+.govee-segments label { display: inline-flex; flex-direction: row-reverse; gap: .3rem; align-items: center; }
