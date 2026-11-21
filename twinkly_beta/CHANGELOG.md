@@ -1,3 +1,7 @@
+## 2.0.0-beta.36
+
+- Speel in Mijn Huis een kleurveeg van het midden van de muurfoto naar buiten of van buiten naar het midden. Bekijk vooraf de volgorde op de foto. De voorvertoning houdt bij beide effecten rekening met de ingestelde timingcorrectie per lamp.
+
 ## 2.0.0-beta.35
 
 - Open Govee → Govee-cloud voor de scènes en segmentbediening die jouw model via de officiële Govee-API beschikbaar stelt. Voeg optioneel een API-sleutel toe aan de appconfiguratie in Home Assistant. LAN-bediening heeft geen cloudkoppeling nodig.
