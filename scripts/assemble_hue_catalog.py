@@ -22,7 +22,7 @@ def fetch(model):
     url = SOURCE + quote(model.replace("/", "-"), safe="") + ".png"
     for attempt in range(3):
         try:
-            with urlopen(url, timeout=12) as response:
+            with urlopen(url, timeout=20) as response:
                 raw = response.read(8_000_001)
             if len(raw) > 8_000_000:
                 return model, None, "Bron-PNG is te groot"
@@ -35,7 +35,7 @@ def fetch(model):
                 resize = max(image.size) > 480 or len(raw) > 480_000
             if resize:
                 raw = subprocess.run(
-                    ["convert", "png:-", "-resize", "320x320>", "-strip", "png:-"],
+                    ["convert", "-limit", "thread", "1", "png:-", "-resize", "320x320>", "-strip", "png:-"],
                     input=raw, capture_output=True, check=True, timeout=20,
                 ).stdout
             return model, raw, None
@@ -60,7 +60,7 @@ def main():
     definition = json.loads((ROOT / "scripts" / "hue-catalog-models.json").read_text(encoding="utf-8"))
     entries = definition["entries"]
     models = sorted({code for entry in entries for code in [entry["model"], *entry["white"]]})
-    with ThreadPoolExecutor(max_workers=16) as executor:
+    with ThreadPoolExecutor(max_workers=8) as executor:
         results = list(executor.map(fetch, models))
     available = {key: data for key, data, _ in results if data is not None}
     if len(available) < 40:
