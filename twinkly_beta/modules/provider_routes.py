@@ -139,6 +139,8 @@ def install(app, store=None, controller=None, govee_key=None):
                 data[provider][identifier] = record
                 store.save(data)
                 clients.pop((provider, identifier), None)
+                if lighting is not None:
+                    lighting.command_snapshot = None
             return web.json_response({"ok": True})
         except PermissionError:
             return web.json_response({"error": "pairing_permission"}, status=409)

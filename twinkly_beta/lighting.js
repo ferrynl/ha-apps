@@ -71,6 +71,8 @@
   let homeView = "lights";
   let homeSelection = "all";
   let activeScene;
+  const mixerValues = new Map();
+  let mixerWrites = 0;
   let homeDialog;
   let data;
   let pending;
@@ -147,18 +149,42 @@
     return label;
   }
 
+  function mixerState(lights, target, state) {
+    const remembered = mixerValues.get(JSON.stringify(target)) || {};
+    const result = {...state};
+    for (const [action, key, capability] of [["color", "color", "rgb"], ["brightness", "brightness", "brightness"]]) {
+      const samples = lights.filter(light => light.status !== "unavailable" && light.capabilities[capability])
+        .map(light => light.state?.[key] ?? null);
+      const first = samples[0];
+      const actual = first != null && samples.every(value =>
+        action === "color" ? stateColor(value) === stateColor(first) : value === first) ? first : null;
+      const last = remembered[action];
+      result[key] = last && (actual == null || last.until > Date.now()) ? last.value : actual;
+    }
+    return result;
+  }
+
   function controls(card, lights, target, state = {}, mixer = false) {
     const available = lights.filter(light => light.status !== "unavailable");
     const capable = key => available.some(light => light.capabilities[key]);
     const row = node("div", "", "lighting-controls");
+    if (mixer) state = mixerState(lights, target, state);
+    const mixerKey = JSON.stringify(target);
+    function remember(action, value) {
+      const previous = mixerValues.get(mixerKey);
+      mixerValues.set(mixerKey, {...previous, [action]: {value, until: Date.now() + 4000}});
+    }
     const send = async (action, value) => {
       if (target.twinklyGroup) {
         const mode = action === "power" ? (value ? "on" : "off") : action;
-        feedback.textContent = controlResult(await request("control", {
+        const result = await request("control", {
           group: target.twinklyGroup, action: mode, value: action === "color" ? stateColor(value) : value,
-        }));
-        await refresh(false);
-        return;
+        });
+        feedback.textContent = controlResult(result);
+        const accepted = lights.length > (result.offline?.length || 0) + result.failed.length;
+        if (mixer && accepted) remember(action, value);
+        if (!mixer || action === "power") await refresh(false);
+        return accepted;
       }
       const result = await api("lighting/control", {...target, action, value});
       const outcomes = ["accepted", "unconfirmed", "skipped", "failed"];
@@ -166,13 +192,56 @@
         const count = Object.values(result.results).filter(value => value === outcome).length;
         return count ? t(29 + i) + " · " + count : "";
       }).filter(Boolean).join(" / ");
+      const accepted = Object.values(result.results).some(outcome => ["accepted", "unconfirmed"].includes(outcome));
       if (mixer) {
+        if (accepted) remember(action, value);
         activeScene = undefined;
         panel.querySelector(".mixer-active")?.replaceChildren();
         panel.querySelectorAll(".mixer-pad [aria-pressed]").forEach(pad => pad.setAttribute("aria-pressed", "false"));
       }
-      await refresh(false);
+      if (!mixer || !["color", "brightness"].includes(action)) await refresh(false);
+      return accepted;
     };
+
+    function bindMixerValue(input, action, read, preview = false) {
+      let timer;
+      let queued;
+      let running = false;
+      let lastSent;
+      async function flush() {
+        clearTimeout(timer);
+        if (running || queued === undefined) return;
+        running = true;
+        mixerWrites++;
+        try {
+          while (queued !== undefined) {
+            const value = queued;
+            queued = undefined;
+            const signature = JSON.stringify(value);
+            if (signature === lastSent) continue;
+            try {
+              lastSent = await send(action, value) ? signature : undefined;
+            } catch {
+              lastSent = undefined;
+              feedback.textContent = t(32);
+            }
+          }
+        } finally {
+          mixerWrites--;
+          running = false;
+        }
+      }
+      if (preview) input.addEventListener("input", () => {
+        queued = read();
+        clearTimeout(timer);
+        timer = setTimeout(flush, 140);
+      });
+      input.addEventListener("change", () => {
+        queued = read();
+        flush();
+      });
+    }
+
     if (capable("power")) {
       for (const [value, index] of [[true, 7], [false, 8]]) {
         const toggle = button(t(index), () => send("power", value));
@@ -186,8 +255,11 @@
       input.min = 1;
       input.max = 100;
       input.value = state.brightness ?? 50;
-      input.addEventListener("change", () => task(input, () => send("brightness", Number(input.value))));
+      const read = () => Number(input.value);
+      if (mixer) bindMixerValue(input, "brightness", read);
+      else input.addEventListener("change", () => task(input, () => send("brightness", read())));
       if (mixer) {
+        input.setAttribute("aria-label", t(9));
         const label = field(t(9), input);
         const value = node("output", state.brightness == null ? "–" : input.value + "%");
         input.addEventListener("input", () => { value.textContent = input.value + "%"; });
@@ -202,8 +274,9 @@
       const input = node("input");
       input.type = "color";
       input.value = stateColor(state.color) || "#ffffff";
-      input.addEventListener("change", () => task(input, () => send("color",
-        input.value.slice(1).match(/../g).map(channel => parseInt(channel, 16)))));
+      const read = () => input.value.slice(1).match(/../g).map(channel => parseInt(channel, 16));
+      if (mixer) bindMixerValue(input, "color", read, true);
+      else input.addEventListener("change", () => task(input, () => send("color", read())));
       const label = field(t(10), input);
       if (mixer) label.classList.add("mixer-color");
       row.append(label);
@@ -412,6 +485,10 @@
         const {results} = await api("lighting/scenes/" + encodeURIComponent(id) + "/apply", filter);
         if (Object.values(results).some(actions => Object.values(actions).some(result => ["accepted", "unconfirmed"].includes(result)))) {
           activeScene = id;
+          for (const key of mixerValues.keys()) {
+            const target = JSON.parse(key);
+            if (target.group === scene.group || target.provider || group.members.includes(target.id)) mixerValues.delete(key);
+          }
           grid.querySelectorAll("[aria-pressed]").forEach(pad => pad.setAttribute("aria-pressed", String(pad === apply)));
           const reading = panel.querySelector(".mixer-active");
           if (reading) reading.textContent = h(23) + " · " + scene.name;
@@ -1070,7 +1147,8 @@
     } finally {
       renderTools(context, data);
       const settingsInUse = context === "settings" && settings.querySelector("details[open]");
-      const groupInUse = context === "home" && (groupBusy || homeDialog?.open);
+      const groupInUse = context === "home" && (groupBusy || homeDialog?.open || mixerWrites ||
+        panel.contains(document.activeElement) && document.activeElement.matches("input[type=color], input[type=range]"));
       if (force || (!settingsInUse && !groupInUse && JSON.stringify(previous) !== JSON.stringify(data))) {
         render();
       }
@@ -1208,13 +1286,13 @@
   });
 
   window.addEventListener("twinkly-studio-update", () => {
-    if (context === "home" && !homeDialog?.open && !panel.contains(document.activeElement)) render();
+    if (context === "home" && !homeDialog?.open && !mixerWrites && !panel.contains(document.activeElement)) render();
   });
 
   // The existing studio's first synchronous page event may have fired before this script loaded.
   if (el("nav-home")) showPage();
   setInterval(() => {
-    if (document.hidden || pending || groupBusy || homeDialog?.open || !["home", "house", "hue", "govee", "control"].includes(context)) return;
+    if (document.hidden || pending || groupBusy || homeDialog?.open || mixerWrites || !["home", "house", "hue", "govee", "control"].includes(context)) return;
     const mount = context === "control" ? studio : panel;
     if (!mount.contains(document.activeElement) && !mount.querySelector(".lighting-group-form input:checked") &&
         !mount.querySelector("button[data-running]")) refresh(false).catch(() => {});

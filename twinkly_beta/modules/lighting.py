@@ -1,6 +1,7 @@
 """Common lighting inventory and controls for ingress clients."""
 import asyncio
 import json
+import time
 import uuid
 
 from aiohttp import ClientError, web
@@ -15,6 +16,7 @@ MAX_MEMBERS = 128
 MAX_GROUPS = 40
 MAX_SCENES = 40
 PROVIDERS = ("twinkly", "hue", "govee")
+COMMAND_SNAPSHOT_SECONDS = 45
 
 
 def light_key(*parts):
@@ -60,8 +62,9 @@ class Lighting:
         self.control_lock = asyncio.Lock()
         self.music = MixedMusic(controller, self.send)
         self.lamp_test = None
+        self.command_snapshot = None
 
-    async def lights(self):
+    async def lights(self, providers=PROVIDERS[1:]):
         lights = {}
         for identifier, device in self.controller.devices.items():
             key = light_key("twinkly", identifier)
@@ -75,10 +78,10 @@ class Lighting:
                           "color": device.last_color if device.mode == "color" else None},
             }
 
-        inventories = await asyncio.gather(*(self.provider_inventory(brand) for brand in ("hue", "govee")),
+        inventories = await asyncio.gather(*(self.provider_inventory(brand) for brand in providers),
                                            return_exceptions=True)
         connections = {}
-        for brand, records in zip(("hue", "govee"), inventories):
+        for brand, records in zip(providers, inventories):
             if isinstance(records, ERRORS):
                 connections[brand] = None
                 continue
@@ -124,6 +127,7 @@ class Lighting:
 
     async def inventory(self, request):
         lights, connections = await self.lights()
+        self.command_snapshot = (time.monotonic(), lights, connections)
         try:
             groups = self.store.load_groups()
         except ERRORS:
@@ -135,6 +139,24 @@ class Lighting:
         return web.json_response({"lights": list(lights.values()), "connections": connections,
                                   "groups": groups, "scenes": scenes, "spatial_groups": self.spatial_groups(groups or {}),
                                   "music": self.music.status()})
+
+    async def command_lights(self, members, provider):
+        if members is None:
+            providers = tuple(brand for brand in PROVIDERS[1:] if provider in ("all", brand))
+            requested = set()
+        else:
+            by_provider = {brand: provider_members(members, brand) for brand in PROVIDERS[1:]}
+            providers = tuple(brand for brand, keys in by_provider.items() if keys)
+            requested = {key for keys in by_provider.values() for key in keys}
+        if self.command_snapshot and providers:
+            created, lights, connections = self.command_snapshot
+            if (time.monotonic() - created < COMMAND_SNAPSHOT_SECONDS
+                    and all(connections.get(brand) is not None for brand in providers)
+                    and requested.issubset(lights)):
+                twinkly, _ = await self.lights(())
+                return {**{key: light for key, light in lights.items() if light["provider"] in providers}, **twinkly}
+        lights, _ = await self.lights(providers)
+        return lights
 
     async def save_group(self, request):
         try:
@@ -235,7 +257,7 @@ class Lighting:
                 await self.lamp_test.stop()
             if self.music.members.intersection(members):
                 await self.music.stop()
-            lights, _ = await self.lights()
+            lights = await self.command_lights(members, provider)
             commands = [("power", scene["on"])]
             commands.extend((action, scene[action]) for action in ("color", "brightness") if action in scene)
             results = {key: {} for key in members}
@@ -373,7 +395,7 @@ class Lighting:
         async with self.control_lock:
             lights = None
             if members is None:
-                lights, _ = await self.lights()
+                lights = await self.command_lights(members, provider)
                 members = list(lights)
             members = provider_members(members, provider)
             if self.lamp_test and self.lamp_test.target in members:
@@ -381,7 +403,7 @@ class Lighting:
             if self.music.members.intersection(members):
                 await self.music.stop()
             if lights is None:
-                lights, _ = await self.lights()
+                lights = await self.command_lights(members, provider)
             results = await asyncio.gather(*(self.send(key, lights.get(key), action, value) for key in members))
         return web.json_response({"results": dict(zip(members, results))})
 

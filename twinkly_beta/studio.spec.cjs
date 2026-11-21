@@ -769,3 +769,47 @@ test('Govee cloud shows each model and sends the selected segment only', async (
   ['apply',{device:'one',action:'color',segments:[2],value:[255,126,51]}],
  ]);
 });
+
+test('Home mixer sends color while the picker is open and keeps room settings on refresh', async ({page}) => {
+ const commands = [];
+ let reads = 0;
+ await page.route('**/lighting', route => {
+  reads++;
+  return route.fulfill({json:{
+   lights:[
+    {id:'t',name:'Tree',provider:'twinkly',status:'online',capabilities:{rgb:true,brightness:true},state:{color:[255,255,255],brightness:42}},
+    {id:'h',name:'Wall',provider:'hue',status:'online',capabilities:{rgb:true,brightness:true},state:{color:null,brightness:60}},
+   ],
+   groups:{room:{name:'Woonkamer',kind:'room',members:['t','h']}},scenes:{},connections:{},
+  }});
+ });
+ await page.route('**/lighting/control', route => {
+  commands.push(route.request().postDataJSON());
+  return route.fulfill({json:{results:{t:'accepted',h:'accepted'}}});
+ });
+ await page.goto('http://127.0.0.1:8765/index.html',{waitUntil:'domcontentloaded'});
+ const home=page.locator('#lighting-panel');
+ await home.getByRole('button',{name:'Kamers',exact:true}).click();
+ await expect(home.locator('.mixer-screen h3')).toHaveText('Woonkamer');
+ const color=home.getByLabel('Kleur',{exact:true});
+ await color.evaluate(input => {
+  input.value='#cc2200';
+  input.dispatchEvent(new Event('input',{bubbles:true}));
+  input.value='#ff0000';
+  input.dispatchEvent(new Event('input',{bubbles:true}));
+ });
+ await expect.poll(() => commands).toEqual([{group:'room',action:'color',value:[255,0,0]}]);
+ await expect(page.locator('#lighting-feedback')).toContainText('Gelukt · 2');
+ await color.dispatchEvent('change');
+ const fader=home.getByRole('slider',{name:'Helderheid',exact:true});
+ await fader.fill('73');
+ await expect.poll(() => commands).toEqual([
+  {group:'room',action:'color',value:[255,0,0]}, {group:'room',action:'brightness',value:73},
+ ]);
+ expect(reads).toBe(1);
+ await home.getByRole('button',{name:'Vernieuwen',exact:true}).click();
+ await expect.poll(() => reads).toBe(2);
+ await expect(color).toHaveValue('#ff0000');
+ await expect(fader).toHaveValue('73');
+ await expect(home.locator('.mixer-fader output')).toHaveText('73%');
+});
