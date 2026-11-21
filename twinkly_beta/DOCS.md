@@ -111,3 +111,5 @@ Onderaan de app opent het versienummer de bijbehorende changelog. De roadmap ern
 Gebruik bij actieve LedFX-muziek op Home de **Masterfader muziek** voor de gemengde groep. Twinkly past de pixelframes aan. Hue en Govee dimmen relatief ten opzichte van de helderheid bij de start als die bekend is en herstellen die bij stoppen.
 
 De app toont Govee-bediening zodra een lokaal statusbericht de benodigde functies aangeeft. Bij een geldige gemelde wittemperatuur verschijnt ook de wittemperatuurregelaar. Govee bevestigt de uitvoering van opdrachten niet. De directe bediening gebruikt je lokale netwerk.
+
+Voor Govee-scènes en segmenten kun je optioneel de officiële cloudkoppeling gebruiken. Vraag in Govee Home een API-sleutel aan, vul `govee_api_key` in bij **Configuratie** van de Home Assistant-app en herstart de app. Open **Govee → Govee-cloud → Cloudlampen ophalen**. Kies een lamp om de functies voor dat model te zien. De lijst kan ook lampen bevatten die niet via LAN zijn gekoppeld.

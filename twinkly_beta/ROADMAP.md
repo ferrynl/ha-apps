@@ -7,13 +7,14 @@
 - **Gemengde groepen en scènes.** Aan/uit, helderheid en kleur voor ondersteunde lampen, met resultaat per lamp.
 - **LedFX.** Twinkly krijgt pixeleffecten. Ondersteunde Hue- en Govee-lampen volgen dezelfde muziek met maximaal één kleurupdate per seconde. De masterfader regelt het niveau van de gemengde muziekgroep.
 - **Testcentrum.** Twinkly-ledmapping, Hue-tests en Govee-LAN-tests. De app leest bij Hue en Govee na afloop de stand opnieuw uit om het herstel te controleren.
+- **Govee-cloud.** Optionele officiële koppeling voor scènes en segmenten. Het model en de ondersteunde functies komen uit het Govee-account.
 - **Govee-wittemperatuur.** Warm en koel wit bij lampen met een geldige LAN-terugmelding.
 - **Showbouwer.** Maak op Home een reeks opgeslagen scènes voor één gemengde groep, met een wachttijd per stap. Shows worden op de Home Assistant-server bewaard en spelen onafhankelijk van de browser af. Stop een actieve show vanuit elke sessie.
 - **Spatial Light Studio.** Open Mijn Huis om lampen op een 2D-foto te plaatsen, te verslepen en groter of kleiner te maken. Bewaar meerdere muren met elk een eigen foto en lampplaatsingen op de Home Assistant-server. Speel een kleurveeg of kleurverloop in vier richtingen en bekijk het effect vooraf op de foto. Geef trager reagerende lampen per lamp een handmatige timingcorrectie. Kies per muur een kamer en wandzijde en bekijk je muurfoto’s en lampen in een draaibaar 3D-model.
 - **Beveiliging.** Netwerkkaart in het Security Center, een Python-lockfile, bijgewerkte afhankelijkheden en een SBOM per bèta-containerarchitectuur. GitHub scant beide containerarchitecturen en maakt per bètaversie een beveiligingsrapport. Het Security Center toont broncode en release, de actieve Python-bibliotheken en lokale controles op Ingress en sleutelbestanden. Open per architectuur het GitHub-rapport van de geïnstalleerde bèta en bekijk de bevindingen en de SBOM.
 
 ## Open voor stabiel
-- **Govee.** Ondersteuning per model verder uitwerken, inclusief scènes, segmenten en de optionele officiële cloud-API.
+- **Govee.** Scènes en segmenten in de praktijk testen met een Govee-account en geschikte modellen.
 - **Spatial Light Studio.** Meer effecten op basis van gedeelde coördinaten en praktijktests voor de timingcorrectie.
 - **Security Center.** Aikido-audit voor stabiel. Het auditresultaat moet nog worden beoordeeld.
 - **Praktijktests.** Hue-tests zijn in de praktijk bevestigd. De Twinkly-muur, Govee en werking, timing en herstel van gemengde groepen staan nog op de testlijst.
