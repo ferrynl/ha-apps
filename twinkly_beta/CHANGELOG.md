@@ -1,3 +1,8 @@
+## 2.0.0-beta.39
+
+- Muziek op Home streamt LedFX-kleuren via Hue Entertainment. Zet de Hue-kleurenlampen aan en maak in de officiële Hue-app een Entertainmentruimte waarvan alle lampen in dezelfde Home-groep zitten. Home toont de gekozen ruimte en eventuele overgeslagen lampen.
+- De masterfader regelt ook de Hue-stream. Na het stoppen geeft de app de Entertainmentruimte vrij.
+
 ## 2.0.0-beta.38
 
 - Kleurkeuzes op de lichtmengtafel worden al verstuurd terwijl de kleurkiezer openstaat. Mixopdrachten gebruiken de recente lampenlijst en wachten bij een ontbrekende lijst alleen op de betrokken merken.
