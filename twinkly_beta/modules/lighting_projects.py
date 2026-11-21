@@ -208,9 +208,11 @@ class Playback:
             succeeded = False
             loop = asyncio.get_running_loop()
             timeline_start = loop.time()
+            due = timeline_start
             for number, step in enumerate(steps, 1):
                 if "due" in step:
-                    await self.wait_until_stopped(timeline_start + step["due"] - loop.time())
+                    due = timeline_start + step["due"]
+                    await self.wait_until_stopped(due - loop.time())
                 if self.stop.is_set():
                     break
                 self.status["step"] = number
@@ -218,6 +220,13 @@ class Playback:
                 results = await apply(step)
                 self.status["last"] = {"step": number, "milliseconds": round((loop.time() - started) * 1000),
                                        "results": results}
+                if self.status["kind"] == "spatial":
+                    self.status.setdefault("timing", []).append({
+                        "lamp": step["lamp"],
+                        "planned_ms": round((due - timeline_start) * 1000),
+                        "sent_ms": round((started - timeline_start) * 1000),
+                        "command_ms": self.status["last"]["milliseconds"],
+                    })
                 outcomes = {value for commands in results.values() for value in commands.values()}
                 self.status["uncertain"] |= "unconfirmed" in outcomes
                 self.status["partial"] |= bool(outcomes.intersection({"failed", "skipped"}))
@@ -229,6 +238,7 @@ class Playback:
                 if prepare and number == len(steps):
                     break
                 if "due" not in step:
+                    due = loop.time() + step["seconds"]
                     await self.wait_until_stopped(step["seconds"])
             if not succeeded:
                 outcome = "failed"

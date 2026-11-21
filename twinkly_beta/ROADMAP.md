@@ -7,7 +7,7 @@
 - **Gemengde groepen en scènes.** Aan/uit, helderheid en kleur voor ondersteunde lampen, met resultaat per lamp.
 - **LedFX.** Twinkly krijgt pixeleffecten. Hue-kleurenlampen volgen de muziek realtime via een passende Entertainmentruimte. Ondersteunde Govee-lampen volgen dezelfde muziek met maximaal één kleurupdate per seconde. De masterfader regelt het niveau van de gemengde muziekgroep.
 - **Testcentrum.** Twinkly-ledmapping, Hue-tests en Govee-LAN-tests. De app leest bij Hue en Govee na afloop de stand opnieuw uit om het herstel te controleren.
-- **Govee-cloud.** Optionele officiële koppeling voor scènes en segmenten. Het model en de ondersteunde functies komen uit het Govee-account.
+- **Govee-cloud.** Optionele officiële koppeling voor scènes en segmenten. Het model en de ondersteunde functies komen uit het Govee-account. Na een geaccepteerde opdracht kun je de reactie op de lamp controleren en op het scherm bevestigen.
 - **Govee-wittemperatuur.** Warm en koel wit bij lampen met een geldige LAN-terugmelding.
 - **Showbouwer.** Maak op Home een reeks opgeslagen scènes voor één gemengde groep, met een wachttijd per stap. Shows worden op de Home Assistant-server bewaard en spelen onafhankelijk van de browser af. Stop een actieve show vanuit elke sessie.
 - **Spatial Light Studio.** Open Mijn Huis om lampen op een 2D-foto te plaatsen, te verslepen en groter of kleiner te maken. Bewaar meerdere muren met eigen maten en lampplaatsingen op de Home Assistant-server. Per muur kun je een foto toevoegen. De 3D-weergave gebruikt de opgegeven maten. Speel een kleurverloop of kleurveeg in vier richtingen, vanuit het midden of vanaf de buitenkant. Bekijk de volgorde vooraf op de foto. Geef trager reagerende lampen per lamp een handmatige timingcorrectie. Kies per muur een kamer en wandzijde en bekijk je muurfoto’s en lampen in een draaibaar 3D-model.
@@ -20,7 +20,7 @@
 ## Open voor stabiel
 - **Mijn Huis.** Vul de ingebouwde Hue-fotocatalogus aan voor modellen zonder geverifieerde transparante bronfoto.
 - **Govee.** Scènes en segmenten in de praktijk testen met een Govee-account en geschikte modellen.
-- **Spatial Light Studio.** Praktijktests voor de timingcorrectie.
+- **Spatial Light Studio.** Praktijktests voor de timingcorrectie. Bekijk per stap het verschil tussen geplande en werkelijke verzendtijd en controleer de lichtreactie op de muur.
 - **Security Center.** Aikido-audit voor stabiel. Het auditresultaat moet nog worden beoordeeld.
 - **Praktijktests.** Hue-tests zijn in de praktijk bevestigd. De Twinkly-muur, Govee en werking, timing en herstel van gemengde groepen staan nog op de testlijst.
 

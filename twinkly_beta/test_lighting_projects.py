@@ -198,6 +198,12 @@ class LightingProjectsTest(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(state["uncertain"])
         self.assertEqual(state["last"]["results"], {left: {"color": "accepted"}})
         self.assertGreaterEqual(state["last"]["milliseconds"], 0)
+        self.assertEqual([row["lamp"] for row in state["timing"]][-1], left)
+        self.assertEqual(len(state["timing"]), state["total"])
+        for row in state["timing"]:
+            self.assertGreaterEqual(row["planned_ms"], 0)
+            self.assertGreaterEqual(row["sent_ms"], 0)
+            self.assertGreaterEqual(row["command_ms"], 0)
         self.assertEqual([call.args[0] for call in self.lighting.send_spatial_color.await_args_list], [right, left])
 
     async def test_timing_offset_is_persisted_and_bounded(self):

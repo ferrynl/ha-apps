@@ -524,7 +524,9 @@ test('Mijn Huis previews the sweep order and displays the last command result', 
     color:[255,189,99],delay:550,...(activeEffect === 'gradient' ? {end_color:[75,144,255]} : {}),
     ...(activeEffect === 'outward' ? {effect:'outward'} : {})});
    started = true;
-   playback = {state:'complete',kind:'spatial',effect:activeEffect,last:{step:2,milliseconds:24,results:{[ids[0]]:{color:'accepted'}}}};
+   playback = {state:'complete',kind:'spatial',effect:activeEffect,last:{step:2,milliseconds:24,results:{[ids[0]]:{color:'accepted'}}}, timing:[
+    {lamp:ids[1],planned_ms:0,sent_ms:1,command_ms:20},{lamp:ids[0],planned_ms:550,sent_ms:553,command_ms:24},
+   ]};
   }
   return route.fulfill({json:{layout,shows:[],playback}});
  });
@@ -542,6 +544,7 @@ test('Mijn Huis previews the sweep order and displays the last command result', 
  await expect(effect.getByText('Kleurveeg klaar')).toBeVisible();
  await effect.getByText('Laatste uitgevoerde stap 2 · Opdrachttijd in de app 24 ms').click();
  await expect(effect.getByText('Links · Geaccepteerd')).toBeVisible();
+ await expect(effect.getByText('Links · Gepland 550 ms · Verzonden 553 ms · Opdrachttijd 24 ms')).toBeVisible();
  activeEffect = 'gradient';
  await effect.getByLabel('Effect', {exact:true}).selectOption('gradient');
  await expect(effect.getByLabel('Eindkleur')).toBeVisible();
@@ -876,10 +879,14 @@ test('Govee cloud shows each model and sends the selected segment only', async (
  await expect(cloud.getByRole('option',{name:'Woonkamer · H605C'})).toBeAttached();
  await cloud.getByRole('button',{name:'Scène toepassen'}).click();
  await expect(cloud.getByText('Govee heeft de opdracht geaccepteerd.')).toBeVisible();
+ const practice = cloud.getByRole('group',{name:'Praktijktest'});
+ await practice.getByRole('radio',{name:'Lamp reageerde zoals bedoeld'}).check();
+ await expect(practice.getByText('Waarneming voor deze opdracht · Lamp reageerde zoals bedoeld')).toBeVisible();
  const segments = cloud.getByRole('group',{name:'Segmentkleur'});
  await segments.getByRole('checkbox',{name:'Segmenten 3'}).check();
  await segments.getByRole('button',{name:'Toepassen',exact:true}).click();
  await expect(cloud.getByText('Govee heeft de opdracht geaccepteerd.')).toBeVisible();
+ await expect(practice.getByRole('radio',{name:'Lamp reageerde zoals bedoeld'})).not.toBeChecked();
  expect(calls).toEqual([
   ['devices',{}],['details',{device:'one'}],['apply',{device:'one',action:'scene',scene:'rainbow'}],
   ['apply',{device:'one',action:'color',segments:[2],value:[255,126,51]}],
