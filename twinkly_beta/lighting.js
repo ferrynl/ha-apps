@@ -414,6 +414,28 @@
     return card;
   }
 
+  const restorationWords = {
+    nl: ["Muziek gestopt", "Twinkly-muziekmodus losgelaten", "Hue Entertainment vrijgegeven", "Hue bevestigt het vrijgeven van de ruimte niet"],
+    en: ["Music stopped", "Twinkly music mode released", "Hue Entertainment released", "Hue did not confirm release of the area"],
+    de: ["Musik gestoppt", "Twinkly-Musikmodus beendet", "Hue Entertainment freigegeben", "Hue hat die Freigabe des Bereichs nicht bestätigt"],
+    es: ["Música detenida", "Modo música de Twinkly liberado", "Hue Entertainment liberado", "Hue no confirmó que la zona quedara libre"],
+  };
+
+  function musicStopMessage(report, members) {
+    const [stopped, twinkly, hue, hueUnknown] = restorationWords[el("language").value] || restorationWords.nl;
+    const details = [stopped];
+    if (report?.twinkly_released) details.push(twinkly + " · " + report.twinkly_released);
+    if (report?.hue) details.push(report.hue === "released" ? hue : hueUnknown);
+    const names = new Map(members.map(light => [light.id, light.name]));
+    for (const [action, label] of [["color", t(10)], ["brightness", t(9)]]) {
+      for (const [key, outcome] of Object.entries(report?.[action] || {})) {
+        const result = {accepted: 29, unconfirmed: 30, skipped: 31, failed: 32}[outcome] ?? 32;
+        details.push((names.get(key) || t(37)) + " · " + label + ": " + t(result));
+      }
+    }
+    return details.join(" / ");
+  }
+
   function groupCard(id, members, target) {
     const [startMusic, stopMusic, waitingMusic, activeMusic, participating, skippedMusic] =
       musicWords[el("language").value] || musicWords.nl;
@@ -471,7 +493,7 @@
       }
       card.append(button(music ? stopMusic : startMusic, async () => {
         const result = await api("lighting/music", music ? {stop: true} : {group: id});
-        feedback.textContent = music ? "" :
+        feedback.textContent = music ? musicStopMessage(result.restoration, members) :
           participating + " · " + result.eligible.length + " / " + skippedMusic + " · " + result.skipped.length;
         await refresh();
       }));

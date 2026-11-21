@@ -1,3 +1,7 @@
+## 2.0.0-beta.47
+
+- Na het stoppen van gemengde muziek toont Home per merk wat is vrijgegeven of hersteld. Als Hue of Govee geen bevestiging geeft of een herstelopdracht mislukt, zie je dat meteen.
+
 ## 2.0.0-beta.46
 
 - Bekijk na een ruimtelijk effect in Mijn Huis per lamp of groep de geplande verzendtijd, werkelijke verzendtijd en opdrachttijd.

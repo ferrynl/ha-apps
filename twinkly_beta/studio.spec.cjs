@@ -126,7 +126,8 @@ test('Home combines providers and keeps pairing in Settings', async ({page}) => 
    return route.fulfill({json:{...music,results:{h:'accepted'}}});
   }
   music={group:stop?null:group,live:!stop,timings:{hue:{frame_age_ms:40,command_ms:90,failed:0}}};
-  return route.fulfill({json:{...music,eligible:['t','h'],skipped:['g']}});
+  return route.fulfill({json:stop ? {...music,restoration:{twinkly_released:1,hue:'unconfirmed',color:{g:'failed'}}}
+   : {...music,eligible:['t','h'],skipped:['g']}});
  });
  await page.route('**/lighting/scenes', route => {
   const scene=route.request().postDataJSON();
@@ -206,6 +207,9 @@ test('Home combines providers and keeps pairing in Settings', async ({page}) => 
  await master.fill('45');
  await expect.poll(() => music.level).toBe(45);
  await group.getByRole('button',{name:'Muziek stoppen'}).click();
+ await expect(page.locator('#lighting-feedback')).toContainText('Muziek gestopt');
+ await expect(page.locator('#lighting-feedback')).toContainText('Hue bevestigt het vrijgeven van de ruimte niet');
+ await expect(page.locator('#lighting-feedback')).toContainText('Strip · Kleur: Mislukt');
  await expect(group.getByRole('button',{name:'Muziek starten'})).toBeVisible();
  await home.getByRole('button',{name:'Scène toevoegen'}).click();
  const sceneForm=page.locator('.lighting-scene-form');

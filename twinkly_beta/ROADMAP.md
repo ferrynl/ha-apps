@@ -22,7 +22,7 @@
 - **Govee.** Scènes en segmenten in de praktijk testen met een Govee-account en geschikte modellen.
 - **Spatial Light Studio.** Praktijktests voor de timingcorrectie. Bekijk per stap het verschil tussen geplande en werkelijke verzendtijd en controleer de lichtreactie op de muur.
 - **Security Center.** Aikido-audit voor stabiel. Het auditresultaat moet nog worden beoordeeld.
-- **Praktijktests.** Hue-tests zijn in de praktijk bevestigd. De Twinkly-muur, Govee en werking, timing en herstel van gemengde groepen staan nog op de testlijst.
+- **Praktijktests.** Hue-tests zijn in de praktijk bevestigd. De Twinkly-muur, Govee en werking, timing en herstel van gemengde groepen staan nog op de testlijst. Home toont na het stoppen van gemengde muziek de uitkomst per merk.
 
 # 2.x — Verbeteringen na 2.0
 
