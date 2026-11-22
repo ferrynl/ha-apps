@@ -1,3 +1,7 @@
+## 2.0.0-beta.53
+
+- Stel de breedte van een geplaatste lamp apart in, tot 100% van de muur. De bestaande hoogte blijft behouden.
+
 ## 2.0.0-beta.52
 
 - Kies direct onder elke muur op de 2D-plattegrond de kamer. De app zoekt een vrije wandzijde en slaat de keuze meteen op.

@@ -549,9 +549,11 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, pr
 
   function setPosition(id, x, y, size = defaultSize, focusId = id) {
     const point = [clamp(x, 0, 100), clamp(y, 0, 100), clamp(size, 4, 40)];
-    const [, , , advance = 0, angle = 0] = wallPoints().get(id) || [];
-    if (advance || angle) point.push(advance);
-    if (angle) point.push(angle);
+    const [, , , advance = 0, angle = 0, width] = wallPoints().get(id) || [];
+    if (width !== undefined) point[0] = clamp(x, width / 2, 100 - width / 2);
+    if (advance || angle || width !== undefined) point.push(advance);
+    if (angle || width !== undefined) point.push(angle);
+    if (width !== undefined) point.push(width);
     return saveWallPoint(id, point, focusId);
   }
 
@@ -1097,9 +1099,10 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, pr
   }
 
   function planLight(light, point, pins, save, layer, wallId) {
-    const [x, y, size = defaultSize, advance = 0, angle = 0] = point;
+    const [x, y, size = defaultSize, advance = 0, angle = 0, customWidth] = point;
     const item = node("span", "", "house-3d-light");
     item.dataset.wall = wallId;
+    item.classList.toggle("house-custom-width", customWidth !== undefined);
     const marker = node("button", "", "house-3d-lamp-button");
     marker.type = "button";
     marker.setAttribute("aria-label", light.name + " · " + t(32));
@@ -1116,17 +1119,22 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, pr
       if (!projection) return;
       const [left, top, width] = placement;
       const [cx, cy] = projection.toScreen(left, top);
-      const [ex, ey] = projection.toScreen(left + width / 2, top);
+      const extent = span => {
+        const [ax, ay] = projection.toScreen(left - span / 2, top);
+        const [bx, by] = projection.toScreen(left + span / 2, top);
+        return Math.max(14, Math.hypot(bx - ax, by - ay));
+      };
+      const projectedWidth = extent(customWidth ?? width);
       const bounds = layer.getBoundingClientRect();
       Object.assign(item.style, {left: cx - bounds.left + "px", top: cy - bounds.top + "px",
-        width: Math.max(14, 2 * Math.hypot(ex - cx, ey - cy)) + "px"});
+        width: projectedWidth + "px", aspectRatio: customWidth === undefined ? "1" : String(projectedWidth / extent(width))});
     };
     const display = values => {
       placement = values;
       position();
     };
     layer.append(item);
-    const commit = values => save(light.id, [...values, advance, angle]);
+    const commit = values => save(light.id, [...values, advance, angle, ...(customWidth === undefined ? [] : [customWidth])]);
     for (const control of [marker, handle]) {
       const resize = control === handle;
       control.onpointerdown = event => {
@@ -1146,7 +1154,7 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, pr
           if (Math.hypot(move.clientX - event.clientX, move.clientY - event.clientY) < 3 && !values) return;
           values = resize
             ? [x, y, clamp(size + dx * 2, 4, 40)]
-            : [clamp(x + dx, 0, 100), clamp(y + dy, 0, 100), size];
+            : [clamp(x + dx, (customWidth ?? 0) / 2, 100 - (customWidth ?? 0) / 2), clamp(y + dy, 0, 100), size];
           display(values);
         };
         const finish = end => {
@@ -1401,7 +1409,7 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, pr
   }
 
   function lampMarker(photo, light, point) {
-    const [x, y, size = defaultSize, , angle = 0] = point;
+    const [x, y, size = defaultSize, , angle = 0, width] = point;
     const item = node("div", "", "house-marker");
     item.dataset.lamp = light.id;
     const marker = action("", () => {
@@ -1425,7 +1433,11 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, pr
     function display(left, top, width) {
       item.style.left = left + "%";
       item.style.top = top + "%";
-      item.style.width = width + "%";
+      item.style.width = (point[5] ?? width) + "%";
+      if (point[5] !== undefined) item.style.aspectRatio = String(point[5] / width);
+    }
+    if (width !== undefined) {
+      item.classList.add("house-custom-width");
     }
     display(x, y, size);
 
@@ -1448,7 +1460,7 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, pr
           if (!moved) return;
           values = resize
             ? [x, y, clamp(size + (x >= 50 ? -2 : 2) * 100 * deltaX / rect.width, 4, 40)]
-            : [clamp(x + 100 * deltaX / rect.width, 0, 100), clamp(y + 100 * deltaY / rect.height, 0, 100), size];
+            : [clamp(x + 100 * deltaX / rect.width, (width ?? 0) / 2, 100 - (width ?? 0) / 2), clamp(y + 100 * deltaY / rect.height, 0, 100), size];
           display(...values);
         };
         const finish = async end => {
@@ -1715,17 +1727,33 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, pr
       Object.assign(advance, {type: "number", min: 0, max: 1000, step: 1, required: true,
         value: selectedPoint[3] || 0, title: g(4)});
       const lampId = selected;
+      const widthLabels = ({
+        nl: ["Lampbreedte (% van de muur)", "Volle muurbreedte"],
+        en: ["Light width (% of wall)", "Full wall width"],
+        de: ["Lichtbreite (% der Wand)", "Ganze Wandbreite"],
+        es: ["Ancho de la luz (% de la pared)", "Ancho completo de la pared"],
+      })[language()] || ["Light width (% of wall)", "Full wall width"];
+      const width = Object.assign(node("input"), {type: "number", min: 4, max: 100,
+        step: 1, required: true, value: selectedPoint[5] ?? selectedPoint[2] ?? defaultSize});
+      const saveWidth = amount => {
+        const [x, y, size = defaultSize, advance = 0, angle = 0] = placements.get(lampId);
+        return saveWallPoint(lampId, [clamp(x, amount / 2, 100 - amount / 2), y, size, advance, angle, amount], "width");
+      };
+      width.onchange = () => { if (width.reportValidity()) saveWidth(width.valueAsNumber); };
+      settings.append(field(widthLabels[0], width), action(widthLabels[1], () => saveWidth(100)));
       const saveSettings = focus => {
         if (!advance.reportValidity() || !angle.reportValidity()) return;
-        const [x, y, size = defaultSize] = placements.get(lampId);
+        const [x, y, size = defaultSize, , , storedWidth] = placements.get(lampId);
         const point = [x, y, size];
-        if (advance.valueAsNumber || angle.valueAsNumber) point.push(advance.valueAsNumber);
-        if (angle.valueAsNumber) point.push(angle.valueAsNumber);
+        if (advance.valueAsNumber || angle.valueAsNumber || storedWidth !== undefined) point.push(advance.valueAsNumber);
+        if (angle.valueAsNumber || storedWidth !== undefined) point.push(angle.valueAsNumber);
+        if (storedWidth !== undefined) point.push(storedWidth);
         return saveWallPoint(lampId, point, focus);
       };
       advance.onchange = () => saveSettings("advance");
       angle.onchange = () => saveSettings("angle");
       settings.append(field(placementLabel(4), angle), field(g(3), advance), node("small", g(4)));
+      if (focusId === "width") focus = width;
       if (focusId === "range") focus = range;
       if (focusId === "advance") focus = advance;
       if (focusId === "angle") focus = angle;
