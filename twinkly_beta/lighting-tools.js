@@ -269,10 +269,10 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, pr
   }
 
   const timingReportLabels = {
-    nl: ["Verzendtijden per lamp of groep", "Gepland", "Verzonden", "Opdrachttijd", "Deze tijden meten het verzenden vanuit de app. Kijk op de muur om te zien wanneer het licht verandert."],
-    en: ["Dispatch times by light or group", "Planned", "Sent", "Command time", "These timings measure dispatch from the app. Watch the wall to see when the light changes."],
-    de: ["Sendezeiten pro Lampe oder Gruppe", "Geplant", "Gesendet", "Befehlsdauer", "Diese Zeiten messen das Senden aus der App. Beobachte die Wand, um zu sehen, wann sich das Licht ändert."],
-    es: ["Tiempos de envío por luz o grupo", "Previsto", "Enviado", "Duración", "Los tiempos miden el envío desde la app. Observa la pared para ver cuándo cambia la luz."],
+    nl: ["Verzendtijden per lamp of groep", "Gepland", "Verzonden", "Opdrachttijd", "Afwijking", "Deze tijden meten het verzenden vanuit de app. Kijk op de muur om te zien wanneer het licht verandert."],
+    en: ["Dispatch times by light or group", "Planned", "Sent", "Command time", "Offset", "These timings measure dispatch from the app. Watch the wall to see when the light changes."],
+    de: ["Sendezeiten pro Lampe oder Gruppe", "Geplant", "Gesendet", "Befehlsdauer", "Abweichung", "Diese Zeiten messen das Senden aus der App. Beobachte die Wand, um zu sehen, wann sich das Licht ändert."],
+    es: ["Tiempos de envío por luz o grupo", "Previsto", "Enviado", "Duración", "Desviación", "Los tiempos miden el envío desde la app. Observa la pared para ver cuándo cambia la luz."],
   };
 
   function updatePlaybackStatus() {
@@ -307,12 +307,14 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, pr
       }
       details.replaceChildren(node("summary", e(10) + " " + last.step + " · " + e(11) + " " + last.milliseconds + " ms"), list);
       if (spatial && playback.timing?.length) {
-        const [title, planned, sent, duration, help] = timingReportLabels[language()] || timingReportLabels.nl;
+        const [title, planned, sent, duration, offset, help] = timingReportLabels[language()] || timingReportLabels.nl;
         const times = node("ol");
         for (const row of playback.timing) {
+          const difference = row.sent_ms - row.planned_ms;
           times.append(node("li", [
             names.get(row.lamp) || t(31), planned + " " + row.planned_ms + " ms",
             sent + " " + row.sent_ms + " ms", duration + " " + row.command_ms + " ms",
+            offset + " " + (difference > 0 ? "+" : "") + difference + " ms",
           ].join(" · ")));
         }
         details.append(node("h4", title), node("p", help), times);

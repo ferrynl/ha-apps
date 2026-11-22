@@ -95,6 +95,7 @@ class HueEntertainment:
         self.streamer_factory = streamer_factory
         self.active = None
         self.error = None
+        self.released = None
         self.task = None
         self.stop_event = asyncio.Event()
 
@@ -107,7 +108,10 @@ class HueEntertainment:
         return bool(self.active and self.active["effect"] == "music")
 
     def status(self):
-        return {"active": self.active, "error": self.error}
+        result = {"active": self.active, "error": self.error}
+        if self.released is not None:
+            result["released"] = self.released
+        return result
 
     async def areas(self, identifier, record, hue):
         result = {"bridge": identifier, "address": record["address"],
@@ -169,6 +173,7 @@ class HueEntertainment:
 
     async def open(self, identifier, record, hue, area_id, effect, brightness, render):
         self.error = None
+        self.released = None
         path = RESOURCE + "/" + area_id
         streamer = self.streamer_factory()
         await hue.request("PUT", path, {"action": "start"})
@@ -220,6 +225,16 @@ class HueEntertainment:
         finally:
             try:
                 await hue.request("PUT", path, {"action": "stop"})
+                area_id = path.rsplit("/", 1)[-1]
+                for attempt in range(3):
+                    areas = await hue.request("GET", path)
+                    if any(area.get("id") == area_id and area.get("status") == "inactive" for area in areas):
+                        self.released = area_id
+                        break
+                    if attempt < 2:
+                        await asyncio.sleep(.25)
+                if self.released is None:
+                    raise RuntimeError("Hue Entertainment area did not become inactive")
             except BRIDGE_ERRORS:
                 self.error = "stop_failed"
                 LOGGER.warning("Hue Entertainment Bridge did not confirm stop")

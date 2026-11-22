@@ -45,6 +45,7 @@ class MixedMusic:
         if self.group is not None:
             result["timings"] = self.timings
             result["level"] = self.level
+            result["audio_received"] = bool(self.controller.music_frame())
         return result
 
     async def start(self, group, lights):
@@ -169,7 +170,7 @@ class MixedMusic:
         if self.hue_members:
             if self.entertainment.music_active:
                 await self.entertainment.stop()
-            report["hue"] = "unconfirmed" if self.entertainment.error == "stop_failed" else "released"
+            report["hue"] = "released" if self.entertainment.released else "unconfirmed"
         colors = await self.restore()
         if colors:
             report["color"] = colors
