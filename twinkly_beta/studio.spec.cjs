@@ -1022,6 +1022,8 @@ test('Mijn Huis joins 5 m walls and moves and resizes a light on another wall in
  await marker.scrollIntoViewIfNeeded();
  const center = await marker.boundingBox();
  const x = center.x + center.width / 2, y = center.y + center.height / 2;
+ await expect.poll(() => marker.evaluate((element, [x,y]) =>
+  element.contains(document.elementFromPoint(x,y)), [x,y])).toBe(true);
  await page.mouse.move(x,y);
  await page.mouse.down();
  await page.mouse.move(x+14,y-10,{steps:5});

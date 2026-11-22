@@ -189,7 +189,7 @@
 @media (pointer: coarse) { .house-3d-light > .house-3d-resize { opacity: 1; } }
 .house-3d-name { position: absolute; bottom: 4px; left: 6px; padding: 3px 6px;
   color: #fff; background: #141c26dd; border-radius: 4px; transform: translateZ(2px); }
-.house-3d-light { position: absolute; transform: translate3d(-50%, -50%, 2px); aspect-ratio: 1; }
+.house-3d-light { position: absolute; transform: translate(-50%, -50%); aspect-ratio: 1; }
 .house-3d-light .house-lamp-art { transform: scale(.65); }
 .house-3d-placement { margin-block: .75rem; }
 .house-3d-placement .lighting-controls { flex-wrap: wrap; align-items: end; }

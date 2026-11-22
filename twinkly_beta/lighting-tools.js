@@ -1036,7 +1036,9 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, pr
               try {
                 const current = wall.id === wallId;
                 const revision = wall.revision ?? (current ? layout.revision : undefined);
-                const points = wallPoints(wall.points);
+                const points = new Map(wall.points);
+                const owners = wallGroupOwners();
+                for (const member of points.keys()) if (owners.get(member) === id) points.delete(member);
                 points.set(id, point);
                 const data = await api(wallPath(wall.id), {action: "layout", revision, points: [...points]});
                 if (current && !requestedWall) receive(data);
