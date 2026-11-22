@@ -1126,7 +1126,7 @@ test('Home room membership is available before drawing and links a wall by group
  const floor = page.locator('.house-floor-plan');
  await floor.getByRole('button',{name:'Woonkamer',exact:true}).click();
  await expect(floor.getByRole('heading',{name:'Leeslamp'})).toBeVisible();
- await floor.getByLabel('Kamer en wandzijde').selectOption({label:'Woonkamer · Voor'});
- await floor.getByRole('button',{name:'Opslaan',exact:true}).click();
+ await floor.getByLabel('Kamer voor Voorwand').selectOption({label:'Woonkamer'});
  await expect.poll(() => saves).toEqual([{wall:'default',slot:4,revision:'initial',room_group:'living'}]);
+ await expect(floor.getByRole('button',{name:'Woonkamer',exact:true})).toHaveAttribute('aria-pressed','true');
 });
