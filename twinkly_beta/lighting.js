@@ -1103,7 +1103,7 @@
       es: ["Demostración de luces", "Iniciar", "Detener", "Elige una habitación de Inicio con luces de color.", "Finalizado", "La habitación no confirmó el cambio de color."],
     })[el("language").value] || ["Demo light show", "Start", "Stop", "Choose a room on Home with colour lights.", "Finished", "The room did not confirm the colour change."];
     const rooms = Object.entries(data?.groups || {}).filter(([, group]) => group.kind === "room" &&
-      data.lights.some(light => group.members.includes(light.id) && light.capabilities?.rgb));
+      data.lights.some(light => group.members.includes(light.id) && light.capabilities?.rgb && light.capabilities?.power));
     const room = node("select");
     for (const [id, group] of rooms) room.add(new Option(group.name, id));
     const content = node("div");
@@ -1131,24 +1131,57 @@
       const group = room.value;
       const currentRun = ++run;
       preview.classList.add("is-playing");
-      const step = async index => {
-        if (currentRun !== run) return;
-        if (index === palette.length) return stop(labels[4]);
-        const color = palette[index];
-        preview.style.setProperty("--demo-color", "rgb(" + color.join(",") + ")");
-        try {
-          const result = await api("lighting/control", {group, action:"color", value:color});
-          if (currentRun !== run) return;
-          if (!Object.values(result.results || {}).some(value => value === "accepted" || value === "unconfirmed")) {
-            stop(labels[5]);
-            return;
-          }
-          timer = setTimeout(() => step(index + 1), 1600);
-        } catch {
-          if (currentRun === run) stop(labels[5]);
-        }
+      const send = async (target, action, value) => {
+        const result = await api("lighting/control", {...target, action, value});
+        return Object.values(result.results || {}).some(value => value === "accepted" || value === "unconfirmed");
       };
-      step(0);
+      const perform = async () => {
+        const overview = await api("lighting/projects/overview").catch(() => ({walls:[]}));
+        if (currentRun !== run) return;
+        const members = data.groups[group].members;
+        const colors = data.lights.filter(light => members.includes(light.id) &&
+          light.capabilities?.rgb && light.capabilities?.power && light.status !== "unavailable");
+        const linkedRoom = Object.keys(overview.room_groups || {}).find(id => overview.room_groups[id] === group);
+        const position = new Map();
+        for (const wall of overview.walls || []) {
+          if (linkedRoom !== undefined && Math.floor(wall.slot / 4) !== Number(linkedRoom)) continue;
+          const side = wall.slot % 4;
+          for (const [id, point] of wall.points || []) {
+            const distance = (point[0] / 100 - .5) * (wall.dimensions?.width_m || 4);
+            const placement = wall.placement;
+            const x = placement ? placement.x_m + distance * Math.cos(placement.angle * Math.PI / 180) :
+              [distance, 3, -distance, -3][side];
+            for (const lamp of data.spatial_groups?.[id]?.members || [id]) if (!position.has(lamp)) position.set(lamp, x);
+          }
+        }
+        colors.sort((left, right) => (position.get(left.id) ?? Infinity) - (position.get(right.id) ?? Infinity));
+        if (!colors.length || !await send({group}, "power", false)) {
+          if (currentRun === run) stop(labels[5]);
+          return;
+        }
+        const sequence = [...colors, ...colors.slice().reverse()];
+        const step = async index => {
+          if (currentRun !== run) return;
+          try {
+            if (index > 0) await send({id:sequence[index - 1].id}, "power", false);
+            if (currentRun !== run) return;
+            if (index === sequence.length) return stop(labels[4]);
+            const light = sequence[index], target = {id:light.id};
+            const color = palette[index % palette.length];
+            if (!await send(target, "color", color)) throw new Error();
+            if (currentRun !== run) return;
+            if (!await send(target, "power", true)) throw new Error();
+            if (currentRun !== run) return;
+            preview.style.setProperty("--demo-color", "rgb(" + color.join(",") + ")");
+            status.textContent = light.name;
+            timer = setTimeout(() => step(index + 1), index < colors.length ? 1200 : 750);
+          } catch {
+            if (currentRun === run) stop(labels[5]);
+          }
+        };
+        if (currentRun === run) timer = setTimeout(() => step(0), 650);
+      };
+      perform().catch(() => { if (currentRun === run) stop(labels[5]); });
     });
     const end = button(labels[2], () => stop());
     const status = node("p", rooms.length ? "" : labels[3]);

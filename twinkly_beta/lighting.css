@@ -419,3 +419,5 @@
   background: radial-gradient(ellipse, #313745, #11131b 72%); }
 .mixer-demo-preview.is-playing { text-shadow: 0 0 1.1em currentColor; transition: color .55s ease; }
 @media (prefers-reduced-motion: reduce) { .mixer-demo-preview.is-playing { transition: none; } }
+
+.house-3d-ceiling { background: #c1d4e552; border-color: #c1d4e5; }

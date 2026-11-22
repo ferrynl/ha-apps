@@ -647,6 +647,7 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, pr
     return frame;
   }
 
+  let showCeilings = false;
   let planResize;
   let planGeneration = 0;
   let planWall;
@@ -1240,6 +1241,7 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, pr
       const fit = Math.min(1, 260 / positionSpan, 520 / (columns * positionSpan),
         520 / (rows * positionSpan), 290 / heightSpan);
       const faces = [];
+      const ceilings = [];
       for (const [index, roomId] of visibleRooms.entries()) {
         const room = node("div", "", "house-3d-room");
         const row = Math.floor(index / columns);
@@ -1254,6 +1256,14 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, pr
           left: (260 - floorWidth) / 2 + "px", top: (160 - floorDepth / 2) + "px"});
         room.append(floor);
         const roomWalls = layoutWalls.filter(wall => Math.floor(wall.slot / 4) === roomId);
+        const ceiling = node("div", "", "house-3d-floor house-3d-ceiling");
+        ceiling.setAttribute("aria-hidden", "true");
+        ceiling.hidden = !showCeilings;
+        const ceilingHeight = Math.max(0, ...roomWalls.map(wall => (wall.dimensions?.height_m ?? 160 / wallPixelsPerMeter) * wallPixelsPerMeter));
+        Object.assign(ceiling.style, {width: floor.style.width, height: floor.style.height, left: floor.style.left,
+          top: (160 - ceilingHeight - floorDepth / 2) + "px"});
+        room.append(ceiling);
+        ceilings.push(ceiling);
         for (const wall of roomWalls) {
           const face = node("div", "", "house-3d-wall");
           face.dataset.wall = wall.id;
@@ -1364,6 +1374,12 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, pr
         roomFilter.className = "house-3d-room-filter";
         controls.append(field(v(12), roomFilter));
       }
+      const ceilingToggle = Object.assign(node("input"), {type:"checkbox", checked:showCeilings});
+      ceilingToggle.onchange = () => {
+        showCeilings = ceilingToggle.checked;
+        for (const ceiling of ceilings) ceiling.hidden = !showCeilings;
+      };
+      controls.append(field(({nl:"Plafond tonen",en:"Show ceiling",de:"Decke anzeigen",es:"Mostrar techo"})[language()] || "Show ceiling", ceilingToggle));
       controls.append(action(v(4), () => { camera.yaw -= 30; rotate(); }), action(v(5), () => { camera.yaw += 30; rotate(); }),
         field(v(3), zoom), action(v(18), () => {
           Object.assign(camera, {yaw: 28, pitch: -15, zoom: null});

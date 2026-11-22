@@ -1,3 +1,8 @@
+## 2.0.0-beta.55
+
+- De demo begint met een donkere kamer en laat lampen afzonderlijk oplichten. Waar posities zijn ingesteld, volgt de show die van links naar rechts en terug.
+- Toon in Mijn Huis een plafond op de hoogte van de wanden in de 3D-kamer.
+
 ## 2.0.0-beta.54
 
 - Govee bewaart de gesynchroniseerde cloudlampen op de server. Gebruik Synchroniseren als je de lijst wilt vernieuwen.
