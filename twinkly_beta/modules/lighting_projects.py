@@ -384,6 +384,7 @@ def install(app, lighting):
             layout = wall_layout(data, wall_id)
             wall = {"id": wall_id, "name": layout.get("name", ""), "slot": slot,
                     "photo_version": layout["photo_version"], "points": layout["points"],
+                    "revision": layout["revision"],
                     "dimensions": layout.get("dimensions")}
             if wall_id in placements:
                 wall["placement"] = placements[wall_id]

@@ -1,3 +1,8 @@
+## 2.0.0-beta.49
+
+- Mijn Huis gebruikt de opgegeven wandbreedtes voor de vloer en hoeken in 3D. Vier muren van 5 × 2,5 m vormen daarmee een kamer van 5 × 5 m. Voorste muren worden doorschijnend bij een volledig gesloten kamer.
+- Sleep verlichting in 3D over de muur en gebruik de hoekgreep om de grootte aan te passen. Dezelfde plaatsing wordt in 2D getoond.
+
 ## 2.0.0-beta.48
 
 - Home toont of er recente LedFX-frames binnenkomen bij gemengde muziek en of de app wacht op een lichtsignaal.

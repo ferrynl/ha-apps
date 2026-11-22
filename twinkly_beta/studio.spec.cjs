@@ -978,3 +978,79 @@ test('Hue product photo is shared with the 2D and 3D walls in My Home', async ({
  await page.getByRole('button',{name:'3D-weergave',exact:true}).click();
  await expect(page.locator('.house-3d-light .hue-product-photo')).toHaveCSS('rotate','45deg');
 });
+
+test('Mijn Huis joins 5 m walls and moves and resizes a light on another wall in 3D', async ({page}) => {
+ const light = {id:'strip',name:'Lichtstrip',provider:'hue',capabilities:{},state:{},status:'online'};
+ const walls = ['default','right','back','left'].map((id,slot) => ({
+  id,name:id,slot,revision:id,photo_version:null,dimensions:{width_m:5,height_m:2.5},
+  points:id === 'back' ? [[light.id,[50,50,16,3,25]]] : [],
+ }));
+ const updates = [];
+ await page.route('**/lighting', route => route.fulfill({json:{
+  lights:[light],groups:{},scenes:{},connections:{},
+ }}));
+ await page.route(/\/lighting\/projects(?:\?.*)?$/, route => {
+  const id = new URL(route.request().url()).searchParams.get('wall') || 'default';
+  const wall = walls.find(item => item.id === id);
+  if (route.request().method() === 'POST') {
+   expect(id).toBe('back');
+   const body = route.request().postDataJSON();
+   expect(body).toMatchObject({action:'layout',revision:wall.revision});
+   wall.points = body.points;
+   updates.push(body.points[0][1]);
+   wall.revision = 'saved-' + updates.length;
+  }
+  return route.fulfill({json:{wall_id:id,walls,shows:[],layout:wall,playback:{state:'idle'}}});
+ });
+ await page.route('**/lighting/projects/overview', route => route.fulfill({json:{revision:'plan',walls}}));
+ await page.goto('http://127.0.0.1:8765/index.html#mijn-huis');
+ const open = page.getByRole('button',{name:'3D-weergave',exact:true});
+ await open.click();
+ const plan = page.locator('.house-3d');
+ const floor = plan.locator('.house-3d-floor');
+ await expect(floor).toHaveCSS('width','325px');
+ await expect(floor).toHaveCSS('height','325px');
+ const faces = plan.locator('.house-3d-wall');
+ await expect(faces).toHaveCount(4);
+ for (const face of await faces.all()) {
+  await expect(face).toHaveCSS('width','325px');
+  await expect(face).toHaveCSS('height','162.5px');
+  await expect(face).toHaveAttribute('style',/translateZ\(162\.5px\)/);
+ }
+ const back = plan.locator('.house-3d-wall[data-wall="back"]');
+ const lamp = plan.locator('.house-3d-light[data-wall="back"]');
+ const marker = lamp.locator('.house-3d-lamp-button');
+ await marker.scrollIntoViewIfNeeded();
+ const center = await marker.boundingBox();
+ const x = center.x + center.width / 2, y = center.y + center.height / 2;
+ await expect.poll(() => marker.evaluate((element, [x,y]) =>
+  element.contains(document.elementFromPoint(x,y)), [x,y])).toBe(true);
+ await page.mouse.move(x,y);
+ await page.mouse.down();
+ await page.mouse.move(x+14,y-10,{steps:5});
+ await page.mouse.up();
+ await expect.poll(() => updates.length).toBe(1);
+ expect(updates[0][0]).not.toBe(50);
+ expect(updates[0][1]).not.toBe(50);
+ expect(updates[0].slice(2)).toEqual([16,3,25]);
+ await expect(plan.getByText(/Lamp opgeslagen/)).toBeVisible();
+ const handle = lamp.locator('.house-3d-resize');
+ await handle.hover();
+ const bounds = await handle.boundingBox();
+ const direction = await back.locator('.house-3d-pin').evaluateAll(([left,right]) =>
+  Math.sign(right.getBoundingClientRect().x - left.getBoundingClientRect().x));
+ const hx = bounds.x + bounds.width / 2, hy = bounds.y + bounds.height / 2;
+ await page.mouse.move(hx,hy);
+ await page.mouse.down();
+ await page.mouse.move(hx+direction*12,hy,{steps:5});
+ await page.mouse.up();
+ await expect.poll(() => updates.length).toBe(2);
+ expect(updates[1].slice(0,2)).toEqual(updates[0].slice(0,2));
+ expect(updates[1][2]).toBeGreaterThan(16);
+ expect(updates[1].slice(3)).toEqual([3,25]);
+ await expect(plan.getByText(/Lamp opgeslagen/)).toBeVisible();
+ const resizedWidth = await lamp.evaluate(el => el.style.width);
+ await page.reload();
+ await open.click();
+ await expect.poll(() => lamp.evaluate(el => el.style.width)).toBe(resizedWidth);
+});
