@@ -296,7 +296,7 @@ def install(app, store=None, controller=None, govee_key=None):
             async with mutation_lock:
                 yield
 
-    install_govee_cloud(app, govee_key, govee_cloud_context)
+    install_govee_cloud(app, govee_key, govee_cloud_context, store.path.with_name("govee-cloud-devices.json"))
     app.router.add_get("/providers/hue/entertainment", entertainment_areas)
     app.router.add_get("/providers/hue/entertainment/status", entertainment_status)
     app.router.add_post("/providers/hue/entertainment/control", entertainment_control)

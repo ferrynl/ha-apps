@@ -413,3 +413,9 @@
 
 .house-custom-width .house-led-map { height: 100%; aspect-ratio: auto; }
 .house-custom-width .hue-product-photo { object-fit: fill; }
+
+.mixer-demo-preview { display: grid; place-items: center; min-height: 9rem; margin-bottom: 1rem;
+  border-radius: .7rem; font-size: 4rem; color: var(--demo-color, #edcb81);
+  background: radial-gradient(ellipse, #313745, #11131b 72%); }
+.mixer-demo-preview.is-playing { text-shadow: 0 0 1.1em currentColor; transition: color .55s ease; }
+@media (prefers-reduced-motion: reduce) { .mixer-demo-preview.is-playing { transition: none; } }

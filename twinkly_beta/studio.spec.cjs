@@ -890,7 +890,7 @@ test('Govee cloud shows each model and sends the selected segment only', async (
  expect(calls).toEqual([]);
  await expect(cloud.getByText('Govee API-sleutel instellen',{exact:true})).toBeVisible();
  await expect(cloud.locator('.govee-setup-guide')).not.toHaveAttribute('open','');
- await cloud.getByRole('button',{name:'Cloudlampen ophalen'}).click();
+ await cloud.getByRole('button',{name:'Synchroniseren'}).click();
  await expect(cloud.getByRole('option',{name:'Woonkamer · H605C'})).toBeAttached();
  await cloud.getByRole('button',{name:'Scène toepassen'}).click();
  await expect(cloud.getByText('Govee heeft de opdracht geaccepteerd.')).toBeVisible();
@@ -1140,4 +1140,26 @@ test('Home room membership is available before drawing and links a wall by group
  await floor.getByLabel('Kamer voor Voorwand').selectOption({label:'Woonkamer'});
  await expect.poll(() => saves).toEqual([{wall:'default',slot:4,revision:'initial',room_group:'living'}]);
  await expect(floor.getByRole('button',{name:'Woonkamer',exact:true})).toHaveAttribute('aria-pressed','true');
+});
+
+test('Home demo only sends its first colour to the chosen room', async ({page}) => {
+ const calls = [];
+ const lamp = {id:'lamp',name:'Leeslamp',provider:'hue',status:'online',state:{},capabilities:{rgb:true}};
+ await page.route('**/lighting', route => route.fulfill({json:{
+  lights:[lamp],groups:{living:{name:'Woonkamer',kind:'room',members:['lamp']},
+   office:{name:'Kantoor',kind:'room',members:['lamp']}},scenes:{},connections:{},
+ }}));
+ await page.route('**/lighting/control', route => {
+  calls.push(route.request().postDataJSON());
+  return route.fulfill({json:{results:{lamp:'accepted'}}});
+ });
+ await page.goto('http://127.0.0.1:8765/index.html');
+ await page.getByRole('button',{name:'Demo lichtshow',exact:true}).click();
+ const dialog = page.getByRole('dialog',{name:'Demo lichtshow'});
+ await dialog.getByLabel('Kamers').selectOption({label:'Kantoor'});
+ expect(calls).toEqual([]);
+ await dialog.getByRole('button',{name:'Start',exact:true}).click();
+ await expect.poll(() => calls).toEqual([{group:'office',action:'color',value:[225,38,69]}]);
+ await dialog.getByRole('button',{name:'Stop',exact:true}).click();
+ await expect(dialog.getByRole('button',{name:'Start',exact:true})).toBeEnabled();
 });

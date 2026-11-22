@@ -4,10 +4,10 @@
   const language = document.getElementById("language");
   const base = "providers/govee/cloud";
   const words = {
-    nl: ["Govee-cloud", "Govee-cloud is nog niet ingesteld.", "Cloudlampen ophalen", "Gegevens ophalen…", "Geen lampen gevonden in dit Govee-account.", "Lamp", "Scène", "Scène toepassen", "Segmenten", "Segmentkleur", "Segmenthelderheid", "Toepassen", "Govee heeft de opdracht geaccepteerd.", "Dit model geeft geen ondersteunde scènes of segmentbediening door.", "Govee is niet bereikbaar of de opdracht is geweigerd.", "Govee weigert de API-sleutel. Controleer de appconfiguratie.", "Te veel verzoeken. Probeer het over een moment opnieuw.", "Stop eerst de actieve test of muziekbediening voor deze lamp.", "Kies {min} tot {max} segmenten.", "De dynamische scènes konden niet worden opgehaald.", "API-sleutel aanvragen"],
-    en: ["Govee Cloud", "Govee Cloud is not configured yet.", "Load cloud lights", "Loading…", "No lights found in this Govee account.", "Light", "Scene", "Apply scene", "Segments", "Segment colour", "Segment brightness", "Apply", "Govee accepted the command.", "This model reports no supported scenes or segment controls.", "Govee is unavailable or rejected the command.", "Govee rejected the API key. Check the app configuration.", "Too many requests. Try again in a moment.", "Stop the running test or music control for this light first.", "Select {min} to {max} segments.", "Could not fetch dynamic scenes.", "Request an API key"],
-    de: ["Govee-Cloud", "Govee-Cloud ist noch nicht eingerichtet.", "Cloud-Lampen laden", "Daten werden geladen…", "In diesem Govee-Konto wurden keine Lampen gefunden.", "Lampe", "Szene", "Szene anwenden", "Segmente", "Segmentfarbe", "Segmenthelligkeit", "Anwenden", "Govee hat den Befehl angenommen.", "Dieses Modell meldet keine unterstützten Szenen oder Segmentsteuerung.", "Govee ist nicht erreichbar oder hat den Befehl abgelehnt.", "Govee hat den API-Schlüssel abgelehnt. Prüfe die App-Konfiguration.", "Zu viele Anfragen. Versuche es gleich erneut.", "Beende zuerst den aktiven Test oder die Musiksteuerung dieser Lampe.", "Wähle {min} bis {max} Segmente.", "Dynamische Szenen konnten nicht abgerufen werden.", "API-Schlüssel anfordern"],
-    es: ["Nube de Govee", "La nube de Govee aún no está configurada.", "Cargar luces de la nube", "Cargando…", "No se encontraron luces en esta cuenta de Govee.", "Luz", "Escena", "Aplicar escena", "Segmentos", "Color de segmento", "Brillo de segmento", "Aplicar", "Govee ha aceptado el comando.", "Este modelo no indica escenas ni controles de segmentos compatibles.", "Govee no está disponible o ha rechazado el comando.", "Govee ha rechazado la clave API. Comprueba la configuración.", "Demasiadas solicitudes. Inténtalo de nuevo en un momento.", "Detén primero la prueba o el control musical de esta luz.", "Selecciona de {min} a {max} segmentos.", "No se pudieron obtener las escenas dinámicas.", "Solicitar clave API"],
+    nl: ["Govee-cloud", "Govee-cloud is nog niet ingesteld.", "Synchroniseren", "Gegevens ophalen…", "Geen lampen gevonden in dit Govee-account.", "Lamp", "Scène", "Scène toepassen", "Segmenten", "Segmentkleur", "Segmenthelderheid", "Toepassen", "Govee heeft de opdracht geaccepteerd.", "Dit model geeft geen ondersteunde scènes of segmentbediening door.", "Govee is niet bereikbaar of de opdracht is geweigerd.", "Govee weigert de API-sleutel. Controleer de appconfiguratie.", "Te veel verzoeken. Probeer het over een moment opnieuw.", "Stop eerst de actieve test of muziekbediening voor deze lamp.", "Kies {min} tot {max} segmenten.", "De dynamische scènes konden niet worden opgehaald.", "API-sleutel aanvragen"],
+    en: ["Govee Cloud", "Govee Cloud is not configured yet.", "Sync", "Loading…", "No lights found in this Govee account.", "Light", "Scene", "Apply scene", "Segments", "Segment colour", "Segment brightness", "Apply", "Govee accepted the command.", "This model reports no supported scenes or segment controls.", "Govee is unavailable or rejected the command.", "Govee rejected the API key. Check the app configuration.", "Too many requests. Try again in a moment.", "Stop the running test or music control for this light first.", "Select {min} to {max} segments.", "Could not fetch dynamic scenes.", "Request an API key"],
+    de: ["Govee-Cloud", "Govee-Cloud ist noch nicht eingerichtet.", "Synchronisieren", "Daten werden geladen…", "In diesem Govee-Konto wurden keine Lampen gefunden.", "Lampe", "Szene", "Szene anwenden", "Segmente", "Segmentfarbe", "Segmenthelligkeit", "Anwenden", "Govee hat den Befehl angenommen.", "Dieses Modell meldet keine unterstützten Szenen oder Segmentsteuerung.", "Govee ist nicht erreichbar oder hat den Befehl abgelehnt.", "Govee hat den API-Schlüssel abgelehnt. Prüfe die App-Konfiguration.", "Zu viele Anfragen. Versuche es gleich erneut.", "Beende zuerst den aktiven Test oder die Musiksteuerung dieser Lampe.", "Wähle {min} bis {max} Segmente.", "Dynamische Szenen konnten nicht abgerufen werden.", "API-Schlüssel anfordern"],
+    es: ["Nube de Govee", "La nube de Govee aún no está configurada.", "Sincronizar", "Cargando…", "No se encontraron luces en esta cuenta de Govee.", "Luz", "Escena", "Aplicar escena", "Segmentos", "Color de segmento", "Brillo de segmento", "Aplicar", "Govee ha aceptado el comando.", "Este modelo no indica escenas ni controles de segmentos compatibles.", "Govee no está disponible o ha rechazado el comando.", "Govee ha rechazado la clave API. Comprueba la configuración.", "Demasiadas solicitudes. Inténtalo de nuevo en un momento.", "Detén primero la prueba o el control musical de esta luz.", "Selecciona de {min} a {max} segmentos.", "No se pudieron obtener las escenas dinámicas.", "Solicitar clave API"],
   };
   const guides = {
     nl: {
@@ -15,32 +15,32 @@
       steps: [
         "Open Home Assistant → Instellingen → Apps → Christmas Control Center Beta → Configuratie.",
         "Zet Ongebruikte optionele configuratieopties weergeven aan. Vul je sleutel in bij govee_api_key en klik op Opslaan.",
-        "Ga naar Info en herstart de bèta-app. Open daarna in Christmas Control Center Govee → Govee-cloud → Cloudlampen ophalen.",
+        "Ga naar Info en herstart de bèta-app. Open daarna in Christmas Control Center Govee → Govee-cloud → Synchroniseren.",
       ],
       fallback: "Zie je het veld niet? Kies bij Opties ⋮ → Bewerken in YAML. Voeg deze regel op hetzelfde niveau als fps toe en vervang YOUR_API_KEY door je eigen sleutel. Sla op en herstart de app.",
-      captions: ["Voorbeeld van de configuratie in Home Assistant", "Voorbeeld van Bewerken in YAML", "De knop Cloudlampen ophalen in Christmas Control Center"],
-      alt: ["Het tabblad Configuratie met de schakelaar voor optionele opties en het veld govee_api_key gemarkeerd.", "De YAML-editor met govee_api_key onder de bestaande opties.", "Govee-cloud met de knop Cloudlampen ophalen."],
+      captions: ["Voorbeeld van de configuratie in Home Assistant", "Voorbeeld van Bewerken in YAML", "De knop Synchroniseren in Christmas Control Center"],
+      alt: ["Het tabblad Configuratie met de schakelaar voor optionele opties en het veld govee_api_key gemarkeerd.", "De YAML-editor met govee_api_key onder de bestaande opties.", "Govee-cloud met de knop Synchroniseren."],
     },
     en: {
       title: "Set up your Govee API key",
       steps: [
         "Open Home Assistant → Settings → Apps → Christmas Control Center Beta → Configuration.",
         "Turn on Show unused optional configuration options. Enter your key in govee_api_key and click Save.",
-        "Go to Info and restart the beta app. Then open Govee → Govee Cloud → Load cloud lights in Christmas Control Center.",
+        "Go to Info and restart the beta app. Then open Govee → Govee Cloud → Sync in Christmas Control Center.",
       ],
       fallback: "If the field is missing, choose Options ⋮ → Edit in YAML. Add this line at the same level as fps and replace YOUR_API_KEY with your key. Save and restart the app.",
-      captions: ["Home Assistant configuration example", "YAML editor example", "The Load cloud lights button in Christmas Control Center"],
-      alt: ["Configuration tab highlighting the optional options switch and the govee_api_key field.", "YAML editor showing govee_api_key below the existing options.", "Govee Cloud showing the Load cloud lights button."],
+      captions: ["Home Assistant configuration example", "YAML editor example", "The Sync button in Christmas Control Center"],
+      alt: ["Configuration tab highlighting the optional options switch and the govee_api_key field.", "YAML editor showing govee_api_key below the existing options.", "Govee Cloud showing the Sync button."],
     },
     de: {
       title: "Govee-API-Schlüssel einrichten",
       steps: [
         "Öffne Home Assistant → Einstellungen → Apps → Christmas Control Center Beta → Konfiguration.",
         "Aktiviere die Anzeige ungenutzter optionaler Konfigurationsoptionen. Trage deinen Schlüssel bei govee_api_key ein und speichere.",
-        "Starte die Beta-App unter Info neu. Öffne danach in Christmas Control Center Govee → Govee-Cloud → Cloud-Lampen laden.",
+        "Starte die Beta-App unter Info neu. Öffne danach in Christmas Control Center Govee → Govee-Cloud → Synchronisieren.",
       ],
       fallback: "Fehlt das Feld, wähle unter Optionen ⋮ → In YAML bearbeiten. Füge diese Zeile auf derselben Ebene wie fps hinzu und ersetze YOUR_API_KEY durch deinen Schlüssel. Speichere und starte die App neu.",
-      captions: ["Beispiel für die Home-Assistant-Konfiguration", "Beispiel des YAML-Editors", "Die Schaltfläche Cloud-Lampen laden in Christmas Control Center"],
+      captions: ["Beispiel für die Home-Assistant-Konfiguration", "Beispiel des YAML-Editors", "Die Schaltfläche Synchronisieren in Christmas Control Center"],
       alt: ["Konfiguration mit markiertem Schalter für optionale Optionen und dem Feld govee_api_key.", "YAML-Editor mit govee_api_key unter den vorhandenen Optionen.", "Govee-Cloud mit der Schaltfläche zum Laden der Cloud-Lampen."],
     },
     es: {
@@ -48,7 +48,7 @@
       steps: [
         "Abre Home Assistant → Ajustes → Aplicaciones → Christmas Control Center Beta → Configuración.",
         "Activa la opción para mostrar las opciones de configuración opcionales sin usar. Introduce la clave en govee_api_key y guarda.",
-        "Reinicia la aplicación beta desde Información. Después, abre Govee → Nube de Govee → Cargar luces de la nube en Christmas Control Center.",
+        "Reinicia la aplicación beta desde Información. Después, abre Govee → Nube de Govee → Sincronizar en Christmas Control Center.",
       ],
       fallback: "Si falta el campo, selecciona Opciones ⋮ → Editar en YAML. Añade esta línea al mismo nivel que fps y sustituye YOUR_API_KEY por tu clave. Guarda y reinicia la aplicación.",
       captions: ["Ejemplo de configuración en Home Assistant", "Ejemplo del editor YAML", "El botón para cargar luces de la nube en Christmas Control Center"],
@@ -224,18 +224,13 @@
         return;
       }
       const devices = element("div");
-      const load = button(t(2), async () => {
-        load.disabled = true;
-        status.textContent = t(3);
-        devices.replaceChildren();
-        try {
-          const result = await api("/devices", {});
-          if (token !== revision || !visible) return;
-          if (!result.devices.length) {
+      async function display(rows) {
+          if (!rows.length) {
+            devices.replaceChildren();
             status.textContent = t(4);
             return;
           }
-          const device = select(result.devices.map(row => [row.id, row.name + " · " + row.sku]));
+          const device = select(rows.map(row => [row.id, row.name + " · " + row.sku]));
           const detail = element("div");
           let selection = 0;
           async function choose() {
@@ -255,6 +250,13 @@
           device.onchange = choose;
           devices.replaceChildren(field(t(5), device), detail);
           await choose();
+      }
+      const load = button(t(2), async () => {
+        load.disabled = true;
+        status.textContent = t(3);
+        try {
+          const result = await api("/devices", {});
+          if (token === revision && visible) await display(result.devices);
         } catch (error) {
           status.textContent = t(errors[error.message] ?? 14);
         } finally {
@@ -262,6 +264,7 @@
         }
       });
       content.append(load, devices, setupGuide(false));
+      if (meta.devices?.length) await display(meta.devices);
     } catch {
       status.textContent = t(14);
     }
