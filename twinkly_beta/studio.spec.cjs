@@ -548,7 +548,7 @@ test('Mijn Huis previews the sweep order and displays the last command result', 
  await expect(effect.getByText('Kleurveeg klaar')).toBeVisible();
  await effect.getByText('Laatste uitgevoerde stap 2 · Opdrachttijd in de app 24 ms').click();
  await expect(effect.getByText('Links · Geaccepteerd')).toBeVisible();
- await expect(effect.getByText('Links · Gepland 550 ms · Verzonden 553 ms · Opdrachttijd 24 ms')).toBeVisible();
+ await expect(effect.getByText('Links · Gepland 550 ms · Verzonden 553 ms · Opdrachttijd 24 ms · Afwijking +3 ms')).toBeVisible();
  activeEffect = 'gradient';
  await effect.getByLabel('Effect', {exact:true}).selectOption('gradient');
  await expect(effect.getByLabel('Eindkleur')).toBeVisible();

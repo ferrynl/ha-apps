@@ -43,9 +43,17 @@ class EntertainmentTests(unittest.IsolatedAsyncioTestCase):
         self.streamer.connect.assert_called_once_with(RECORD["address"], "app", "f" * 32, AREA)
         await self.entertainment.stop()
         self.hue.request.assert_any_await("PUT", PATH, {"action": "start"})
-        self.hue.request.assert_awaited_with("PUT", PATH, {"action": "stop"})
+        self.hue.request.assert_any_await("PUT", PATH, {"action": "stop"})
+        self.hue.request.assert_awaited_with("GET", PATH)
         self.streamer.disconnect.assert_called_once()
-        self.assertEqual(self.entertainment.status(), {"active": None, "error": None})
+        self.assertEqual(self.entertainment.status(), {"active": None, "error": None, "released": AREA})
+
+    async def test_stop_acknowledged_but_area_stays_active(self):
+        await self.start()
+        self.area["status"] = "active"
+        await self.entertainment.stop()
+        self.assertEqual(self.entertainment.status(), {"active": None, "error": "stop_failed"})
+        self.assertEqual(sum(call.args == ("GET", PATH) for call in self.hue.request.await_args_list), 3)
 
     async def test_bridge_with_existing_stream_is_left_alone(self):
         self.area["status"] = "active"
@@ -59,15 +67,17 @@ class EntertainmentTests(unittest.IsolatedAsyncioTestCase):
         self.streamer.connect.side_effect = OSError
         with self.assertRaises(OSError):
             await self.start()
-        self.hue.request.assert_awaited_with("PUT", PATH, {"action": "stop"})
+        self.hue.request.assert_any_await("PUT", PATH, {"action": "stop"})
+        self.hue.request.assert_awaited_with("GET", PATH)
         self.assertIsNone(self.entertainment.active_bridge)
 
     async def test_disconnected_stream_releases_bridge(self):
         await self.start()
         self.streamer.is_connected = False
         await asyncio.wait_for(asyncio.shield(self.entertainment.task), 1)
-        self.hue.request.assert_awaited_with("PUT", PATH, {"action": "stop"})
-        self.assertEqual(self.entertainment.status(), {"active": None, "error": "stream_lost"})
+        self.hue.request.assert_any_await("PUT", PATH, {"action": "stop"})
+        self.hue.request.assert_awaited_with("GET", PATH)
+        self.assertEqual(self.entertainment.status(), {"active": None, "error": "stream_lost", "released": AREA})
 
     def test_sunset_respects_brightness(self):
         commands = effect_frame("sunset", 1, [3, 8], 40)

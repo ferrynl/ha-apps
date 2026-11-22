@@ -1,3 +1,9 @@
+## 2.0.0-beta.48
+
+- Home toont of er recente LedFX-frames binnenkomen bij gemengde muziek en of de app wacht op een lichtsignaal.
+- Na stoppen leest de app de Entertainmentruimte opnieuw uit. De Hue-pagina en het herstelbericht van gemengde muziek melden pas vrijgave als de Bridge de ruimte als inactief teruggeeft.
+- Mijn Huis toont per lamp of groep hoeveel milliseconden de verzending afweek van het plan. Dit meet de app, terwijl je de lichtreactie op de muur controleert.
+
 ## 2.0.0-beta.47
 
 - Na het stoppen van gemengde muziek toont Home per merk wat is vrijgegeven of hersteld. Als Hue of Govee geen bevestiging geeft of een herstelopdracht mislukt, zie je dat meteen.

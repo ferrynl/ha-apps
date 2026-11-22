@@ -436,6 +436,13 @@
     return details.join(" / ");
   }
 
+  const ledfxInputWords = {
+    nl: ["Geen recente LedFX-frames", "LedFX-frames ontvangen, wacht op lichtsignaal"],
+    en: ["No recent LedFX frames", "LedFX frames received, waiting for a light signal"],
+    de: ["Keine aktuellen LedFX-Frames", "LedFX-Frames empfangen, warte auf Lichtsignal"],
+    es: ["Sin fotogramas recientes de LedFX", "Fotogramas de LedFX recibidos, esperando señal de luz"],
+  };
+
   function groupCard(id, members, target) {
     const [startMusic, stopMusic, waitingMusic, activeMusic, participating, skippedMusic] =
       musicWords[el("language").value] || musicWords.nl;
@@ -444,7 +451,10 @@
     if (homeBrand === "all" && data.groups?.[id]) {
       const music = data.music?.group === id;
       if (music) {
-        card.append(node("p", data.music.live ? activeMusic : waitingMusic));
+        const input = ledfxInputWords[el("language").value] || ledfxInputWords.nl;
+        const audio = data.music.audio_received;
+        card.append(node("p", audio === false ? input[0] : data.music.live ? activeMusic :
+          audio === true ? input[1] : waitingMusic));
         const master = node("input");
         master.type = "range";
         master.min = 1;
@@ -1314,11 +1324,17 @@
       let active;
       let busy = false;
       let error;
+      let released;
       let requestRevision = 0;
+      const confirmed = {
+        nl: "Hue Bridge bevestigt dat de ruimte vrij is", en: "Hue Bridge confirms the area is free",
+        de: "Hue Bridge bestätigt die Freigabe", es: "El puente Hue confirma que la zona está libre",
+      };
       const errors = {pair_again: 8, busy: 10, stream_lost: 11, stop_failed: 12};
       function update(state) {
         active = state.active;
         error = state.error;
+        released = state.released;
         paint();
       }
       function paint() {
@@ -1328,7 +1344,8 @@
         reload.disabled = busy;
         const running = choices.find(choice => choice.bridge === active?.bridge && choice.area === active?.area);
         status.textContent = error ? labels[errors[error] ?? 13] :
-          active ? labels[6] + (running ? " · " + running.name : "") : "";
+          active ? labels[6] + (running ? " · " + running.name : "") :
+          released ? (confirmed[el("language").value] || confirmed.nl) : "";
         if (active?.effect === "music") {
           const words = hueMusicWords[el("language").value] || hueMusicWords.nl;
           status.textContent = words.streaming + (running ? " · " + running.name : "") + " · " + words.stop;
@@ -1360,7 +1377,8 @@
         const request = requestRevision;
         const state = await api(entertainmentPath + "/status");
         if (revision === entertainmentRead && request === requestRevision && !busy &&
-            (state.error || JSON.stringify(state.active) !== JSON.stringify(active))) update(state);
+            (state.error !== error || state.released !== released ||
+              JSON.stringify(state.active) !== JSON.stringify(active))) update(state);
       };
       update(result);
     } catch {

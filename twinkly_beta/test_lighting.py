@@ -78,7 +78,7 @@ class LightingTests(unittest.IsolatedAsyncioTestCase):
         }
 
         async def request(method, path, body=None):
-            return responses[path] if method == "GET" else []
+            return responses[RESOURCE if path == RESOURCE + "/" + AREA else path] if method == "GET" else []
 
         patcher = patch("modules.provider_routes.Hue.request", new=AsyncMock(side_effect=request))
         self.addCleanup(patcher.stop)
@@ -210,6 +210,7 @@ class LightingTests(unittest.IsolatedAsyncioTestCase):
         response = await self.client.post("/lighting/music", json={"group": group})
         self.assertEqual(response.status, 200, await response.text())
         info = await response.json()
+        self.assertTrue(info["audio_received"])
         self.assertEqual(info["eligible"], [self.twinkly, self.hue, self.govee])
         self.assertEqual(info["skipped"], [self.silent])
         self.assertEqual(info["hue"], {"state": "streaming", "area": "Living room", "skipped": 0, "group": group})
@@ -237,7 +238,8 @@ class LightingTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.controller.music, set())
         self.control.assert_not_awaited()
         self.color.assert_awaited_with([255, 1, 2])
-        bridge.assert_awaited_with("PUT", RESOURCE + "/" + AREA, {"action": "stop"})
+        bridge.assert_any_await("PUT", RESOURCE + "/" + AREA, {"action": "stop"})
+        bridge.assert_awaited_with("GET", RESOURCE + "/" + AREA)
         self.streamer.disconnect.assert_called_once()
 
     async def test_music_stop_reports_unconfirmed_hue_release_and_failed_govee_restore(self):
