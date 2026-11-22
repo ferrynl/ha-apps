@@ -657,8 +657,23 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, pr
   const treeText = index => (treeLabels[language()] || treeLabels.nl)[index];
   const treeWidthRatio = 290 / 478;
 
-  function wallTransform(slot, placement) {
-    if (!placement) return "rotateY(" + (slot % 4) * 90 + "deg) translateZ(130px)";
+  function roomFootprint(walls, room) {
+    const widths = [[], []];
+    for (const wall of walls) {
+      if (Math.floor(wall.slot / 4) === room && wall.dimensions) {
+        widths[wall.slot % 2].push(wall.dimensions.width_m);
+      }
+    }
+    const width = Math.max(0, ...widths[0]);
+    const depth = Math.max(0, ...widths[1]);
+    return {width: width || depth || 4, depth: depth || width || 4};
+  }
+
+  function wallTransform(slot, placement, footprint) {
+    if (!placement) {
+      const depth = slot % 2 ? footprint.width : footprint.depth;
+      return "rotateY(" + (slot % 4) * 90 + "deg) translateZ(" + depth * wallPixelsPerMeter / 2 + "px)";
+    }
     return "translate3d(" + placement.x_m * wallPixelsPerMeter + "px,0," + placement.z_m * wallPixelsPerMeter +
       "px) rotateY(" + placement.angle + "deg)";
   }
@@ -696,14 +711,16 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, pr
         const original = walls.find(wall => wall.id === face.dataset.wall);
         if (!original) continue;
         const editing = original.id === planWall && original.slot === Number(destination.value) && validCoordinates();
-        face.style.transform = wallTransform(original.slot, editing ? (custom ? transform() : null) : original.placement);
+        face.style.transform = wallTransform(original.slot, editing ? (custom ? transform() : null) : original.placement,
+          roomFootprint(walls, Math.floor(original.slot / 4)));
       }
     };
     const fill = placement => {
       custom = Boolean(placement);
       const side = Number(destination.value) % 4;
-      x.value = placement?.x_m ?? [0, 2, 0, -2][side];
-      z.value = placement?.z_m ?? [2, 0, -2, 0][side];
+      const {width, depth} = roomFootprint(walls, destinationRoom());
+      x.value = placement?.x_m ?? [0, width / 2, 0, -width / 2][side];
+      z.value = placement?.z_m ?? [depth / 2, 0, -depth / 2, 0][side];
       angle.value = placement?.angle ?? [0, 90, 180, -90][side];
       preview();
     };
@@ -834,7 +851,94 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, pr
     return panel;
   }
 
+  const planEditWords = {
+    nl: ["Sleep een lamp over de muur. Gebruik het vierkantje om de grootte te wijzigen.", "Lamp opgeslagen"],
+    en: ["Drag a light across its wall. Use the square handle to resize it.", "Light saved"],
+    de: ["Ziehe eine Lampe über ihre Wand. Verwende den quadratischen Griff zum Skalieren.", "Lampe gespeichert"],
+    es: ["Arrastra una luz por su pared. Usa el tirador cuadrado para cambiar el tamaño.", "Luz guardada"],
+  };
+  const planEdit = index => (planEditWords[language()] || planEditWords.nl)[index];
+
+  function wallProjection(pins) {
+    // Invert the perspective projection from the wall corners to recover wall coordinates.
+    const [a, b, c, d] = pins.map(pin => pin.getBoundingClientRect());
+    const dx = [b.x - d.x, c.x - d.x, a.x - b.x - c.x + d.x];
+    const dy = [b.y - d.y, c.y - d.y, a.y - b.y - c.y + d.y];
+    const determinant = dx[0] * dy[1] - dx[1] * dy[0];
+    if (Math.abs(determinant) < 1) return null;
+    const g = (dx[2] * dy[1] - dx[1] * dy[2]) / determinant;
+    const h = (dx[0] * dy[2] - dx[2] * dy[0]) / determinant;
+    return (x, y) => {
+      const A = b.x - a.x + g * (b.x - x), B = c.x - a.x + h * (c.x - x);
+      const C = b.y - a.y + g * (b.y - y), D = c.y - a.y + h * (c.y - y);
+      const denominator = A * D - B * C;
+      if (Math.abs(denominator) < 1) return null;
+      return [100 * ((x - a.x) * D - B * (y - a.y)) / denominator,
+        100 * (A * (y - a.y) - (x - a.x) * C) / denominator];
+    };
+  }
+
+  function planLight(light, point, pins, save) {
+    const [x, y, size = defaultSize, advance = 0, angle = 0] = point;
+    const item = node("span", "", "house-3d-light");
+    const marker = node("button", "", "house-3d-lamp-button");
+    marker.type = "button";
+    marker.setAttribute("aria-label", light.name + " · " + t(32));
+    marker.append(rotatedLampImage(light, angle));
+    const handle = node("button", "", "house-3d-resize");
+    handle.type = "button";
+    handle.setAttribute("aria-label", h(2) + " · " + light.name);
+    handle.title = h(2);
+    item.append(marker, handle);
+    const display = ([left, top, width]) => Object.assign(item.style,
+      {left: left + "%", top: top + "%", width: width + "%"});
+    display([x, y, size]);
+    const commit = values => save(light.id, [...values, advance, angle]);
+    for (const control of [marker, handle]) {
+      const resize = control === handle;
+      control.onpointerdown = event => {
+        if (event.button !== 0 || !event.isPrimary || gesture || busy || savingPlan) return;
+        event.stopPropagation();
+        const project = wallProjection(pins);
+        const origin = project?.(event.clientX, event.clientY);
+        if (!origin) return;
+        gesture = control;
+        let values;
+        control.setPointerCapture(event.pointerId);
+        control.onpointermove = move => {
+          if (gesture !== control || move.pointerId !== event.pointerId) return;
+          const local = project(move.clientX, move.clientY);
+          if (!local) return;
+          const [dx, dy] = local.map((value, index) => value - origin[index]);
+          if (Math.hypot(move.clientX - event.clientX, move.clientY - event.clientY) < 3 && !values) return;
+          values = resize
+            ? [x, y, clamp(size + dx * 2, 4, 40)]
+            : [clamp(x + dx, 0, 100), clamp(y + dy, 0, 100), size];
+          display(values);
+        };
+        const finish = end => {
+          if (gesture !== control || end.pointerId !== event.pointerId) return;
+          gesture = undefined;
+          if (end.type === "pointerup" && values) commit(values);
+          else display([x, y, size]);
+        };
+        control.onpointerup = control.onpointercancel = control.onlostpointercapture = finish;
+      };
+      control.onkeydown = event => {
+        const offset = {ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1]}[event.key];
+        if (!offset) return;
+        event.stopPropagation();
+        event.preventDefault();
+        const [dx, dy] = offset;
+        commit(resize ? [x, y, clamp(size + dx - dy, 4, 40)]
+          : [clamp(x + dx, 0, 100), clamp(y + dy, 0, 100), size]);
+      };
+    }
+    return item;
+  }
+
   async function renderHouse3d(snapshot, message, focusSelector = ".house-3d-placement button") {
+    if (gesture) return;
     const request = ++planGeneration;
     const close = action(v(1), () => { plan.hidden = true; openPlan.setAttribute("aria-expanded", "false"); openPlan.focus(); });
     const header = node("div", "", "lighting-controls");
@@ -867,7 +971,8 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, pr
       const visibleRooms = planRoom ? rooms.filter(room => room === Number(planRoom)) : rooms;
       const roomCount = visibleRooms.length;
       const visibleWalls = layoutWalls.filter(wall => visibleRooms.includes(Math.floor(wall.slot / 4)));
-      const roomSpan = Math.max(260, ...visibleWalls.map(wall => (wall.dimensions?.width_m || 0) * wallPixelsPerMeter));
+      const footprints = new Map(visibleRooms.map(id => [id, roomFootprint(layoutWalls, id)]));
+      const roomSpan = Math.max(260, ...[...footprints.values()].map(room => Math.max(room.width, room.depth) * wallPixelsPerMeter));
       const visibleTrees = visibleRooms.map(room => trees[room]).filter(Boolean);
       const heightSpan = Math.max(160, ...visibleWalls.map(wall => (wall.dimensions?.height_m || 0) * wallPixelsPerMeter),
         ...visibleTrees.map(tree => tree.height_m * wallPixelsPerMeter));
@@ -879,6 +984,7 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, pr
       const rows = Math.ceil(roomCount / columns);
       const fit = Math.min(1, 260 / positionSpan, 520 / (columns * positionSpan),
         520 / (rows * positionSpan), 290 / heightSpan);
+      const faces = [];
       for (const [index, roomId] of visibleRooms.entries()) {
         const room = node("div", "", "house-3d-room");
         const row = Math.floor(index / columns);
@@ -886,11 +992,18 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, pr
         const x = (index % columns - (roomsInRow - 1) / 2) * (positionSpan + 22);
         const z = (row - (rows - 1) / 2) * (positionSpan + 22);
         room.style.transform = "translate3d(" + x + "px,0," + z + "px)";
-        room.append(node("div", "", "house-3d-floor"));
-        for (const wall of layoutWalls.filter(wall => Math.floor(wall.slot / 4) === roomId)) {
+        const footprint = footprints.get(roomId);
+        const floor = node("div", "", "house-3d-floor");
+        const floorWidth = footprint.width * wallPixelsPerMeter, floorDepth = footprint.depth * wallPixelsPerMeter;
+        Object.assign(floor.style, {width: floorWidth + "px", height: floorDepth + "px",
+          left: (260 - floorWidth) / 2 + "px", top: (160 - floorDepth / 2) + "px"});
+        room.append(floor);
+        const roomWalls = layoutWalls.filter(wall => Math.floor(wall.slot / 4) === roomId);
+        for (const wall of roomWalls) {
           const face = node("div", "", "house-3d-wall");
           face.dataset.wall = wall.id;
-          face.style.transform = wallTransform(wall.slot, wall.placement);
+          face.style.transform = wallTransform(wall.slot, wall.placement, footprint);
+          if (roomWalls.length === 4) faces.push([face, wall.placement?.angle ?? wall.slot % 4 * 90]);
           const name = wall.name || (wallLabels[language()] || wallLabels.nl)[1];
           if (wall.dimensions) {
             const width = wall.dimensions.width_m * wallPixelsPerMeter;
@@ -910,16 +1023,33 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, pr
           const caption = wall.dimensions ? name + " · " + showDimensions(wall.dimensions) : name;
           face.append(node("span", caption, "house-3d-name"));
           if (inventory) {
-            for (const [id, [x, y, size = defaultSize, , angle = 0]] of wallPoints(wall.points)) {
+            const pins = [[0, 0], [100, 0], [0, 100], [100, 100]].map(([left, top]) => {
+              const pin = node("span", "", "house-3d-pin");
+              Object.assign(pin.style, {left: left + "%", top: top + "%"});
+              face.append(pin);
+              return pin;
+            });
+            const save = async (id, point) => {
+              if (busy || savingPlan) return;
+              busy = savingPlan = true;
+              generation++;
+              try {
+                const current = wall.id === wallId;
+                const revision = wall.revision ?? (current ? layout.revision : undefined);
+                const points = wallPoints(wall.points);
+                points.set(id, point);
+                const data = await api(wallPath(wall.id), {action: "layout", revision, points: [...points]});
+                if (current && !requestedWall) receive(data);
+                if (!plan.hidden) renderHouse3d(undefined, planEdit(1));
+              } catch (error) {
+                if (!plan.hidden) renderHouse3d(undefined, error.message === "project_conflict" ? msg(5) : t(25));
+              } finally {
+                busy = savingPlan = false;
+              }
+            };
+            for (const [id, point] of wallPoints(wall.points)) {
               const light = lights.get(id);
-              if (!light) continue;
-              const marker = node("span", "", "house-3d-light");
-              marker.title = light.name;
-              marker.style.left = x + "%";
-              marker.style.top = y + "%";
-              marker.style.width = size + "%";
-              marker.append(rotatedLampImage(light, angle));
-              face.append(marker);
+              if (light) face.append(planLight(light, point, pins, save));
             }
           }
           room.append(face);
@@ -939,6 +1069,9 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, pr
       Object.assign(zoom, {type: "range", min: 35, max: 125, value: camera.zoom ?? initialZoom});
       const rotate = () => {
         camera.pitch = clamp(camera.pitch, -75, 75);
+        for (const [face, angle] of faces) {
+          face.classList.toggle("house-3d-cutaway", Math.cos((camera.yaw + angle) * Math.PI / 180) > .15);
+        }
         world.style.transform = "rotateX(" + camera.pitch + "deg) rotateY(" + camera.yaw + "deg) scale(" + (Number(zoom.value) / 100 * fit) + ")";
       };
       zoom.oninput = () => { camera.zoom = Number(zoom.value); rotate(); };
@@ -978,7 +1111,7 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, pr
           zoom.value = initialZoom;
           rotate();
         }));
-      status.textContent = [message, v(2), !visibleTrees.length && !layoutWalls.some(wall => wall.photo_version || wall.dimensions) && v(6)].filter(Boolean).join(" ");
+      status.textContent = [message, v(2), planEdit(0), !visibleTrees.length && !layoutWalls.some(wall => wall.photo_version || wall.dimensions) && v(6)].filter(Boolean).join(" ");
       plan.append(controls, scene);
       rotate();
       if (message) plan.querySelector(focusSelector)?.focus();
