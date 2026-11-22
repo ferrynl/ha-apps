@@ -472,6 +472,17 @@ test('Mijn Huis saves lamp moves, angles and sizes across browser sessions', asy
  await expect(second.page.locator('.house-marker-lamp .house-led-map')).toHaveCSS('rotate','-35deg');
  const width = await second.page.locator('.house-marker').evaluate(marker => parseFloat(marker.style.width));
  expect(width).toBeCloseTo(22, 0);
+ const before = state.layout.points[0][1];
+ await second.page.locator('.house-marker-lamp').click();
+ const markerBefore = await second.page.locator('.house-marker').boundingBox();
+ await second.page.getByRole('button',{name:'Volle muurbreedte'}).click();
+ await expect.poll(() => state.layout.points[0][1]).toEqual([50,before[1],before[2],0,-35,100]);
+ await expect(second.page.getByLabel('Lampbreedte (% van de muur)')).toHaveValue('100');
+ const full = second.page.locator('.house-marker');
+ await expect(full).toHaveAttribute('style',/width: 100%/);
+ expect((await full.boundingBox()).height).toBeCloseTo(markerBefore.height, 0);
+ await second.page.reload();
+ await expect(full).toHaveAttribute('style',/width: 100%/);
  await second.context.close();
 });
 

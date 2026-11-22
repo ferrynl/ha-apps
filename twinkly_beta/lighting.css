@@ -410,3 +410,6 @@
 .house-floor-wall:active { cursor: grabbing; z-index: 1; }
 .house-floor-lamps article { padding: .5rem 0; }
 .house-floor-lamps h5 { margin: 0 0 .4rem; }
+
+.house-custom-width .house-led-map { height: 100%; aspect-ratio: auto; }
+.house-custom-width .hue-product-photo { object-fit: fill; }
