@@ -1035,6 +1035,7 @@ test('Mijn Huis joins 5 m walls and moves and resizes a light on another wall in
  expect(updates[0].slice(2)).toEqual([16,3,25]);
  await expect(plan.getByText(/Lamp opgeslagen/)).toBeVisible();
  const handle = lamp.locator('.house-3d-resize');
+ await handle.hover();
  const bounds = await handle.boundingBox();
  const direction = await back.locator('.house-3d-pin').evaluateAll(([left,right]) =>
   Math.sign(right.getBoundingClientRect().x - left.getBoundingClientRect().x));
@@ -1047,6 +1048,7 @@ test('Mijn Huis joins 5 m walls and moves and resizes a light on another wall in
  expect(updates[1].slice(0,2)).toEqual(updates[0].slice(0,2));
  expect(updates[1][2]).toBeGreaterThan(16);
  expect(updates[1].slice(3)).toEqual([3,25]);
+ await expect(plan.getByText(/Lamp opgeslagen/)).toBeVisible();
  const resizedWidth = await lamp.evaluate(el => el.style.width);
  await page.reload();
  await open.click();

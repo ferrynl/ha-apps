@@ -1073,7 +1073,7 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, pr
                 points.set(id, point);
                 const data = await api(wallPath(wall.id), {action: "layout", revision, points: [...points]});
                 if (current && !requestedWall) receive(data);
-                if (!plan.hidden) renderHouse3d(undefined, planEdit(1));
+                if (!plan.hidden) renderHouse3d(undefined, planEdit(1), null);
               } catch (error) {
                 if (!plan.hidden) renderHouse3d(undefined, error.message === "project_conflict" ? msg(5) : t(25));
               } finally {
@@ -1151,7 +1151,7 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, pr
       rotate();
       planResize = new ResizeObserver(positionLights);
       planResize.observe(scene);
-      if (message) plan.querySelector(focusSelector)?.focus();
+      if (message && focusSelector) plan.querySelector(focusSelector)?.focus();
     } catch {
       if (request === planGeneration && !plan.hidden) status.textContent = msg(1);
     }

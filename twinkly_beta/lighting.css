@@ -184,7 +184,7 @@
 .house-3d-light:hover > .house-3d-lamp-button,
 .house-3d-light:focus-within > .house-3d-lamp-button { border-color: var(--studio-gold); }
 .house-3d-light > .house-3d-resize { position: absolute; right: -5px; bottom: -5px; width: 13px; height: 13px;
-  min-width: 0; min-height: 0; padding: 0; border: 1px solid #fff; border-radius: 2px;
+  min-width: 0; min-height: 0; padding: 0; border: 1px solid #fff; border-radius: 2px; z-index: 1;
   background: var(--studio-gold); cursor: nwse-resize; opacity: 0; }
 .house-3d-light:hover > .house-3d-resize, .house-3d-light:focus-within > .house-3d-resize { opacity: 1; }
 @media (pointer: coarse) { .house-3d-light > .house-3d-resize { opacity: 1; } }
