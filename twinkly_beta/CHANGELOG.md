@@ -1,3 +1,7 @@
+## 2.0.0-beta.51
+
+- Kamers op Home staan ook in Mijn Huis. Koppel bestaande wanden aan een Home-kamer en bedien de lampen die op Home bij die kamer horen.
+
 ## 2.0.0-beta.50
 
 - In Mijn Huis kun je muren in bovenaanzicht verslepen, kamers benoemen en de lampen per kamer bedienen.

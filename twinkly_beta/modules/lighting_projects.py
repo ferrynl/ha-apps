@@ -326,7 +326,7 @@ def tree_placement(value):
 
 
 def plan_revision(data, slots):
-    parts = [slots, data.get("wall_placements", {}), data.get("room_names", {}), data.get("trees", {})]
+    parts = [slots, data.get("wall_placements", {}), data.get("room_names", {}), data.get("trees", {}), data.get("room_groups", {})]
     return sha256(json.dumps(parts, sort_keys=True).encode()).hexdigest()
 
 
@@ -390,7 +390,7 @@ def install(app, lighting):
                 wall["placement"] = placements[wall_id]
             result.append(wall)
         return web.json_response({"revision": plan_revision(data, slots), "walls": result,
-                                  "room_names": names, "trees": data.get("trees", {})}, headers=HEADERS)
+                                  "room_names": names, "room_groups": data.get("room_groups", {}), "trees": data.get("trees", {})}, headers=HEADERS)
 
     async def overview(request):
         try:
@@ -411,15 +411,19 @@ def install(app, lighting):
                 if not isinstance(name, str) or len(name.strip()) > 60:
                     raise ValueError("Invalid room name")
                 name = name.strip()
+            group = body.get("room_group")
+            if group is not None and (not isinstance(group, str) or not 1 <= len(group) <= 128):
+                raise ValueError("Invalid room group")
             async with lock:
                 latest = await load()
                 slots = plan_slots(latest)
+                links = latest.get("room_groups", {}).copy()
                 placements = latest.get("wall_placements", {}).copy()
                 names = latest.get("room_names", {}).copy()
                 if wall_id not in slots or revision != plan_revision(latest, slots):
                     return web.json_response({"error": "project_conflict"}, status=409, headers=HEADERS)
                 previous = slots[wall_id]
-                if (previous == slot and "room_name" not in body
+                if (previous == slot and "room_name" not in body and "room_group" not in body
                         and ("placement" not in body or placement == placements.get(wall_id))):
                     return overview_response(latest)
                 if previous != slot:
@@ -438,7 +442,13 @@ def install(app, lighting):
                         names[room] = name
                     else:
                         names.pop(room, None)
-                data = {**latest, "plan_slots": slots, "wall_placements": placements, "room_names": names}
+                if "room_group" in body:
+                    room = str(slot // 4)
+                    links = {key: value for key, value in links.items() if key != room and value != group}
+                    if group is not None:
+                        links[room] = group
+                data = {**latest, "plan_slots": slots, "wall_placements": placements,
+                        "room_names": names, "room_groups": links}
                 await asyncio.to_thread(store.write, path, data, PROJECT_LIMIT)
                 state = data
                 return overview_response(data)
