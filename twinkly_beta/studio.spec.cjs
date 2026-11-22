@@ -1017,8 +1017,9 @@ test('Mijn Huis joins 5 m walls and moves and resizes a light on another wall in
   await expect(face).toHaveCSS('height','162.5px');
   await expect(face).toHaveAttribute('style',/translateZ\(162\.5px\)/);
  }
- const back = faces.filter({has:page.locator('.house-3d-light')});
- const marker = back.locator('.house-3d-lamp-button');
+ const back = plan.locator('.house-3d-wall[data-wall="back"]');
+ const lamp = plan.locator('.house-3d-light[data-wall="back"]');
+ const marker = lamp.locator('.house-3d-lamp-button');
  await marker.scrollIntoViewIfNeeded();
  const center = await marker.boundingBox();
  const x = center.x + center.width / 2, y = center.y + center.height / 2;
@@ -1033,7 +1034,7 @@ test('Mijn Huis joins 5 m walls and moves and resizes a light on another wall in
  expect(updates[0][1]).not.toBe(50);
  expect(updates[0].slice(2)).toEqual([16,3,25]);
  await expect(plan.getByText(/Lamp opgeslagen/)).toBeVisible();
- const handle = back.locator('.house-3d-resize');
+ const handle = lamp.locator('.house-3d-resize');
  const bounds = await handle.boundingBox();
  const direction = await back.locator('.house-3d-pin').evaluateAll(([left,right]) =>
   Math.sign(right.getBoundingClientRect().x - left.getBoundingClientRect().x));
@@ -1046,7 +1047,8 @@ test('Mijn Huis joins 5 m walls and moves and resizes a light on another wall in
  expect(updates[1].slice(0,2)).toEqual(updates[0].slice(0,2));
  expect(updates[1][2]).toBeGreaterThan(16);
  expect(updates[1].slice(3)).toEqual([3,25]);
+ const resizedWidth = await lamp.evaluate(el => el.style.width);
  await page.reload();
  await open.click();
- await expect(back.locator('.house-3d-light')).toHaveAttribute('style',/width: (?!16%)[\d.]+%/);
+ await expect.poll(() => lamp.evaluate(el => el.style.width)).toBe(resizedWidth);
 });

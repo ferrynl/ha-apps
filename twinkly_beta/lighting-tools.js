@@ -637,6 +637,7 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, pr
     return frame;
   }
 
+  let planResize;
   let planGeneration = 0;
   let planWall;
   let planRoom = "";
@@ -868,7 +869,7 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, pr
     if (Math.abs(determinant) < 1) return null;
     const g = (dx[2] * dy[1] - dx[1] * dy[2]) / determinant;
     const h = (dx[0] * dy[2] - dx[2] * dy[0]) / determinant;
-    return (x, y) => {
+    const toWall = (x, y) => {
       const A = b.x - a.x + g * (b.x - x), B = c.x - a.x + h * (c.x - x);
       const C = b.y - a.y + g * (b.y - y), D = c.y - a.y + h * (c.y - y);
       const denominator = A * D - B * C;
@@ -876,11 +877,19 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, pr
       return [100 * ((x - a.x) * D - B * (y - a.y)) / denominator,
         100 * (A * (y - a.y) - (x - a.x) * C) / denominator];
     };
+    const toScreen = (x, y) => {
+      const u = x / 100, v = y / 100;
+      const divisor = 1 + g * u + h * v;
+      return [((1 + g) * b.x * u + (1 + h) * c.x * v + a.x * (1 - u - v)) / divisor,
+        ((1 + g) * b.y * u + (1 + h) * c.y * v + a.y * (1 - u - v)) / divisor];
+    };
+    return {toWall, toScreen};
   }
 
-  function planLight(light, point, pins, save) {
+  function planLight(light, point, pins, save, layer, wallId) {
     const [x, y, size = defaultSize, advance = 0, angle = 0] = point;
     const item = node("span", "", "house-3d-light");
+    item.dataset.wall = wallId;
     const marker = node("button", "", "house-3d-lamp-button");
     marker.type = "button";
     marker.setAttribute("aria-label", light.name + " · " + t(32));
@@ -890,24 +899,38 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, pr
     handle.setAttribute("aria-label", h(2) + " · " + light.name);
     handle.title = h(2);
     item.append(marker, handle);
-    const display = ([left, top, width]) => Object.assign(item.style,
-      {left: left + "%", top: top + "%", width: width + "%"});
-    display([x, y, size]);
+    let placement = [x, y, size];
+    const position = () => {
+      const projection = wallProjection(pins);
+      item.hidden = !projection;
+      if (!projection) return;
+      const [left, top, width] = placement;
+      const [cx, cy] = projection.toScreen(left, top);
+      const [ex, ey] = projection.toScreen(left + width / 2, top);
+      const bounds = layer.getBoundingClientRect();
+      Object.assign(item.style, {left: cx - bounds.left + "px", top: cy - bounds.top + "px",
+        width: Math.max(14, 2 * Math.hypot(ex - cx, ey - cy)) + "px"});
+    };
+    const display = values => {
+      placement = values;
+      position();
+    };
+    layer.append(item);
     const commit = values => save(light.id, [...values, advance, angle]);
     for (const control of [marker, handle]) {
       const resize = control === handle;
       control.onpointerdown = event => {
         if (event.button !== 0 || !event.isPrimary || gesture || busy || savingPlan) return;
         event.stopPropagation();
-        const project = wallProjection(pins);
-        const origin = project?.(event.clientX, event.clientY);
+        const projection = wallProjection(pins);
+        const origin = projection?.toWall(event.clientX, event.clientY);
         if (!origin) return;
         gesture = control;
         let values;
         control.setPointerCapture(event.pointerId);
         control.onpointermove = move => {
           if (gesture !== control || move.pointerId !== event.pointerId) return;
-          const local = project(move.clientX, move.clientY);
+          const local = projection.toWall(move.clientX, move.clientY);
           if (!local) return;
           const [dx, dy] = local.map((value, index) => value - origin[index]);
           if (Math.hypot(move.clientX - event.clientX, move.clientY - event.clientY) < 3 && !values) return;
@@ -934,13 +957,19 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, pr
           : [clamp(x + dx, 0, 100), clamp(y + dy, 0, 100), size]);
       };
     }
-    return item;
+    return position;
   }
 
   async function renderHouse3d(snapshot, message, focusSelector = ".house-3d-placement button") {
     if (gesture) return;
     const request = ++planGeneration;
-    const close = action(v(1), () => { plan.hidden = true; openPlan.setAttribute("aria-expanded", "false"); openPlan.focus(); });
+    planResize?.disconnect();
+    const close = action(v(1), () => {
+      planResize?.disconnect();
+      plan.hidden = true;
+      openPlan.setAttribute("aria-expanded", "false");
+      openPlan.focus();
+    });
     const header = node("div", "", "lighting-controls");
     header.append(node("h3", v(0)), action(v(19), () => renderHouse3d()), close);
     const status = node("p");
@@ -960,7 +989,9 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, pr
       scene.tabIndex = 0;
       scene.setAttribute("aria-label", v(0));
       const world = node("div", "", "house-3d-world");
-      scene.append(world);
+      const layer = node("div", "", "house-3d-lights");
+      scene.append(world, layer);
+      const lightPositions = [];
       const groups = inventory?.spatial_groups || {};
       const lights = new Map((inventory?.lights || []).map(light => [light.id, light]));
       for (const [id, group] of Object.entries(groups)) lights.set(id, {...group, id});
@@ -1051,7 +1082,7 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, pr
             };
             for (const [id, point] of wallPoints(wall.points)) {
               const light = lights.get(id);
-              if (light) face.append(planLight(light, point, pins, save));
+              if (light) lightPositions.push(planLight(light, point, pins, save, layer, wall.id));
             }
           }
           room.append(face);
@@ -1069,12 +1100,14 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, pr
       const zoom = node("input");
       const initialZoom = roomCount === 1 ? 76 : 54;
       Object.assign(zoom, {type: "range", min: 35, max: 125, value: camera.zoom ?? initialZoom});
+      const positionLights = () => lightPositions.forEach(position => position());
       const rotate = () => {
         camera.pitch = clamp(camera.pitch, -75, 75);
         for (const [face, angle] of faces) {
           face.classList.toggle("house-3d-cutaway", Math.cos((camera.yaw + angle) * Math.PI / 180) > .15);
         }
         world.style.transform = "rotateX(" + camera.pitch + "deg) rotateY(" + camera.yaw + "deg) scale(" + (Number(zoom.value) / 100 * fit) + ")";
+        positionLights();
       };
       zoom.oninput = () => { camera.zoom = Number(zoom.value); rotate(); };
       let drag;
@@ -1116,6 +1149,8 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, pr
       status.textContent = [message, v(2), planEdit(0), !visibleTrees.length && !layoutWalls.some(wall => wall.photo_version || wall.dimensions) && v(6)].filter(Boolean).join(" ");
       plan.append(controls, scene);
       rotate();
+      planResize = new ResizeObserver(positionLights);
+      planResize.observe(scene);
       if (message) plan.querySelector(focusSelector)?.focus();
     } catch {
       if (request === planGeneration && !plan.hidden) status.textContent = msg(1);
