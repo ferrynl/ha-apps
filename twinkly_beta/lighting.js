@@ -1095,6 +1095,72 @@
     return item;
   }
 
+  function demoShow(opener) {
+    const labels = ({
+      nl: ["Demo lichtshow", "Start", "Stop", "Kies een kamer op Home met kleurlampen.", "Klaar", "De kamer heeft de kleurwissel niet bevestigd."],
+      en: ["Demo light show", "Start", "Stop", "Choose a room on Home with colour lights.", "Finished", "The room did not confirm the colour change."],
+      de: ["Demo-Lichtshow", "Start", "Stopp", "Wähle auf Home einen Raum mit Farblampen.", "Fertig", "Der Raum hat den Farbwechsel nicht bestätigt."],
+      es: ["Demostración de luces", "Iniciar", "Detener", "Elige una habitación de Inicio con luces de color.", "Finalizado", "La habitación no confirmó el cambio de color."],
+    })[el("language").value] || ["Demo light show", "Start", "Stop", "Choose a room on Home with colour lights.", "Finished", "The room did not confirm the colour change."];
+    const rooms = Object.entries(data?.groups || {}).filter(([, group]) => group.kind === "room" &&
+      data.lights.some(light => group.members.includes(light.id) && light.capabilities?.rgb));
+    const room = node("select");
+    for (const [id, group] of rooms) room.add(new Option(group.name, id));
+    const content = node("div");
+    const preview = node("div", "✦", "mixer-demo-preview");
+    preview.setAttribute("aria-hidden", "true");
+    const controls = node("div", "", "lighting-controls");
+    const palette = [[225,38,69], [24,170,91], [255,173,68], [100,68,238], [255,214,148]];
+    let running = false, timer, run = 0;
+    const stop = (message = "") => {
+      running = false;
+      run++;
+      clearTimeout(timer);
+      preview.classList.remove("is-playing");
+      room.disabled = false;
+      start.disabled = !rooms.length;
+      end.disabled = true;
+      status.textContent = message;
+    };
+    const start = button(labels[1], () => {
+      if (running || !room.value) return;
+      running = true;
+      room.disabled = start.disabled = true;
+      end.disabled = false;
+      status.textContent = "";
+      const group = room.value;
+      const currentRun = ++run;
+      preview.classList.add("is-playing");
+      const step = async index => {
+        if (currentRun !== run) return;
+        if (index === palette.length) return stop(labels[4]);
+        const color = palette[index];
+        preview.style.setProperty("--demo-color", "rgb(" + color.join(",") + ")");
+        try {
+          const result = await api("lighting/control", {group, action:"color", value:color});
+          if (currentRun !== run) return;
+          if (!Object.values(result.results || {}).some(value => value === "accepted" || value === "unconfirmed")) {
+            stop(labels[5]);
+            return;
+          }
+          timer = setTimeout(() => step(index + 1), 1600);
+        } catch {
+          if (currentRun === run) stop(labels[5]);
+        }
+      };
+      step(0);
+    });
+    const end = button(labels[2], () => stop());
+    const status = node("p", rooms.length ? "" : labels[3]);
+    status.setAttribute("role", "status");
+    start.disabled = room.disabled = !rooms.length;
+    end.disabled = true;
+    controls.append(field(h(3), room), start, end);
+    content.append(preview, controls, status);
+    const dialog = openDialog(labels[0], content, opener);
+    dialog.addEventListener("close", () => stop(), {once:true});
+  }
+
   function renderMixer() {
     const mixer = node("section", "", "home-mixer");
     const header = node("header", "", "mixer-header");
@@ -1112,7 +1178,8 @@
     const add = mixerButton(h(6), "add-light", addLight);
     add.className = "mixer-add";
     add.disabled = !data;
-    tools.append(mixerButton(t(2), "refresh", () => refresh()), add);
+    const demoLabel = ({nl:"Demo lichtshow", en:"Demo light show", de:"Demo-Lichtshow", es:"Demostración de luces"})[el("language").value] || "Demo light show";
+    tools.append(mixerButton(t(2), "refresh", () => refresh()), add, mixerButton(demoLabel, "demo-show", demoShow));
     header.append(node("h2", h(0)), brandBar, tools);
     mixer.append(header);
     if (!data) {

@@ -1,4 +1,6 @@
 from contextlib import asynccontextmanager
+from pathlib import Path
+from tempfile import TemporaryDirectory
 import unittest
 from unittest.mock import patch
 
@@ -29,9 +31,9 @@ async def can_control(device):
 
 
 class GoveeCloudTests(unittest.IsolatedAsyncioTestCase):
-    async def client(self, key=None):
+    async def client(self, key=None, cache_path=None):
         app = web.Application()
-        install(app, key, can_control)
+        install(app, key, can_control, cache_path)
         client = TestClient(TestServer(app))
         await client.start_server()
         self.addAsyncCleanup(client.close)
@@ -57,7 +59,7 @@ class GoveeCloudTests(unittest.IsolatedAsyncioTestCase):
         with patch.object(GoveeCloud, "request", autospec=True, side_effect=request):
             root = "/providers/govee/cloud"
             settings = await (await client.get(root)).json()
-            self.assertEqual(settings, {"configured": True})
+            self.assertEqual(settings, {"configured": True, "devices": []})
             self.assertEqual(calls, [])
             devices = await (await client.post(root + "/devices", json={})).json()
             self.assertEqual(devices, {"devices": [{"id": ID, "name": "Woonkamer", "sku": "H605C"}]})
@@ -94,7 +96,21 @@ class GoveeCloudTests(unittest.IsolatedAsyncioTestCase):
     async def test_disabled_returns_no_configured_key(self):
         client = await self.client()
         root = "/providers/govee/cloud"
-        self.assertEqual(await (await client.get(root)).json(), {"configured": False})
+        self.assertEqual(await (await client.get(root)).json(), {"configured": False, "devices": []})
         response = await client.post(root + "/devices", json={})
         self.assertEqual(response.status, 409)
         self.assertEqual(await response.json(), {"error": "disabled"})
+
+    async def test_synced_devices_persist_and_are_scoped_to_the_key(self):
+        with TemporaryDirectory() as directory:
+            path = Path(directory) / "govee.json"
+            client = await self.client("test-credential", path)
+            root = "/providers/govee/cloud"
+            payload = {"data": [{"device": ID, "sku": "H605C", "type": "devices.types.light"}]}
+            with patch.object(GoveeCloud, "request", return_value=payload) as request:
+                await client.post(root + "/devices", json={})
+                reopened = await self.client("test-credential", path)
+                self.assertEqual((await (await reopened.get(root)).json())["devices"][0]["id"], ID)
+                other_account = await self.client("different-credential", path)
+                self.assertEqual((await (await other_account.get(root)).json())["devices"], [])
+                request.assert_awaited_once()

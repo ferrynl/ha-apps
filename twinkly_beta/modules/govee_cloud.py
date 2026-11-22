@@ -9,6 +9,7 @@ from uuid import uuid4
 from aiohttp import ClientError, ClientSession, ClientTimeout, web
 
 from .common import RateGate, rgb
+from .provider_store import ProviderStore
 
 BASE = "https://openapi.api.govee.com/router/api/v1"
 SEGMENT_TYPE = "devices.capabilities.segment_color_setting"
@@ -94,11 +95,19 @@ def scene_options(capabilities):
 
 
 class GoveeCloud:
-    def __init__(self, key):
+    def __init__(self, key, cache_path=None):
         self.key = key.strip() if isinstance(key, str) and re.fullmatch(r"\s*[\x21-\x7e]{1,128}\s*", key) else ""
         self.device_cache = {}
         self.scene_cache = {}
-        self.devices_until = 0
+        self.cache_path = cache_path
+        self.account = sha256(self.key.encode()).hexdigest()
+        if self.key and cache_path is not None:
+            try:
+                saved = ProviderStore.read(cache_path, {}, 4 * 1024 * 1024)
+                if saved.get("account") == self.account and isinstance(saved.get("devices"), dict):
+                    self.device_cache = saved["devices"]
+            except (OSError, ValueError, AttributeError, RecursionError):
+                pass
         self.lock = asyncio.Lock()
         self.commands = RateGate(.5)
 
@@ -134,8 +143,6 @@ class GoveeCloud:
 
     async def devices(self):
         async with self.lock:
-            if monotonic() < self.devices_until:
-                return self.device_cache
             result = await self.request("GET", "/user/devices")
             if not isinstance(result.get("data"), list):
                 raise CloudError("cloud_failed", 502)
@@ -149,15 +156,20 @@ class GoveeCloud:
                     continue
                 devices[identifier] = {"id": identifier, "sku": sku, "name": name[:128] if isinstance(name, str) and name else sku,
                                        "caps": list(objects(item.get("capabilities")))}
+            if self.cache_path is not None:
+                try:
+                    await asyncio.to_thread(ProviderStore.write, self.cache_path,
+                                            {"account": self.account, "devices": devices}, 4 * 1024 * 1024)
+                except (OSError, ValueError):
+                    raise CloudError("cloud_failed", 502) from None
             self.device_cache = devices
-            self.devices_until = monotonic() + 60
             self.scene_cache = {key: row for key, row in self.scene_cache.items() if key[0] in devices}
             return devices
 
     async def device(self, identifier):
         if not isinstance(identifier, str):
             raise ValueError("Invalid device")
-        device = (await self.devices()).get(identifier)
+        device = self.device_cache.get(identifier)
         if device is None:
             raise CloudError("unknown_device", 404)
         return device
@@ -228,22 +240,24 @@ class GoveeCloud:
         ))
 
 
-def install(app, key, control_context):
-    cloud = GoveeCloud(key)
+def install(app, key, control_context, cache_path=None):
+    cloud = GoveeCloud(key, cache_path)
 
     def response(value, status=200):
         return web.json_response(value, status=status, headers=HEADERS)
 
+    def public_devices(devices):
+        return [{key: row[key] for key in ("id", "sku", "name")} for row in devices.values()]
+
     async def status(request):
-        return response({"configured": bool(cloud.key)})
+        return response({"configured": bool(cloud.key), "devices": public_devices(cloud.device_cache)})
 
     async def manage(request):
         try:
             operation = request.match_info["operation"]
             if operation == "devices":
                 devices = await cloud.devices()
-                return response({"devices": [{key: row[key] for key in ("id", "sku", "name")}
-                                             for row in devices.values()]})
+                return response({"devices": public_devices(devices)})
             body = await request.json()
             device = await cloud.device(body["device"])
             if operation == "details":

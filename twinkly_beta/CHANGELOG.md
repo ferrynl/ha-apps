@@ -1,3 +1,8 @@
+## 2.0.0-beta.54
+
+- Govee bewaart de gesynchroniseerde cloudlampen op de server. Gebruik Synchroniseren als je de lijst wilt vernieuwen.
+- Start op Home een demo met vijf kleurwissels voor een gekozen kamer.
+
 ## 2.0.0-beta.53
 
 - Stel de breedte van een geplaatste lamp apart in, tot 100% van de muur. De bestaande hoogte blijft behouden.
