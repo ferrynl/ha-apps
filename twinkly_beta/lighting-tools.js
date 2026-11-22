@@ -1157,9 +1157,9 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, pr
     try {
       snapshot ??= await api(planPath);
       if (request !== planGeneration || plan.hidden) return;
-      const {links, groups} = homeRooms(snapshot);
+      const {links, groups: linkedGroups} = homeRooms(snapshot);
       const roomNames = {...snapshot.room_names};
-      for (const [room, id] of Object.entries(links)) if (groups.has(id)) roomNames[room] = groups.get(id).name;
+      for (const [room, id] of Object.entries(links)) if (linkedGroups.has(id)) roomNames[room] = linkedGroups.get(id).name;
       const layoutWalls = snapshot.walls.map((wall, index) => ({...wall, slot: wall.slot ?? index}));
       if (!layoutWalls.length) {
         status.textContent = v(6);
