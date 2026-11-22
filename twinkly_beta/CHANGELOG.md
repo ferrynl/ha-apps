@@ -1,3 +1,7 @@
+## 2.0.0-beta.52
+
+- Kies direct onder elke muur op de 2D-plattegrond de kamer. De app zoekt een vrije wandzijde en slaat de keuze meteen op.
+
 ## 2.0.0-beta.51
 
 - Kamers op Home staan ook in Mijn Huis. Koppel bestaande wanden aan een Home-kamer en bedien de lampen die op Home bij die kamer horen.

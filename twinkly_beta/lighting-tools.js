@@ -952,7 +952,8 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, pr
         const label = action(roomName(id), () => selectRoom(id));
         label.dataset.room = id;
         const canvas = node("div", "", "house-floor-canvas");
-        area.append(label, canvas);
+        const assignments = node("div", "", "lighting-controls");
+        area.append(label, canvas, assignments);
         areas.append(area);
         const footprint = roomFootprint(walls, id);
         const assigned = walls.filter(wall => Math.floor(wall.slot / 4) === id);
@@ -979,21 +980,51 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, pr
             transform: "translate(-50%, -50%) rotate(" + (-angle) + "deg)",
           });
           draw(start);
-          const save = async position => {
+          const save = async (changes, targetRoom = id) => {
             if (savingPlan) return;
+            roomChoice.disabled = true;
             savingPlan = true;
             try {
-              update(await api(planPath, {wall: wall.id, slot: wall.slot, revision: snapshot.revision, placement: position}));
+              const updated = await api(planPath, {wall: wall.id, slot: wall.slot, revision: snapshot.revision, ...changes});
+              floorRoom = targetRoom;
+              update(updated);
             } catch (error) {
               if (error.message === "project_conflict") renderFloorPlan(undefined, msg(5));
               else {
                 draw(start);
+                roomChoice.value = String(id);
                 status.textContent = t(25);
               }
             } finally {
               savingPlan = false;
+              roomChoice.disabled = false;
             }
           };
+          const destinations = new Map();
+          const used = new Set(walls.map(item => item.slot));
+          const roomChoice = dropdown(ids.map(room => {
+            if (room !== id) {
+              const preferred = room * 4 + side;
+              const slots = [preferred, ...Array.from({length: 4}, (_, side) => room * 4 + side)];
+              const free = slots.find(slot => !used.has(slot));
+              if (free !== undefined) destinations.set(room, free);
+            }
+            return [String(room), roomName(room)];
+          }), String(id));
+          for (const option of roomChoice.options) {
+            option.disabled = Number(option.value) !== id && !destinations.has(Number(option.value));
+          }
+          roomChoice.onchange = () => {
+            const room = Number(roomChoice.value);
+            if (!destinations.has(room) || savingPlan) {
+              roomChoice.value = String(id);
+              return;
+            }
+            const group = links[room];
+            save({slot: destinations.get(room), ...(groups.has(group) && {room_group: group})}, room);
+          };
+          const labelText = ({nl:"Kamer voor",en:"Room for",de:"Raum für",es:"Habitación para"})[language()] || "Room for";
+          assignments.append(field(labelText + " " + button.textContent, roomChoice));
           const offset = (dx, dz) => ({...start,
             x_m: Math.round(clamp(start.x_m + dx, -20, 20) * 100) / 100,
             z_m: Math.round(clamp(start.z_m + dz, -20, 20) * 100) / 100});
@@ -1013,7 +1044,7 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, pr
             button.onpointerup = button.onpointercancel = button.onlostpointercapture = end => {
               if (gesture !== button || end.pointerId !== event.pointerId) return;
               gesture = undefined;
-              if (position && end.type === "pointerup") save(position);
+              if (position && end.type === "pointerup") save({placement: position});
               else draw(start);
             };
           };
@@ -1021,7 +1052,7 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, pr
             const step = {ArrowLeft: [-.1, 0], ArrowRight: [.1, 0], ArrowUp: [0, -.1], ArrowDown: [0, .1]}[event.key];
             if (!step) return;
             event.preventDefault();
-            save(offset(...step));
+            save({placement: offset(...step)});
           };
         }
       }
