@@ -1054,3 +1054,48 @@ test('Mijn Huis joins 5 m walls and moves and resizes a light on another wall in
  await open.click();
  await expect.poll(() => lamp.evaluate(el => el.style.width)).toBe(resizedWidth);
 });
+
+test('2D floor plan saves wall drag and controls the selected room light', async ({page}) => {
+ const light = {id:'lamp',name:'Testlamp',provider:'hue',status:'online',capabilities:{power:true},state:{on:false}};
+ const walls = [{id:'default',slot:0,name:'Voorwand',points:[],dimensions:{width_m:5,height_m:2.5}},
+  {id:'office',slot:4,name:'Kantoormuur',points:[[light.id,[50,50,10]]],dimensions:{width_m:4,height_m:2.5}}];
+ const snapshot = {revision:'first',walls,room_names:{1:'Kantoor'}};
+ const moves = [], commands = [];
+ await page.route('**/lighting', route => route.fulfill({json:{lights:[light],groups:{},scenes:{},connections:{}}}));
+ await page.route('**/lighting/projects', route => route.fulfill({json:{
+  walls,wall_id:'default',shows:[],layout:{...walls[0],revision:'layout'},playback:{state:'idle'},
+ }}));
+ await page.route('**/lighting/projects/overview', route => {
+  if (route.request().method() === 'POST') {
+   const body = route.request().postDataJSON();
+   expect(body.revision).toBe(snapshot.revision);
+   moves.push(body);
+   walls[1].placement = body.placement;
+   snapshot.revision = 'next';
+  }
+  return route.fulfill({json:snapshot});
+ });
+ await page.route('**/lighting/control', route => {
+  commands.push(route.request().postDataJSON());
+  return route.fulfill({json:{results:{lamp:'accepted'}}});
+ });
+ await page.goto('http://127.0.0.1:8765/index.html#mijn-huis');
+ await page.getByRole('button',{name:'2D-plattegrond',exact:true}).click();
+ const floor = page.locator('.house-floor-plan');
+ await expect(floor.getByText('Geen lampen op de muren van deze kamer.')).toBeVisible();
+ await floor.getByRole('button',{name:'Kantoor',exact:true}).click();
+ await expect(floor.getByRole('heading',{name:'Testlamp'})).toBeVisible();
+ await floor.getByRole('button',{name:'Aan',exact:true}).click();
+ await expect.poll(() => commands).toEqual([{id:'lamp',action:'power',value:true}]);
+ const wall = floor.getByRole('button',{name:'Verplaats Kantoormuur'});
+ await wall.scrollIntoViewIfNeeded();
+ const box = await wall.boundingBox();
+ const x = box.x + box.width / 2, y = box.y + box.height / 2;
+ await page.mouse.move(x,y);
+ await page.mouse.down();
+ await page.mouse.move(x+30,y-15,{steps:5});
+ await page.mouse.up();
+ await expect.poll(() => moves.length).toBe(1);
+ expect(moves[0]).toMatchObject({wall:'office',slot:4,placement:{angle:0}});
+ expect(moves[0].placement.x_m).toBeGreaterThan(0);
+});

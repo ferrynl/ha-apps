@@ -20,7 +20,7 @@ function hueProductImage(light, fallback) {
   return image;
 }
 
-window.createLightingTools = ({mount, house, nav, api, node, field, language, productPhotoSettings}) => {
+window.createLightingTools = ({mount, house, nav, api, node, field, language, productPhotoSettings, roomLightControls}) => {
   const labels = {
     nl: ["Showbouwer", "Shownaam", "Scène", "Wachttijd (sec.)", "Stap toevoegen", "Omhoog", "Omlaag", "Verwijderen", "Opslaan", "Afspelen", "Stoppen", "Maak eerst een scène voor een gemengde groep op Home.", "Stap", "Show klaar", "Show gestopt", "Show onderbroken", "Geen bevestiging", "Spatial Light Studio", "Kies een foto", "Kies een lamp", "Plaats in het midden", "Verwijder plaatsing", "Klik op de foto om de gekozen lamp te plaatsen. Verplaats een markering met de pijltjestoetsen.", "Foto wissen", "Kies een geldige JPG, PNG of WebP van maximaal 15 MB.", "Opslaan op de server is mislukt.", "Shows en foto-indeling staan op je Home Assistant-server. Een show loopt door als je de pagina sluit.", "Groep", "Nieuwe show", "Bewerken", "Definieer minimaal één geldige stap.", "Onbekende lamp", "Locatie", "Foto van de ruimte", "Scène of groep ontbreekt", "Opdrachten gedeeltelijk uitgevoerd"],
     en: ["Show builder", "Show name", "Scene", "Hold (sec.)", "Add step", "Move up", "Move down", "Remove", "Save", "Play", "Stop", "First create a scene for a mixed group on Home.", "Step", "Show complete", "Show stopped", "Show interrupted", "Unconfirmed", "Spatial Light Studio", "Choose a photo", "Choose a light", "Place in the centre", "Remove placement", "Click the photo to place the selected light. Move a marker with the arrow keys.", "Clear photo", "Choose a valid JPG, PNG or WebP up to 15 MB.", "Could not save to the server.", "Shows and photo layouts are saved on your Home Assistant server. Playback continues when you close this page.", "Group", "New show", "Edit", "Add at least one valid step.", "Unknown light", "Position", "Photo of the space", "Scene or group missing", "Some commands did not complete"],
@@ -138,7 +138,15 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, pr
     if (!plan.hidden) renderHouse3d();
   });
   openPlan.setAttribute("aria-expanded", "false");
-  house.append(houseTitle, guide, openPlan, plan, wallPicker, spatialSection);
+  const floorPlan = node("section", "", "house-floor-plan");
+  floorPlan.hidden = true;
+  const openFloor = action("", () => {
+    floorPlan.hidden = !floorPlan.hidden;
+    openFloor.setAttribute("aria-expanded", String(!floorPlan.hidden));
+    if (!floorPlan.hidden) renderFloorPlan();
+  });
+  openFloor.setAttribute("aria-expanded", "false");
+  house.append(houseTitle, guide, openFloor, floorPlan, openPlan, plan, wallPicker, spatialSection);
   function renderWallGuide() {
     const current = language();
     if (guideLanguage === current) return;
@@ -684,14 +692,15 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, pr
     return format.format(dimensions.width_m) + " × " + format.format(dimensions.height_m) + " m";
   }
 
-  function planPlacement(snapshot, walls) {
+  function planPlacement(snapshot, walls, onSaved, isFloor = false) {
     if (!snapshot.revision) return undefined;
+    let selectedWall = isFloor ? floorWall : planWall;
     const wallNames = walls.map(wall => [wall.id, wall.name || (wallLabels[language()] || wallLabels.nl)[1]]);
-    if (!walls.some(wall => wall.id === planWall)) planWall = walls.find(wall => wall.id === wallId)?.id || walls[0].id;
-    const selectWall = dropdown(wallNames, planWall);
+    if (!walls.some(wall => wall.id === selectedWall)) selectedWall = walls.find(wall => wall.id === wallId)?.id || walls[0].id;
+    const selectWall = dropdown(wallNames, selectedWall);
     const slots = Array.from({length: planSlots}, (_, slot) => [String(slot),
       roomLabel(Math.floor(slot / 4), snapshot.room_names) + " · " + v(13 + slot % 4)]);
-    const currentWall = () => walls.find(wall => wall.id === planWall);
+    const currentWall = () => walls.find(wall => wall.id === selectedWall);
     const destination = dropdown(slots, String(currentWall().slot));
     const coordinate = (limit, step) => Object.assign(node("input"),
       {type: "number", min: -limit, max: limit, step, required: true});
@@ -708,10 +717,11 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, pr
     const inputs = [x, z, angle];
     const validCoordinates = () => inputs.every(input => input.validity.valid);
     const preview = () => {
+      if (isFloor) return;
       for (const face of plan.querySelectorAll(".house-3d-wall")) {
         const original = walls.find(wall => wall.id === face.dataset.wall);
         if (!original) continue;
-        const editing = original.id === planWall && original.slot === Number(destination.value) && validCoordinates();
+        const editing = original.id === selectedWall && original.slot === Number(destination.value) && validCoordinates();
         face.style.transform = wallTransform(original.slot, editing ? (custom ? transform() : null) : original.placement,
           roomFootprint(walls, Math.floor(original.slot / 4)));
       }
@@ -740,17 +750,18 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, pr
       event.preventDefault();
       if (savingPlan) return;
       savingPlan = true;
-      const body = {wall: planWall, slot: Number(destination.value), revision: snapshot.revision};
+      const body = {wall: selectedWall, slot: Number(destination.value), revision: snapshot.revision};
       if (custom || currentWall().placement) body.placement = custom ? transform() : null;
       if (roomName.value.trim() !== savedRoomName()) body.room_name = roomName.value.trim();
       const controls = [selectWall, destination, ...inputs, roomName, save, reset];
       controls.forEach(control => { control.disabled = true; });
       try {
         const updated = await api(planPath, body);
-        if (!plan.hidden) renderHouse3d(updated, v(21));
+        onSaved(updated);
       } catch (error) {
-        if (error.message === "project_conflict" && !plan.hidden) {
-          renderHouse3d(undefined, msg(5));
+        if (error.message === "project_conflict") {
+          if (isFloor && !floorPlan.hidden) renderFloorPlan(undefined, msg(5));
+          if (!isFloor && !plan.hidden) renderHouse3d(undefined, msg(5));
         } else {
           feedback.textContent = t(25);
         }
@@ -760,7 +771,9 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, pr
       }
     };
     selectWall.onchange = () => {
-      planWall = selectWall.value;
+      selectedWall = selectWall.value;
+      if (isFloor) floorWall = selectedWall;
+      else planWall = selectedWall;
       destination.value = String(currentWall().slot);
       fill(currentWall().placement);
       fillRoomName();
@@ -850,6 +863,147 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, pr
     form.append(field(treeText(1), room), ...inputs.map((input, index) => field(treeText(index + 2), input)), save, remove);
     panel.append(node("summary", treeText(0)), form, feedback);
     return panel;
+  }
+
+  const floorWords = {
+    nl: ["2D-plattegrond", "Sleep muren naar hun plek. Kies een kamer om de lampen te bedienen.", "Lampen in", "Geen lampen op de muren van deze kamer.", "Verplaats"],
+    en: ["2D floor plan", "Drag walls into place. Select a room to control its lights.", "Lights in", "No lights on the walls of this room.", "Move"],
+    de: ["2D-Grundriss", "Wände ziehen. Wähle einen Raum, um seine Lampen zu steuern.", "Lampen in", "Keine Lampen an den Wänden dieses Raums.", "Verschieben"],
+    es: ["Plano 2D", "Arrastra las paredes. Elige una habitación para controlar sus luces.", "Luces en", "No hay luces en las paredes de esta habitación.", "Mover"],
+  };
+  const floorText = index => (floorWords[language()] || floorWords.nl)[index];
+  let floorRoom;
+  let floorWall;
+  let floorGeneration = 0;
+
+  async function renderFloorPlan(snapshot, message = "") {
+    const request = ++floorGeneration;
+    const status = node("p", message);
+    status.setAttribute("role", "status");
+    try {
+      snapshot ??= await api(planPath);
+      if (request !== floorGeneration || floorPlan.hidden) return;
+      const walls = snapshot.walls;
+      floorPlan.replaceChildren(node("h3", floorText(0)), node("p", floorText(1)), status);
+      if (!walls.length) return;
+      const ids = [...new Set(walls.map(wall => Math.floor(wall.slot / 4)))];
+      if (!ids.includes(floorRoom)) floorRoom = ids[0];
+      const roomName = id => roomLabel(id, snapshot.room_names);
+      const update = updated => {
+        if (!floorPlan.hidden) renderFloorPlan(updated, v(21));
+        if (!plan.hidden) renderHouse3d(updated);
+      };
+      floorPlan.append(planPlacement(snapshot, walls, update, true));
+      const areas = node("div", "", "house-floor-rooms");
+      const lamps = node("div", "", "house-floor-lamps");
+      floorPlan.append(areas, lamps);
+      function selectRoom(id) {
+        floorRoom = id;
+        for (const button of areas.querySelectorAll("[data-room]")) {
+          button.setAttribute("aria-pressed", String(Number(button.dataset.room) === id));
+        }
+        lamps.replaceChildren(node("h4", floorText(2) + " " + roomName(id)));
+        const ids = new Set();
+        for (const wall of walls.filter(item => Math.floor(item.slot / 4) === id)) {
+          for (const [lightId] of wall.points) {
+            for (const member of inventory?.spatial_groups?.[lightId]?.members || [lightId]) ids.add(member);
+          }
+        }
+        const lights = (inventory?.lights || []).filter(light => ids.has(light.id));
+        if (lights.length) {
+          const feedback = node("p");
+          feedback.setAttribute("role", "status");
+          for (const light of lights) {
+            const card = node("article");
+            card.append(node("h5", light.name));
+            roomLightControls(card, light, feedback);
+            lamps.append(card);
+          }
+          lamps.append(feedback);
+        } else lamps.append(node("p", floorText(3)));
+      }
+      for (const id of ids) {
+        const area = node("article");
+        const label = action(roomName(id), () => selectRoom(id));
+        label.dataset.room = id;
+        const canvas = node("div", "", "house-floor-canvas");
+        area.append(label, canvas);
+        areas.append(area);
+        const footprint = roomFootprint(walls, id);
+        const assigned = walls.filter(wall => Math.floor(wall.slot / 4) === id);
+        const span = Math.max(footprint.width, footprint.depth, ...assigned.map(wall => {
+          const position = wall.placement;
+          return position ? 2 * Math.max(Math.abs(position.x_m), Math.abs(position.z_m)) + (wall.dimensions?.width_m || 4) : 0;
+        }));
+        const scale = 72 / span;
+        const floor = node("span", "", "house-floor-outline");
+        floor.style.width = footprint.width * scale + "%";
+        floor.style.height = footprint.depth * scale + "%";
+        canvas.append(floor);
+        for (const wall of assigned) {
+          const side = wall.slot % 4;
+          const start = wall.placement || {x_m: [0, footprint.width / 2, 0, -footprint.width / 2][side],
+            z_m: [footprint.depth / 2, 0, -footprint.depth / 2, 0][side], angle: [0, 90, 180, -90][side]};
+          const button = action(wall.name || v(13 + side), () => selectRoom(id));
+          button.className = "house-floor-wall";
+          button.setAttribute("aria-label", floorText(4) + " " + button.textContent);
+          canvas.append(button);
+          const draw = ({x_m, z_m, angle}) => Object.assign(button.style, {
+            left: 50 + x_m * scale + "%", top: 50 + z_m * scale + "%",
+            width: (wall.dimensions?.width_m || 4) * scale + "%",
+            transform: "translate(-50%, -50%) rotate(" + (-angle) + "deg)",
+          });
+          draw(start);
+          const save = async position => {
+            if (savingPlan) return;
+            savingPlan = true;
+            try {
+              update(await api(planPath, {wall: wall.id, slot: wall.slot, revision: snapshot.revision, placement: position}));
+            } catch (error) {
+              if (error.message === "project_conflict") renderFloorPlan(undefined, msg(5));
+              else {
+                draw(start);
+                status.textContent = t(25);
+              }
+            } finally {
+              savingPlan = false;
+            }
+          };
+          const offset = (dx, dz) => ({...start,
+            x_m: Math.round(clamp(start.x_m + dx, -20, 20) * 100) / 100,
+            z_m: Math.round(clamp(start.z_m + dz, -20, 20) * 100) / 100});
+          button.onpointerdown = event => {
+            if (event.button !== 0 || !event.isPrimary || gesture || savingPlan) return;
+            gesture = button;
+            button.setPointerCapture(event.pointerId);
+            const ratio = canvas.clientWidth * scale / 100;
+            let position;
+            button.onpointermove = move => {
+              if (gesture !== button || move.pointerId !== event.pointerId) return;
+              const dx = move.clientX - event.clientX, dz = move.clientY - event.clientY;
+              if (!position && Math.hypot(dx, dz) < 3) return;
+              position = offset(dx / ratio, dz / ratio);
+              draw(position);
+            };
+            button.onpointerup = button.onpointercancel = button.onlostpointercapture = end => {
+              if (gesture !== button || end.pointerId !== event.pointerId) return;
+              gesture = undefined;
+              if (position && end.type === "pointerup") save(position);
+              else draw(start);
+            };
+          };
+          button.onkeydown = event => {
+            const step = {ArrowLeft: [-.1, 0], ArrowRight: [.1, 0], ArrowUp: [0, -.1], ArrowDown: [0, .1]}[event.key];
+            if (!step) return;
+            event.preventDefault();
+            save(offset(...step));
+          };
+        }
+      }
+      selectRoom(floorRoom);
+    } catch {
+      if (request === floorGeneration) floorPlan.replaceChildren(node("p", msg(1)));
+    }
   }
 
   const planEditWords = {
@@ -983,7 +1137,10 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, pr
         status.textContent = v(6);
         return;
       }
-      const placement = planPlacement(snapshot, layoutWalls);
+      const placement = planPlacement(snapshot, layoutWalls, updated => {
+        if (!plan.hidden) renderHouse3d(updated, v(21));
+        if (!floorPlan.hidden) renderFloorPlan(updated);
+      });
       if (placement) plan.append(placement);
       const scene = node("div", "", "house-3d-scene");
       scene.tabIndex = 0;
@@ -1535,6 +1692,7 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, pr
     if (page === "house") {
       renderWallGuide();
       openPlan.textContent = v(0);
+      openFloor.textContent = floorText(0);
       if (initialized) renderWallPicker();
     }
     nav.setAttribute("aria-current", page === "house" ? "page" : "false");
@@ -1559,6 +1717,7 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, pr
       renderShows();
       renderSpatial();
       if (page === "house" && !plan.hidden && !savingPlan) renderHouse3d();
+      if (page === "house" && !floorPlan.hidden && !savingPlan) renderFloorPlan();
       updatePlaybackStatus();
     }
     if (page === "house") refreshEffectButtons?.();
