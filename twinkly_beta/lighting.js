@@ -170,7 +170,7 @@
     return result;
   }
 
-  function controls(card, lights, target, state = {}, mixer = false) {
+  function controls(card, lights, target, state = {}, mixer = false, controlFeedback = feedback) {
     const available = lights.filter(light => light.status !== "unavailable");
     const capable = key => available.some(light => light.capabilities[key]);
     const row = node("div", "", "lighting-controls");
@@ -186,7 +186,7 @@
         const result = await request("control", {
           group: target.twinklyGroup, action: mode, value: action === "color" ? stateColor(value) : value,
         });
-        feedback.textContent = controlResult(result);
+        controlFeedback.textContent = controlResult(result);
         const accepted = lights.length > (result.offline?.length || 0) + result.failed.length;
         if (mixer && accepted) remember(action, value);
         if (!mixer || action === "power") await refresh(false);
@@ -194,7 +194,7 @@
       }
       const result = await api("lighting/control", {...target, action, value});
       const outcomes = ["accepted", "unconfirmed", "skipped", "failed"];
-      feedback.textContent = outcomes.map((outcome, i) => {
+      controlFeedback.textContent = outcomes.map((outcome, i) => {
         const count = Object.values(result.results).filter(value => value === outcome).length;
         return count ? t(29 + i) + " · " + count : "";
       }).filter(Boolean).join(" / ");
@@ -992,6 +992,7 @@
   const renderTools = window.createLightingTools({
     mount: el("lighting-tools"), house: el("house-page"), nav: el("nav-house"), api, node, field,
     language: () => el("language").value, productPhotoSettings,
+    roomLightControls: (card, light, status) => controls(card, [light], {id: light.id}, light.state, false, status),
   });
 
   function openDialog(title, content, opener) {

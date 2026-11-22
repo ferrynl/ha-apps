@@ -395,3 +395,18 @@
 .hue-product-settings summary { display: list-item; width: fit-content; max-width: 100%; cursor: pointer;
   border: 1px solid var(--studio-gold); border-radius: .5rem; padding: .45rem .65rem; }
 .hue-product-settings summary:focus-visible { outline: 2px solid var(--studio-gold); outline-offset: 3px; }
+
+.house-floor-rooms { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); gap: 1rem; }
+.house-floor-rooms > article { min-width: 0; }
+.house-floor-rooms button[aria-pressed="true"] { border-color: var(--studio-gold); }
+.house-floor-canvas { position: relative; aspect-ratio: 1; overflow: hidden; margin-top: .5rem;
+  background: repeating-linear-gradient(0deg, transparent 0 19px, #ffffff0c 19px 20px),
+    repeating-linear-gradient(90deg, transparent 0 19px, #ffffff0c 19px 20px), #172330; }
+.house-floor-outline { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  border: 1px dashed #91a7b9; background: #3e556845; pointer-events: none; }
+.house-floor-canvas .house-floor-wall { position: absolute; padding: 2px; min-width: 0;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; touch-action: none;
+  cursor: grab; border-radius: 3px; background: #354b60; }
+.house-floor-wall:active { cursor: grabbing; z-index: 1; }
+.house-floor-lamps article { padding: .5rem 0; }
+.house-floor-lamps h5 { margin: 0 0 .4rem; }
