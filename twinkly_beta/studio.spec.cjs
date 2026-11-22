@@ -1018,7 +1018,11 @@ test('Mijn Huis joins 5 m walls and moves and resizes a light on another wall in
  const open = page.getByRole('button',{name:'3D-weergave',exact:true});
  await open.click();
  const plan = page.locator('.house-3d');
- const floor = plan.locator('.house-3d-floor');
+ const floor = plan.locator('.house-3d-floor:not(.house-3d-ceiling)');
+ await expect(plan.locator('.house-3d-ceiling')).toBeHidden();
+ await plan.getByLabel('Plafond tonen').check();
+ await expect(plan.locator('.house-3d-ceiling')).toBeVisible();
+ await plan.getByLabel('Plafond tonen').uncheck();
  await expect(floor).toHaveCSS('width','325px');
  await expect(floor).toHaveCSS('height','325px');
  const faces = plan.locator('.house-3d-wall');
@@ -1142,12 +1146,15 @@ test('Home room membership is available before drawing and links a wall by group
  await expect(floor.getByRole('button',{name:'Woonkamer',exact:true})).toHaveAttribute('aria-pressed','true');
 });
 
-test('Home demo only sends its first colour to the chosen room', async ({page}) => {
+test('Home demo starts dark and follows wall positions in the chosen room', async ({page}) => {
  const calls = [];
- const lamp = {id:'lamp',name:'Leeslamp',provider:'hue',status:'online',state:{},capabilities:{rgb:true}};
+ const lamp = {id:'lamp',name:'Leeslamp',provider:'hue',status:'online',state:{},capabilities:{rgb:true,power:true}};
  await page.route('**/lighting', route => route.fulfill({json:{
-  lights:[lamp],groups:{living:{name:'Woonkamer',kind:'room',members:['lamp']},
-   office:{name:'Kantoor',kind:'room',members:['lamp']}},scenes:{},connections:{},
+  lights:[lamp,{...lamp,id:'left',name:'Links'}],groups:{living:{name:'Woonkamer',kind:'room',members:['lamp']},
+   office:{name:'Kantoor',kind:'room',members:['lamp','left']}},scenes:{},connections:{},
+ }}));
+ await page.route('**/lighting/projects/overview', route => route.fulfill({json:{
+  room_groups:{1:'office'},walls:[{slot:4,points:[['lamp',[80,50]],['left',[20,50]]]}],
  }}));
  await page.route('**/lighting/control', route => {
   calls.push(route.request().postDataJSON());
@@ -1159,7 +1166,11 @@ test('Home demo only sends its first colour to the chosen room', async ({page}) 
  await dialog.getByLabel('Kamers').selectOption({label:'Kantoor'});
  expect(calls).toEqual([]);
  await dialog.getByRole('button',{name:'Start',exact:true}).click();
- await expect.poll(() => calls).toEqual([{group:'office',action:'color',value:[225,38,69]}]);
+ await expect.poll(() => calls).toEqual([
+  {group:'office',action:'power',value:false},
+  {id:'left',action:'color',value:[225,38,69]},
+  {id:'left',action:'power',value:true},
+ ]);
  await dialog.getByRole('button',{name:'Stop',exact:true}).click();
  await expect(dialog.getByRole('button',{name:'Start',exact:true})).toBeEnabled();
 });
