@@ -1099,3 +1099,34 @@ test('2D floor plan saves wall drag and controls the selected room light', async
  expect(moves[0]).toMatchObject({wall:'office',slot:4,placement:{angle:0}});
  expect(moves[0].placement.x_m).toBeGreaterThan(0);
 });
+
+test('Home room membership is available before drawing and links a wall by group ID', async ({page}) => {
+ const light = {id:'lamp',name:'Leeslamp',provider:'hue',status:'online',capabilities:{power:true},state:{}};
+ const wall = {id:'default',slot:0,name:'Voorwand',points:[],dimensions:{width_m:5,height_m:2.5}};
+ const snapshot = {revision:'initial',walls:[wall],room_names:{},room_groups:{}};
+ const saves = [];
+ await page.route('**/lighting', route => route.fulfill({json:{
+  lights:[light],groups:{living:{name:'Woonkamer',kind:'room',members:['lamp']}},scenes:{},connections:{},
+ }}));
+ await page.route('**/lighting/projects', route => route.fulfill({json:{
+  walls:[wall],wall_id:'default',shows:[],layout:{...wall,revision:'layout'},playback:{state:'idle'},
+ }}));
+ await page.route('**/lighting/projects/overview', route => {
+  if (route.request().method() === 'POST') {
+   const body = route.request().postDataJSON();
+   saves.push(body);
+   wall.slot = body.slot;
+   snapshot.room_groups = {1:body.room_group};
+   snapshot.revision = 'saved';
+  }
+  return route.fulfill({json:snapshot});
+ });
+ await page.goto('http://127.0.0.1:8765/index.html#mijn-huis');
+ await page.getByRole('button',{name:'2D-plattegrond',exact:true}).click();
+ const floor = page.locator('.house-floor-plan');
+ await floor.getByRole('button',{name:'Woonkamer',exact:true}).click();
+ await expect(floor.getByRole('heading',{name:'Leeslamp'})).toBeVisible();
+ await floor.getByLabel('Kamer en wandzijde').selectOption({label:'Woonkamer · Voor'});
+ await floor.getByRole('button',{name:'Opslaan',exact:true}).click();
+ await expect.poll(() => saves).toEqual([{wall:'default',slot:4,revision:'initial',room_group:'living'}]);
+});

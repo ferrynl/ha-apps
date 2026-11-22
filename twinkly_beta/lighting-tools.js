@@ -692,14 +692,32 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, pr
     return format.format(dimensions.width_m) + " × " + format.format(dimensions.height_m) + " m";
   }
 
+  function homeRooms(snapshot) {
+    const groups = Object.entries(inventory?.groups || {}).filter(([, group]) => group.kind === "room");
+    const links = {...snapshot.room_groups};
+    const occupied = new Set([...snapshot.walls.map(wall => Math.floor(wall.slot / 4)),
+      ...Object.keys(snapshot.room_names || {}).map(Number), ...Object.keys(snapshot.trees || {}).map(Number)]);
+    for (const [id, group] of groups) {
+      if (Object.values(links).includes(id)) continue;
+      const matching = [...occupied].find(room => !(room in links) && snapshot.room_names?.[room]?.toLowerCase() === group.name.toLowerCase());
+      const free = Array.from({length: planSlots / 4}, (_, room) => room).find(room => !occupied.has(room) && !(room in links));
+      const room = matching ?? free;
+      if (room !== undefined) links[room] = id;
+    }
+    return {links, groups: new Map(groups)};
+  }
+
   function planPlacement(snapshot, walls, onSaved, isFloor = false) {
     if (!snapshot.revision) return undefined;
     let selectedWall = isFloor ? floorWall : planWall;
     const wallNames = walls.map(wall => [wall.id, wall.name || (wallLabels[language()] || wallLabels.nl)[1]]);
     if (!walls.some(wall => wall.id === selectedWall)) selectedWall = walls.find(wall => wall.id === wallId)?.id || walls[0].id;
     const selectWall = dropdown(wallNames, selectedWall);
+    const {links, groups} = homeRooms(snapshot);
+    const names = {...snapshot.room_names};
+    for (const [room, id] of Object.entries(links)) if (groups.has(id)) names[room] = groups.get(id).name;
     const slots = Array.from({length: planSlots}, (_, slot) => [String(slot),
-      roomLabel(Math.floor(slot / 4), snapshot.room_names) + " · " + v(13 + slot % 4)]);
+      roomLabel(Math.floor(slot / 4), names) + " · " + v(13 + slot % 4)]);
     const currentWall = () => walls.find(wall => wall.id === selectedWall);
     const destination = dropdown(slots, String(currentWall().slot));
     const coordinate = (limit, step) => Object.assign(node("input"),
@@ -707,8 +725,10 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, pr
     const x = coordinate(20, .01), z = coordinate(20, .01), angle = coordinate(180, 1);
     const roomName = Object.assign(node("input"), {type: "text", maxLength: 60});
     const destinationRoom = () => Math.floor(Number(destination.value) / 4);
+    const link = dropdown([["", "—"], ...[...groups].map(([id, group]) => [id, group.name])], "");
     const savedRoomName = () => snapshot.room_names?.[destinationRoom()] || "";
     const fillRoomName = () => {
+      link.value = groups.has(links[destinationRoom()]) ? links[destinationRoom()] : "";
       roomName.value = savedRoomName();
       roomName.placeholder = roomLabel(destinationRoom());
     };
@@ -753,7 +773,8 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, pr
       const body = {wall: selectedWall, slot: Number(destination.value), revision: snapshot.revision};
       if (custom || currentWall().placement) body.placement = custom ? transform() : null;
       if (roomName.value.trim() !== savedRoomName()) body.room_name = roomName.value.trim();
-      const controls = [selectWall, destination, ...inputs, roomName, save, reset];
+      if (link.value || snapshot.room_groups?.[destinationRoom()]) body.room_group = link.value || null;
+      const controls = [selectWall, destination, ...inputs, roomName, link, save, reset];
       controls.forEach(control => { control.disabled = true; });
       try {
         const updated = await api(planPath, body);
@@ -781,6 +802,7 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, pr
     const row = node("div", "", "lighting-controls");
     row.append(field(v(10), selectWall), field(v(11), destination), field(placementLabel(5), roomName),
       field(placementLabel(0), x), field(placementLabel(1), z), field(placementLabel(2), angle), save, reset);
+    if (groups.size) row.append(field(({nl:"Kamer op Home",en:"Room on Home",de:"Raum auf Home",es:"Habitación en Inicio"})[language()] || "Room on Home", link));
     fill(currentWall().placement);
     fillRoomName();
     form.append(row, node("p", v(20)), feedback);
@@ -885,15 +907,17 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, pr
       if (request !== floorGeneration || floorPlan.hidden) return;
       const walls = snapshot.walls;
       floorPlan.replaceChildren(node("h3", floorText(0)), node("p", floorText(1)), status);
-      if (!walls.length) return;
-      const ids = [...new Set(walls.map(wall => Math.floor(wall.slot / 4)))];
+      const {links, groups} = homeRooms(snapshot);
+      const ids = [...new Set([...walls.map(wall => Math.floor(wall.slot / 4)),
+        ...Object.keys(links).filter(room => groups.has(links[room])).map(Number)])];
+      if (!ids.length) return;
       if (!ids.includes(floorRoom)) floorRoom = ids[0];
-      const roomName = id => roomLabel(id, snapshot.room_names);
+      const roomName = id => groups.get(links[id])?.name || roomLabel(id, snapshot.room_names);
       const update = updated => {
         if (!floorPlan.hidden) renderFloorPlan(updated, v(21));
         if (!plan.hidden) renderHouse3d(updated);
       };
-      floorPlan.append(planPlacement(snapshot, walls, update, true));
+      if (walls.length && snapshot.revision) floorPlan.append(planPlacement(snapshot, walls, update, true));
       const areas = node("div", "", "house-floor-rooms");
       const lamps = node("div", "", "house-floor-lamps");
       floorPlan.append(areas, lamps);
@@ -903,8 +927,9 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, pr
           button.setAttribute("aria-pressed", String(Number(button.dataset.room) === id));
         }
         lamps.replaceChildren(node("h4", floorText(2) + " " + roomName(id)));
-        const ids = new Set();
-        for (const wall of walls.filter(item => Math.floor(item.slot / 4) === id)) {
+        const group = groups.get(links[id]);
+        const ids = new Set(group?.members || []);
+        if (!group) for (const wall of walls.filter(item => Math.floor(item.slot / 4) === id)) {
           for (const [lightId] of wall.points) {
             for (const member of inventory?.spatial_groups?.[lightId]?.members || [lightId]) ids.add(member);
           }
@@ -1132,6 +1157,9 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, pr
     try {
       snapshot ??= await api(planPath);
       if (request !== planGeneration || plan.hidden) return;
+      const {links, groups} = homeRooms(snapshot);
+      const roomNames = {...snapshot.room_names};
+      for (const [room, id] of Object.entries(links)) if (groups.has(id)) roomNames[room] = groups.get(id).name;
       const layoutWalls = snapshot.walls.map((wall, index) => ({...wall, slot: wall.slot ?? index}));
       if (!layoutWalls.length) {
         status.textContent = v(6);
@@ -1253,7 +1281,7 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, pr
         room.append(tree);
         world.append(room);
       }
-      if (snapshot.revision) plan.append(treePlacement(snapshot, treeModels));
+      if (snapshot.revision) plan.append(treePlacement({...snapshot, room_names: roomNames}, treeModels));
       const zoom = node("input");
       const initialZoom = roomCount === 1 ? 76 : 54;
       Object.assign(zoom, {type: "range", min: 35, max: 125, value: camera.zoom ?? initialZoom});
@@ -1288,7 +1316,7 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, pr
       };
       const controls = node("div", "", "lighting-controls");
       if (rooms.length > 1) {
-        const roomFilter = dropdown([["", v(17)], ...rooms.map(room => [String(room), roomLabel(room, snapshot.room_names)])], planRoom);
+        const roomFilter = dropdown([["", v(17)], ...rooms.map(room => [String(room), roomLabel(room, roomNames)])], planRoom);
         roomFilter.onchange = () => {
           planRoom = roomFilter.value;
           renderHouse3d(snapshot);
