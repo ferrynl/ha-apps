@@ -1,3 +1,9 @@
+## 2.0.0-beta.57
+
+- Hue Entertainment onthoudt zone, effect en helderheid tijdens het navigeren.
+- Govee toont bij een lege cloudlijst hoe je de accountlampen synchroniseert.
+- De roadmap vermeldt de huidige functies en de nog openstaande hardwaretests.
+
 ## 2.0.0-beta.56
 
 - De demo stuurt gekoppelde Twinkly-lampen als één groep aan. Groepen die over meerdere kamers lopen worden overgeslagen.
