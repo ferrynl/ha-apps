@@ -1,3 +1,7 @@
+## 2.0.0-beta.56
+
+- De demo stuurt gekoppelde Twinkly-lampen als één groep aan. Groepen die over meerdere kamers lopen worden overgeslagen.
+
 ## 2.0.0-beta.55
 
 - De demo begint met een donkere kamer en laat lampen afzonderlijk oplichten. Waar posities zijn ingesteld, volgt de show die van links naar rechts en terug.
