@@ -1,3 +1,7 @@
+## 2.0.0-beta.62
+
+- Lampen in Mijn Huis hebben acht gele schaalgrepen. Pas breedte of hoogte aan via een rand, of schaal proportioneel via een hoek.
+
 ## 2.0.0-beta.61
 
 - Bewerk de grootte, breedte en draaihoek rechtstreeks op de muurafbeelding. De bedieningsvelden onder de afbeelding zijn verwijderd.

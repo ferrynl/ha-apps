@@ -1573,21 +1573,14 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, pr
     marker.setAttribute("aria-label", light.name + " · " + t(32) + " " + Math.round(x) + "%, " + Math.round(y) + "%");
     marker.setAttribute("aria-pressed", String(light.id === selected));
     item.classList.toggle("is-selected", light.id === selected);
-    const handle = action("", () => {});
-    handle.type = "button";
-    handle.className = "house-resize-handle";
-    handle.setAttribute("aria-label", h(2) + " · " + light.name);
-    handle.title = h(2);
-    handle.hidden = light.id !== selected;
-    item.classList.toggle("handle-left", x >= 50);
     item.classList.toggle("handle-top", y >= 50);
 
     const captions = ({
-      nl:["Draai lamp", "Pas breedte aan", "Volle muurbreedte"],
-      en:["Rotate light", "Resize width", "Full wall width"],
-      de:["Lampe drehen", "Breite ändern", "Ganze Wandbreite"],
-      es:["Girar luz", "Cambiar ancho", "Ancho completo de la pared"],
-    })[language()] || ["Rotate light", "Resize width", "Full wall width"];
+      nl:["Draai lamp", "Volle muurbreedte"],
+      en:["Rotate light", "Full wall width"],
+      de:["Lampe drehen", "Ganze Wandbreite"],
+      es:["Girar luz", "Ancho completo de la pared"],
+    })[language()] || ["Rotate light", "Full wall width"];
     const tool = (symbol, label, run = () => {}) => {
       const button = action(symbol, run);
       button.setAttribute("aria-label", label);
@@ -1599,28 +1592,47 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, pr
       if (span !== undefined) next.push(span);
       return saveWallPoint(light.id, next, light.id);
     };
-    const center = span => clamp(x, span / 2, 100 - span / 2);
     const rotate = tool("↻", captions[0]);
-    const stretch = tool("↔", captions[1]);
-    const full = tool("⇔", captions[2], () => saveGeometry(50, y, size, angle, 100));
+    const full = tool("⇔", captions[1], () => saveGeometry(50, y, size, angle, 100));
     const remove = tool("×", t(21), () => saveWallPoint(light.id, null));
     const tools = node("div", "", "house-marker-tools");
     tools.hidden = light.id !== selected;
-    tools.append(rotate, stretch, full, remove);
+    tools.append(rotate, full, remove);
     const normalize = value => ((Math.round(value) + 540) % 360) - 180;
     function display(left, top, scale, rotation = angle, span = width) {
       item.style.left = left + "%";
       item.style.top = top + "%";
       item.style.width = (span ?? scale) + "%";
-      if (span !== undefined) item.style.aspectRatio = String(span / scale);
+      item.style.aspectRatio = String((span ?? scale) / scale);
+      item.classList.toggle("house-custom-width", span !== undefined);
       artwork.style.rotate = rotation + "deg";
-    }
-    if (width !== undefined) {
-      item.classList.add("house-custom-width");
     }
     display(x, y, size);
 
-    function wire(control, mode) {
+    const resize = (horizontal, vertical, dx, dy, wallRatio) => {
+      const span = width ?? size;
+      const height = size * wallRatio;
+      const fixedX = x - horizontal * span / 2, fixedY = y - vertical * height / 2;
+      const maxWidth = horizontal > 0 ? 100 - fixedX : fixedX;
+      const maxHeight = vertical > 0 ? 100 - fixedY : fixedY;
+      if (horizontal && vertical) {
+        const relative = (horizontal * dx * span + vertical * dy / wallRatio * size) /
+          (span * span + size * size);
+        const minimum = Math.max(4 / size, 4 / span);
+        const maximum = Math.min(40 / size, 100 / span, maxWidth / span, maxHeight / height);
+        const factor = clamp(1 + relative, minimum, Math.max(minimum, maximum));
+        const next = size * factor, nextWidth = span * factor;
+        return [fixedX + horizontal * nextWidth / 2, fixedY + vertical * next * wallRatio / 2,
+          next, angle, width === undefined ? undefined : nextWidth];
+      }
+      if (horizontal) {
+        const next = clamp(span + horizontal * dx, 4, Math.max(4, maxWidth));
+        return [fixedX + horizontal * next / 2, y, size, angle, next];
+      }
+      const next = clamp(size + vertical * dy / wallRatio, 4, Math.max(4, Math.min(40, maxHeight / wallRatio)));
+      return [x, fixedY + vertical * next * wallRatio / 2, next, angle, span];
+    };
+    function wire(control, mode, horizontal = 0, vertical = 0) {
       let moved = false;
       control.onpointerdown = event => {
         if (!event.isPrimary || event.button !== 0 || gesture || busy) return;
@@ -1641,11 +1653,8 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, pr
           if (!moved) return;
           if (mode === "rotate") {
             values[3] = normalize(angle + bearing(move.clientX, move.clientY) - bearing(startX, startY));
-          } else if (mode === "width") {
-            const span = clamp((width ?? size) + 200 * deltaX / rect.width, 4, 100);
-            values = [center(span), y, size, angle, span];
           } else if (mode === "size") {
-            values[2] = clamp(size + (x >= 50 ? -2 : 2) * 100 * deltaX / rect.width, 4, 40);
+            values = resize(horizontal, vertical, 100 * deltaX / rect.width, 100 * deltaY / rect.height, rect.width / rect.height);
           } else {
             values[0] = clamp(x + 100 * deltaX / rect.width, (width ?? 0) / 2, 100 - (width ?? 0) / 2);
             values[1] = clamp(y + 100 * deltaY / rect.height, 0, 100);
@@ -1670,9 +1679,7 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, pr
       }, true);
     }
     wire(marker, "move");
-    wire(handle, "size");
     wire(rotate, "rotate");
-    wire(stretch, "width");
     const arrows = callback => event => {
       const delta = {ArrowLeft:-1, ArrowDown:-1, ArrowRight:1, ArrowUp:1}[event.key];
       if (!delta) return;
@@ -1680,10 +1687,6 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, pr
       callback(delta);
     };
     rotate.onkeydown = arrows(delta => saveGeometry(x, y, size, normalize(angle - delta * 5), width));
-    stretch.onkeydown = arrows(delta => {
-      const span = clamp((width ?? size) + delta, 4, 100);
-      saveGeometry(center(span), y, size, angle, span);
-    });
     marker.onkeydown = event => {
       const nudge = {ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1]}[event.key];
       if (!nudge) return;
@@ -1691,14 +1694,26 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, pr
       selected = light.id;
       setPosition(light.id, x + nudge[0], y + nudge[1], size);
     };
-    handle.onkeydown = event => {
-      const delta = {ArrowLeft: -1, ArrowDown: -1, ArrowRight: 1, ArrowUp: 1}[event.key];
-      if (!delta) return;
-      event.preventDefault();
-      setPosition(light.id, x, y, size + delta, "resize");
-    };
-    item.append(marker, handle, tools);
-    return {item, marker, handle};
+    const edges = [
+      ["nw",-1,-1], ["n",0,-1], ["ne",1,-1], ["e",1,0],
+      ["se",1,1], ["s",0,1], ["sw",-1,1], ["w",-1,0],
+    ];
+    const handles = edges.map(([side, horizontal, vertical]) => {
+      const label = h(2) + " · " + light.name + " (" + side.toUpperCase() + ")";
+      const grip = tool("", label);
+      grip.className = "house-edge-grip";
+      grip.dataset.edge = side;
+      grip.hidden = light.id !== selected;
+      wire(grip, "size", horizontal, vertical);
+      grip.onkeydown = arrows(delta => {
+        const rect = photo.getBoundingClientRect();
+        if (!rect.width || !rect.height) return;
+        saveGeometry(...resize(horizontal, vertical, delta * horizontal, delta * vertical, rect.width / rect.height));
+      });
+      return grip;
+    });
+    item.append(marker, ...handles, tools);
+    return {item, marker};
   }
 
   const rgbFromHex = hex => hex.slice(1).match(/../g).map(value => parseInt(value, 16));
@@ -1933,9 +1948,8 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, pr
       cards.append(choose);
       if (focusId === "list" && light.id === selected) focus = choose;
       if (!point) continue;
-      const {item, marker, handle} = lampMarker(photo, light, point);
+      const {item, marker} = lampMarker(photo, light, point);
       stage.append(item);
-      if (light.id === selected && focusId === "resize") focus = handle;
       if (light.id === focusId) focus = marker;
     }
     if (!lights.size) cards.append(node("p", h(3)));
@@ -1954,8 +1968,8 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, pr
     canvas.append(stage);
     editor.append(canvas, panel);
     spatialSection.replaceChildren(dimensions, toolbar, spatialStatus, node("p", ({
-      nl:"Sleep een lamp uit de lijst naar de muur. Sleep de geplaatste lamp om haar te verplaatsen en gebruik de ronde greep om haar te vergroten of verkleinen.",
-      en:"Drag a light from the list onto the wall. Drag a placed light to move it, or use the round handle to resize it.",
+      nl:"Sleep een lamp uit de lijst naar de muur. Sleep de geplaatste lamp om haar te verplaatsen en gebruik de gele grepen aan de randen en hoeken om haar te schalen.",
+      en:"Drag a light from the list onto the wall. Drag a placed light to move it, or use the yellow edge and corner handles to resize it.",
       de:"Ziehe eine Lampe aus der Liste auf die Wand. Ziehe sie an ihre Position und ändere ihre Größe am runden Griff.",
       es:"Arrastra una luz de la lista a la pared. Arrástrala para moverla o usa el tirador redondo para cambiar su tamaño.",
     })[language()] || h(4)), editor, effectControls(stage));
