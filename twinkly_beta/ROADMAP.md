@@ -20,6 +20,9 @@
 - **Demo lichtshow.** De show begint met een blackout en gebruikt daarna de lampposities in de gekozen kamer. Gekoppelde Twinkly-lampen spelen als één groep.
 - **Kamerplattegrond.** Koppel muren aan Home-kamers in 2D, stel verlichting in op volle muurbreedte en toon een plafond in 3D.
 
+## Testdekking
+- **GitHub.** Browsertests simuleren Hue Entertainment starten en stoppen met bevestigde vrijgave en controleren Govee-synchronisatie, scènes, segmentkleur en segmenthelderheid. De reactie van de fysieke lampen wordt tijdens de praktijktests gecontroleerd.
+
 ## Open voor stabiel
 - **Mijn Huis.** Vul de ingebouwde Hue-fotocatalogus aan voor modellen zonder geverifieerde transparante bronfoto.
 - **Hue Entertainment.** Test op een fysieke Bridge achtereenvolgens starten, dimmen, stoppen en vrijgave van de Entertainmentruimte. Herhaal via LedFX op Home.
