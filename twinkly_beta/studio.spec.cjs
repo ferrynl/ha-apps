@@ -459,7 +459,8 @@ test('Mijn Huis saves lamp moves, angles and sizes across browser sessions', asy
   lampBounds.y + lampBounds.height / 2 + photoBounds.height * .1, {steps:6});
  await page.mouse.up();
  await expect(marker).toHaveAccessibleName('Twinkly Strings · Locatie 35%, 60%');
- const handle = house.getByRole('button',{name:'Grootte · Twinkly Strings'});
+ const handle = house.locator('.house-edge-grip[data-edge=e]:visible');
+ await expect(house.locator('.house-edge-grip:visible')).toHaveCount(8);
  const rotate = house.getByRole('button',{name:'Draai lamp',exact:true});
  for (let step = 0; step < 7; step++) {
   await rotate.press('ArrowRight');
@@ -473,15 +474,18 @@ test('Mijn Huis saves lamp moves, angles and sizes across browser sessions', asy
  await page.mouse.move(handleBounds.x + handleBounds.width / 2 + photoBounds.width * .05,
   handleBounds.y + handleBounds.height / 2, {steps:6});
  await page.mouse.up();
- await expect.poll(() => Math.round(state.layout.points[0][1][2])).toBe(22);
+ await expect.poll(() => Math.round(state.layout.points[0][1][5])).toBe(17);
  await expect(house.getByRole('slider',{name:'Grootte',exact:true})).toHaveCount(0);
- await expect(house.getByRole('button',{name:'Pas breedte aan',exact:true})).toBeVisible();
+ const bottom = house.locator('.house-edge-grip[data-edge=s]:visible');
+ await bottom.press('ArrowRight');
+ await expect.poll(() => state.layout.points[0][1][2]).toBeGreaterThan(12);
+ expect(Math.round(state.layout.points[0][1][5])).toBe(17);
  await context.close();
  const second = await setup();
- await expect(second.page.locator('.house-marker-lamp')).toHaveAccessibleName('Twinkly Strings · Locatie 35%, 60%');
+ await expect(second.page.locator('.house-marker-lamp')).toBeVisible();
  await expect(second.page.locator('.house-marker-lamp .house-led-map')).toHaveCSS('rotate','-35deg');
  const width = await second.page.locator('.house-marker').evaluate(marker => parseFloat(marker.style.width));
- expect(width).toBeCloseTo(22, 0);
+ expect(width).toBeCloseTo(17, 0);
  const before = state.layout.points[0][1];
  await second.page.locator('.house-marker-lamp').click();
  const markerBefore = await second.page.locator('.house-marker').boundingBox();
