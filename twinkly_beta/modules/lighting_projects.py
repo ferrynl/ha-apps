@@ -328,7 +328,7 @@ def tree_placement(value):
 
 
 def plan_revision(data, slots):
-    parts = [slots, data.get("wall_placements", {}), data.get("room_names", {}), data.get("trees", {}), data.get("room_groups", {})]
+    parts = [slots, data.get("wall_placements", {}), data.get("room_names", {}), data.get("trees", {}), data.get("room_groups", {}), data.get("room_positions", {})]
     return sha256(json.dumps(parts, sort_keys=True).encode()).hexdigest()
 
 
@@ -392,7 +392,7 @@ def install(app, lighting):
                 wall["placement"] = placements[wall_id]
             result.append(wall)
         return web.json_response({"revision": plan_revision(data, slots), "walls": result,
-                                  "room_names": names, "room_groups": data.get("room_groups", {}), "trees": data.get("trees", {})}, headers=HEADERS)
+                                  "room_names": names, "room_positions": data.get("room_positions", {}), "room_groups": data.get("room_groups", {}), "trees": data.get("trees", {})}, headers=HEADERS)
 
     async def overview(request):
         try:
@@ -451,6 +451,29 @@ def install(app, lighting):
                         links[room] = group
                 data = {**latest, "plan_slots": slots, "wall_placements": placements,
                         "room_names": names, "room_groups": links}
+                await asyncio.to_thread(store.write, path, data, PROJECT_LIMIT)
+                state = data
+                return overview_response(data)
+        except invalid:
+            return web.json_response({"error": "invalid_project"}, status=400, headers=HEADERS)
+        except OSError:
+            return web.json_response({"error": "project_storage_unavailable"}, status=503, headers=HEADERS)
+
+    async def place_room(request):
+        nonlocal state
+        try:
+            body = await request.json()
+            room, x, z = (body[key] for key in ("room", "x_m", "z_m"))
+            if (type(room) is not int or not 0 <= room < PLAN_SLOTS // 4
+                    or any(type(value) not in (int, float) or not -40 <= value <= 40 for value in (x, z))):
+                raise ValueError("Invalid room position")
+            async with lock:
+                latest = await load()
+                slots = plan_slots(latest)
+                if body["revision"] != plan_revision(latest, slots):
+                    return web.json_response({"error": "project_conflict"}, status=409, headers=HEADERS)
+                positions = {**latest.get("room_positions", {}), str(room): {"x_m": round(x, 2), "z_m": round(z, 2)}}
+                data = {**latest, "room_positions": positions}
                 await asyncio.to_thread(store.write, path, data, PROJECT_LIMIT)
                 state = data
                 return overview_response(data)
@@ -630,4 +653,5 @@ def install(app, lighting):
     app.router.add_get("/lighting/projects/overview", overview)
     app.router.add_post("/lighting/projects/overview", move_wall)
     app.router.add_post("/lighting/projects/overview/tree", place_tree)
+    app.router.add_post("/lighting/projects/overview/room", place_room)
     app.cleanup_ctx.append(playback.cleanup)

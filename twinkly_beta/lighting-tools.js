@@ -901,6 +901,14 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, pr
   let floorWall;
   let floorGeneration = 0;
 
+  function roomBoxes(ids, walls, saved = {}) {
+    const footprints = ids.map(id => roomFootprint(walls, id));
+    const spacing = Math.max(4, ...footprints.map(({width, depth}) => Math.max(width, depth))) + 1;
+    const columns = Math.ceil(Math.sqrt(ids.length));
+    return ids.map((id, index) => ({id, ...footprints[index],
+      ...(saved[id] || {x_m:(index % columns) * spacing, z_m:Math.floor(index / columns) * spacing})}));
+  }
+
   async function renderFloorPlan(snapshot, message = "") {
     const request = ++floorGeneration;
     const status = node("p", message);
@@ -921,6 +929,67 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, pr
         if (!plan.hidden) renderHouse3d(updated);
       };
       if (walls.length && snapshot.revision) floorPlan.append(planPlacement(snapshot, walls, update, true));
+      if (snapshot.revision && ids.length > 1) {
+        const [heading, move] = ({
+          nl:["Plattegrond van het huis", "Verplaats kamer"], en:["Whole-house plan", "Move room"],
+          de:["Hausgrundriss", "Raum verschieben"], es:["Plano de la casa", "Mover habitación"],
+        })[language()] || ["Whole-house plan", "Move room"];
+        const map = node("div", "", "house-room-map");
+        floorPlan.append(node("h4", heading), map);
+        const view = node("div", "", "house-room-map-grid");
+        map.append(view);
+        const boxes = roomBoxes(ids, walls, snapshot.room_positions);
+        const left = Math.min(...boxes.map(b => b.x_m - b.width / 2)) - 5;
+        const top = Math.min(...boxes.map(b => b.z_m - b.depth / 2)) - 5;
+        const pixels = 32;
+        view.style.width = Math.ceil(pixels * (Math.max(...boxes.map(b => b.x_m + b.width / 2)) - left + 5)) + "px";
+        view.style.height = Math.ceil(pixels * (Math.max(...boxes.map(b => b.z_m + b.depth / 2)) - top + 5)) + "px";
+        for (const box of boxes) {
+          const button = action(roomName(box.id), () => selectRoom(box.id));
+          button.className = "house-room-map-tile";
+          button.setAttribute("aria-label", move + " · " + roomName(box.id));
+          const draw = (x, z) => Object.assign(button.style, {left:(x - left) * pixels + "px", top:(z - top) * pixels + "px"});
+          Object.assign(button.style, {width:box.width * pixels + "px", height:box.depth * pixels + "px"});
+          draw(box.x_m, box.z_m);
+          view.append(button);
+          const moveRoom = async (x, z) => {
+            if (savingPlan) return;
+            savingPlan = true;
+            try {
+              await api(planPath + "/room", {room:box.id, x_m:x, z_m:z, revision:snapshot.revision}).then(update);
+            } catch (error) {
+              if (error.message === "project_conflict") renderFloorPlan(undefined, msg(5));
+              else { draw(box.x_m, box.z_m); status.textContent = t(25); }
+            } finally { savingPlan = false; }
+          };
+          const adjusted = (dx, dz) => [box.x_m + dx, box.z_m + dz].map(value => clamp(Math.round(value * 4) / 4, -40, 40));
+          button.onkeydown = event => {
+            const offset = {ArrowLeft:[-.25,0],ArrowRight:[.25,0],ArrowUp:[0,-.25],ArrowDown:[0,.25]}[event.key];
+            if (!offset) return;
+            event.preventDefault();
+            moveRoom(...adjusted(...offset));
+          };
+          button.onpointerdown = event => {
+            if (!event.isPrimary || event.button !== 0 || gesture || savingPlan) return;
+            gesture = button;
+            let destination;
+            button.setPointerCapture(event.pointerId);
+            button.onpointermove = move => {
+              if (gesture !== button || move.pointerId !== event.pointerId) return;
+              const dx = move.clientX - event.clientX, dz = move.clientY - event.clientY;
+              if (Math.hypot(dx, dz) < 4 && !destination) return;
+              destination = adjusted(dx / pixels, dz / pixels);
+              draw(...destination);
+            };
+            button.onpointerup = button.onpointercancel = button.onlostpointercapture = end => {
+              if (gesture !== button || end.pointerId !== event.pointerId) return;
+              gesture = undefined;
+              if (destination && end.type === "pointerup") moveRoom(...destination);
+              else draw(box.x_m, box.z_m);
+            };
+          };
+        }
+      }
       const areas = node("div", "", "house-floor-rooms");
       const lamps = node("div", "", "house-floor-lamps");
       floorPlan.append(areas, lamps);
@@ -1238,7 +1307,14 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, pr
         wallPixelsPerMeter * (2 * Math.hypot(tree.x_m, tree.z_m) + tree.height_m * treeWidthRatio)));
       const columns = Math.ceil(Math.sqrt(roomCount));
       const rows = Math.ceil(roomCount / columns);
-      const fit = Math.min(1, 260 / positionSpan, 520 / (columns * positionSpan),
+      const shared = Object.keys(snapshot.room_positions || {}).length > 0;
+      const mapIds = [...new Set([...layoutWalls.map(wall => Math.floor(wall.slot / 4)),
+        ...Object.keys(links).filter(room => linkedGroups.has(links[room])).map(Number), ...rooms])];
+      const boxes = roomBoxes(mapIds, layoutWalls, snapshot.room_positions).filter(box => visibleRooms.includes(box.id));
+      const center = axis => (Math.max(...boxes.map(box => box[axis])) + Math.min(...boxes.map(box => box[axis]))) / 2;
+      const centerX = shared ? center("x_m") : 0, centerZ = shared ? center("z_m") : 0;
+      const spread = shared ? Math.max(...boxes.map(box => Math.max(Math.abs(box.x_m - centerX), Math.abs(box.z_m - centerZ)))) * wallPixelsPerMeter * 2 : 0;
+      const fit = Math.min(1, 260 / positionSpan, 520 / (positionSpan + spread), 520 / (columns * positionSpan),
         520 / (rows * positionSpan), 290 / heightSpan);
       const faces = [];
       const ceilings = [];
@@ -1246,8 +1322,11 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, pr
         const room = node("div", "", "house-3d-room");
         const row = Math.floor(index / columns);
         const roomsInRow = Math.min(columns, roomCount - row * columns);
-        const x = (index % columns - (roomsInRow - 1) / 2) * (positionSpan + 22);
-        const z = (row - (rows - 1) / 2) * (positionSpan + 22);
+        const box = boxes.find(box => box.id === roomId);
+        const x = shared ? (box.x_m - centerX) * wallPixelsPerMeter :
+          (index % columns - (roomsInRow - 1) / 2) * (positionSpan + 22);
+        const z = shared ? (box.z_m - centerZ) * wallPixelsPerMeter :
+          (row - (rows - 1) / 2) * (positionSpan + 22);
         room.style.transform = "translate3d(" + x + "px,0," + z + "px)";
         const footprint = footprints.get(roomId);
         const floor = node("div", "", "house-3d-floor");

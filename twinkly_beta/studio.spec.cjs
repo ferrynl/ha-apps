@@ -880,7 +880,7 @@ test('Govee cloud shows each model and sends the selected segment only', async (
   calls.push([endpoint,route.request().postDataJSON()]);
   if (endpoint === 'devices') return route.fulfill({json:{devices:[{id:'one',name:'Woonkamer',sku:'H605C'}]}});
   if (endpoint === 'details') return route.fulfill({json:{
-   scenes:[{id:'rainbow',name:'Rainbow'}],segments:{color:{indices:[0,2],minimum:1,limit:1}},scene_error:null,
+   scenes:[{id:'rainbow',name:'Rainbow'}],segments:{color:{indices:[0,2],minimum:1,limit:1},brightness:{indices:[0,2],minimum:1,limit:1,low:0,high:100,step:5}},scene_error:null,
   }});
   return route.fulfill({json:{accepted:true}});
  });
@@ -902,9 +902,15 @@ test('Govee cloud shows each model and sends the selected segment only', async (
  await segments.getByRole('button',{name:'Toepassen',exact:true}).click();
  await expect(cloud.getByText('Govee heeft de opdracht geaccepteerd.')).toBeVisible();
  await expect(practice.getByRole('radio',{name:'Lamp reageerde zoals bedoeld'})).not.toBeChecked();
+ const brightness = cloud.getByRole('group',{name:'Segmenthelderheid'});
+ await brightness.getByRole('checkbox',{name:'Segmenten 1'}).check();
+ await brightness.getByRole('spinbutton').fill('35');
+ await brightness.getByRole('button',{name:'Toepassen',exact:true}).click();
+ await expect.poll(() => calls.length).toBe(5);
  expect(calls).toEqual([
   ['devices',{}],['details',{device:'one'}],['apply',{device:'one',action:'scene',scene:'rainbow'}],
   ['apply',{device:'one',action:'color',segments:[2],value:[255,126,51]}],
+  ['apply',{device:'one',action:'brightness',segments:[0],value:35}],
  ]);
 });
 
@@ -1211,4 +1217,73 @@ test('Govee cloud shows saved lamps without syncing the account again', async ({
  await page.goto('http://127.0.0.1:8765/index.html#govee');
  await expect(page.locator('#govee-cloud').getByRole('combobox',{name:'Lamp',exact:true})).toHaveValue('saved');
  expect(syncs).toBe(0);
+});
+
+test('Hue Entertainment preserves the setup and reports confirmed Bridge release', async ({page}) => {
+ const prefix = '**/providers/hue/entertainment';
+ const calls = [];
+ let active = null;
+ let released = false;
+ await page.route(prefix, route => route.fulfill({json:{active,released,bridges:[
+  {bridge:'b1',address:'192.168.1.2',has_client_key:true,areas:[{id:'first',name:'Kantoor'},{id:'second',name:'Woonkamer'}]},
+ ]}}));
+ await page.route(prefix + '/status', route => route.fulfill({json:{active,released}}));
+ await page.route(prefix + '/control', route => {
+  const body = route.request().postDataJSON();
+  calls.push(body);
+  active = body.action === 'start' ? body : null;
+  released = body.action === 'stop';
+  return route.fulfill({json:{active,released}});
+ });
+ await page.goto('http://127.0.0.1:8765/index.html');
+ await page.locator('#nav-hue').click();
+ const entertainment = page.locator('section').filter({has:page.getByRole('heading',{name:'Hue Entertainment',exact:true})}).filter({has:page.getByRole('button',{name:'Start effect',exact:true})}).last();
+ const zone = entertainment.locator('select').first();
+ await zone.selectOption({label:'Woonkamer · 192.168.1.2'});
+ await page.getByRole('combobox',{name:'Hue Entertainment',exact:true}).selectOption('sunset');
+ const brightness = entertainment.locator('input[type=number]');
+ await brightness.fill('25');
+ await brightness.blur();
+ await page.locator('#nav-home').click();
+ await page.locator('#nav-hue').click();
+ await expect(zone).toHaveValue('1');
+ await expect(brightness).toHaveValue('25');
+ await page.getByRole('button',{name:'Start effect',exact:true}).click();
+ await expect(page.getByText('Effect actief · Woonkamer')).toBeVisible();
+ await page.getByRole('button',{name:'Stop effect',exact:true}).click();
+ await expect(page.getByText('Hue Bridge bevestigt dat de ruimte vrij is')).toBeVisible();
+ expect(calls).toEqual([{action:'start',bridge:'b1',area:'second',effect:'sunset',brightness:25},{action:'stop'}]);
+});
+
+test('Mijn Huis remembers room positions on the shared plan and shows them in 3D', async ({page}) => {
+ const walls = [0,4].map(slot => ({id:'wall'+slot,slot,name:'Wand '+slot,
+  dimensions:{width_m:4,height_m:2.5},points:[]}));
+ const snapshot = {walls,revision:'initial',room_names:{0:'Hal',1:'Kantoor'}};
+ await page.route('**/lighting', route => route.fulfill({json:{lights:[],groups:{},scenes:{},connections:{}}}));
+ await page.route('**/lighting/projects/overview', route => route.fulfill({json:snapshot}));
+ await page.route('**/lighting/projects/overview/room', route => {
+  const body = route.request().postDataJSON();
+  expect(body).toEqual({room:1,x_m:6,z_m:1,revision:'initial'});
+  snapshot.room_positions = {1:{x_m:6,z_m:1}};
+  snapshot.revision = 'updated';
+  return route.fulfill({json:snapshot});
+ });
+ await page.goto('http://127.0.0.1:8765/index.html#mijn-huis');
+ const open = page.getByRole('button',{name:'2D-plattegrond',exact:true});
+ await open.click();
+ const tile = page.getByRole('button',{name:'Verplaats kamer · Kantoor'});
+ await tile.scrollIntoViewIfNeeded();
+ const box = await tile.boundingBox();
+ const x = box.x + box.width/2, y = box.y + box.height/2;
+ await page.mouse.move(x,y);
+ await page.mouse.down();
+ await page.mouse.move(x+32,y+32,{steps:4});
+ await page.mouse.up();
+ await expect.poll(() => snapshot.revision).toBe('updated');
+ await expect(tile).toHaveCSS('top','256px');
+ await page.reload();
+ await open.click();
+ await expect(tile).toHaveCSS('top','256px');
+ await page.getByRole('button',{name:'3D-weergave',exact:true}).click();
+ await expect(page.locator('.house-3d-room').last()).toHaveAttribute('style',/translate3d\(195px, 0px, 32\.5px\)/);
 });
