@@ -1174,3 +1174,26 @@ test('Home demo starts dark and follows wall positions in the chosen room', asyn
  await dialog.getByRole('button',{name:'Stop',exact:true}).click();
  await expect(dialog.getByRole('button',{name:'Start',exact:true})).toBeEnabled();
 });
+
+test('Demo sends native group commands for linked Twinkly lights', async ({page}) => {
+ const ids = ['one','two'].map(key => JSON.stringify(['twinkly',key]));
+ const id = JSON.stringify(['group','twinkly:native:wall']);
+ const calls = [];
+ await page.route('**/lighting', route => route.fulfill({json:{
+  lights:ids.map(id => ({id,name:id,provider:'twinkly',status:'online',state:{},capabilities:{rgb:true,power:true}})),
+  groups:{room:{name:'Kantoor',kind:'room',members:ids}}, spatial_groups:{[id]:{provider:'twinkly',name:'Kerstmuur',members:ids}},
+  scenes:{},connections:{},
+ }}));
+ await page.route('**/lighting/projects/overview', route => route.fulfill({json:{walls:[{slot:0,points:[[id,[25,50]]]}]}}));
+ await page.route('**/control', route => {
+  calls.push([new URL(route.request().url()).pathname, route.request().postDataJSON()]);
+  return route.fulfill({json:{failed:[],offline:[]}});
+ });
+ await page.goto('http://127.0.0.1:8765/index.html');
+ await page.getByRole('button',{name:'Demo lichtshow',exact:true}).click();
+ const dialog = page.getByRole('dialog',{name:'Demo lichtshow'});
+ await dialog.getByRole('button',{name:'Start',exact:true}).click();
+ await expect.poll(() => calls.slice(0,3).map(([path,body]) => [path,body.group,body.action]))
+  .toEqual([['/control','native:wall','off'],['/control','native:wall','color'],['/control','native:wall','on']]);
+ await dialog.getByRole('button',{name:'Stop',exact:true}).click();
+});

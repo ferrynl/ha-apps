@@ -1102,8 +1102,30 @@
       de: ["Demo-Lichtshow", "Start", "Stopp", "Wähle auf Home einen Raum mit Farblampen.", "Fertig", "Der Raum hat den Farbwechsel nicht bestätigt."],
       es: ["Demostración de luces", "Iniciar", "Detener", "Elige una habitación de Inicio con luces de color.", "Finalizado", "La habitación no confirmó el cambio de color."],
     })[el("language").value] || ["Demo light show", "Start", "Stop", "Choose a room on Home with colour lights.", "Finished", "The room did not confirm the colour change."];
-    const rooms = Object.entries(data?.groups || {}).filter(([, group]) => group.kind === "room" &&
-      data.lights.some(light => group.members.includes(light.id) && light.capabilities?.rgb && light.capabilities?.power));
+    function roomLights(room) {
+      const members = new Set(room.members);
+      const lights = new Map(data.lights.map(light => [light.id, light]));
+      const grouped = new Set(), claimed = new Set(), targets = [];
+      for (const [id, group] of Object.entries(data.spatial_groups || {})) {
+        if (group.provider !== "twinkly") continue;
+        const [, key] = JSON.parse(id);
+        if (typeof key !== "string" || !key.startsWith("twinkly:")) continue;
+        group.members.forEach(member => grouped.add(member));
+        if (!group.members.length || !group.members.every(member => members.has(member) && !claimed.has(member))) continue;
+        group.members.forEach(member => claimed.add(member));
+        targets.push({id, name:group.name, members:group.members, target:{twinklyGroup:key.slice(8)},
+          rgb:group.members.some(member => lights.get(member)?.capabilities?.rgb)});
+      }
+      for (const id of members) {
+        const light = lights.get(id);
+        if (!grouped.has(id) && light?.capabilities?.power && light.status !== "unavailable") {
+          targets.push({id, name:light.name, members:[id], target:{id}, rgb:light.capabilities.rgb});
+        }
+      }
+      return {targets, grouped:[...members].some(id => grouped.has(id))};
+    }
+    const rooms = Object.entries(data?.groups || {}).filter(([, group]) =>
+      group.kind === "room" && roomLights(group).targets.some(light => light.rgb));
     const room = node("select");
     for (const [id, group] of rooms) room.add(new Option(group.name, id));
     const content = node("div");
@@ -1132,15 +1154,20 @@
       const currentRun = ++run;
       preview.classList.add("is-playing");
       const send = async (target, action, value) => {
+        if (target.twinklyGroup) {
+          const mode = action === "power" ? (value ? "on" : "off") : action;
+          const result = await request("control", {group:target.twinklyGroup, action:mode,
+            value:action === "color" ? stateColor(value) : value});
+          return !result.failed?.length && !result.offline?.length;
+        }
         const result = await api("lighting/control", {...target, action, value});
         return Object.values(result.results || {}).some(value => value === "accepted" || value === "unconfirmed");
       };
       const perform = async () => {
         const overview = await api("lighting/projects/overview").catch(() => ({walls:[]}));
         if (currentRun !== run) return;
-        const members = data.groups[group].members;
-        const colors = data.lights.filter(light => members.includes(light.id) &&
-          light.capabilities?.rgb && light.capabilities?.power && light.status !== "unavailable");
+        const {targets, grouped} = roomLights(data.groups[group]);
+        const colors = targets.filter(light => light.rgb);
         const linkedRoom = Object.keys(overview.room_groups || {}).find(id => overview.room_groups[id] === group);
         const position = new Map();
         for (const wall of overview.walls || []) {
@@ -1151,11 +1178,16 @@
             const placement = wall.placement;
             const x = placement ? placement.x_m + distance * Math.cos(placement.angle * Math.PI / 180) :
               [distance, 3, -distance, -3][side];
-            for (const lamp of data.spatial_groups?.[id]?.members || [id]) if (!position.has(lamp)) position.set(lamp, x);
+            for (const lamp of [id, ...(data.spatial_groups?.[id]?.members || [])]) if (!position.has(lamp)) position.set(lamp, x);
           }
         }
-        colors.sort((left, right) => (position.get(left.id) ?? Infinity) - (position.get(right.id) ?? Infinity));
-        if (!colors.length || !await send({group}, "power", false)) {
+        const location = light => position.get(light.id) ?? Math.min(...light.members.map(id => position.get(id) ?? Infinity));
+        colors.sort((left, right) => location(left) - location(right));
+        const blackout = grouped
+          ? (await Promise.allSettled(targets.map(light => send(light.target, "power", false))))
+            .some(result => result.status === "fulfilled" && result.value)
+          : await send({group}, "power", false);
+        if (!colors.length || !blackout) {
           if (currentRun === run) stop(labels[5]);
           return;
         }
@@ -1163,10 +1195,10 @@
         const step = async index => {
           if (currentRun !== run) return;
           try {
-            if (index > 0) await send({id:sequence[index - 1].id}, "power", false);
+            if (index > 0) await send(sequence[index - 1].target, "power", false);
             if (currentRun !== run) return;
             if (index === sequence.length) return stop(labels[4]);
-            const light = sequence[index], target = {id:light.id};
+            const light = sequence[index], target = light.target;
             const color = palette[index % palette.length];
             if (!await send(target, "color", color)) throw new Error();
             if (currentRun !== run) return;
