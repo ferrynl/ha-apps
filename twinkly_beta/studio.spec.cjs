@@ -1235,11 +1235,13 @@ test('Hue Entertainment preserves the setup and reports confirmed Bridge release
   released = body.action === 'stop';
   return route.fulfill({json:{active,released}});
  });
- await page.goto('http://127.0.0.1:8765/index.html#hue');
- const zone = page.getByLabel('Entertainment-zone',{exact:true});
+ await page.goto('http://127.0.0.1:8765/index.html');
+ await page.locator('#nav-hue').click();
+ const entertainment = page.locator('section').filter({has:page.getByRole('heading',{name:'Hue Entertainment',exact:true})}).filter({has:page.getByRole('button',{name:'Start effect',exact:true})}).last();
+ const zone = entertainment.locator('select').first();
  await zone.selectOption({label:'Woonkamer · 192.168.1.2'});
  await page.getByRole('combobox',{name:'Hue Entertainment',exact:true}).selectOption('sunset');
- const brightness = page.getByLabel('Helderheid (%)',{exact:true});
+ const brightness = entertainment.locator('input[type=number]');
  await brightness.fill('25');
  await brightness.blur();
  await page.locator('#nav-home').click();
