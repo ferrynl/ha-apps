@@ -460,10 +460,13 @@ test('Mijn Huis saves lamp moves, angles and sizes across browser sessions', asy
  await page.mouse.up();
  await expect(marker).toHaveAccessibleName('Twinkly Strings · Locatie 35%, 60%');
  const handle = house.getByRole('button',{name:'Grootte · Twinkly Strings'});
- const angle = house.getByLabel('Draaihoek lamp (°)');
- await angle.fill('-35');
- await angle.press('Tab');
+ const rotate = house.getByRole('button',{name:'Draai lamp',exact:true});
+ for (let step = 0; step < 7; step++) {
+  await rotate.press('ArrowRight');
+  await expect(marker.locator('.house-led-map')).toHaveCSS('rotate', -(step + 1) * 5 + 'deg');
+ }
  await expect(marker.locator('.house-led-map')).toHaveCSS('rotate','-35deg');
+ await handle.scrollIntoViewIfNeeded();
  const handleBounds = await handle.boundingBox();
  await page.mouse.move(handleBounds.x + handleBounds.width / 2, handleBounds.y + handleBounds.height / 2);
  await page.mouse.down();
@@ -471,7 +474,8 @@ test('Mijn Huis saves lamp moves, angles and sizes across browser sessions', asy
   handleBounds.y + handleBounds.height / 2, {steps:6});
  await page.mouse.up();
  await expect.poll(() => Math.round(state.layout.points[0][1][2])).toBe(22);
- await expect(house.getByRole('slider',{name:'Grootte'})).toHaveValue('22');
+ await expect(house.getByRole('slider',{name:'Grootte',exact:true})).toHaveCount(0);
+ await expect(house.getByRole('button',{name:'Pas breedte aan',exact:true})).toBeVisible();
  await context.close();
  const second = await setup();
  await expect(second.page.locator('.house-marker-lamp')).toHaveAccessibleName('Twinkly Strings · Locatie 35%, 60%');
@@ -483,7 +487,7 @@ test('Mijn Huis saves lamp moves, angles and sizes across browser sessions', asy
  const markerBefore = await second.page.locator('.house-marker').boundingBox();
  await second.page.getByRole('button',{name:'Volle muurbreedte'}).click();
  await expect.poll(() => state.layout.points[0][1]).toEqual([50,before[1],before[2],0,-35,100]);
- await expect(second.page.getByLabel('Lampbreedte (% van de muur)')).toHaveValue('100');
+ await expect(second.page.getByLabel('Lampbreedte (% van de muur)')).toHaveCount(0);
  const full = second.page.locator('.house-marker');
  await expect(full).toHaveAttribute('style',/width: 100%/);
  expect((await full.boundingBox()).height).toBeCloseTo(markerBefore.height, 0);

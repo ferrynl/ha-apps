@@ -430,3 +430,15 @@
 .house-lamp-choice { cursor: grab; touch-action: none; }
 .house-lamp-choice:active { cursor: grabbing; }
 .lighting-spatial-stage.house-drop-target { outline: 2px solid var(--studio-gold); }
+
+.house-marker-tools { position: absolute; top: 0; left: 50%; transform: translateX(-50%);
+  display: flex; gap: 3px; z-index: 2; }
+.house-marker-tools[hidden] { display: none; }
+.house-marker-tools button { padding: 0; width: 27px; height: 27px; min-height: 0; touch-action: none;
+  background: #182635; border: 1px solid #aa9061; }
+.house-marker-tools button:first-child { cursor: grab; }
+.house-marker-tools button:nth-child(2) { cursor: ew-resize; }
+
+.house-marker .house-resize-handle { z-index: 3; }
+.house-marker-tools { top: auto; bottom: calc(100% + 5px); }
+.house-marker:not(.handle-top) .house-marker-tools { top: calc(100% + 5px); bottom: auto; }

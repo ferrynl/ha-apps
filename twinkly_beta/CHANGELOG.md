@@ -1,3 +1,7 @@
+## 2.0.0-beta.61
+
+- Bewerk de grootte, breedte en draaihoek rechtstreeks op de muurafbeelding. De bedieningsvelden onder de afbeelding zijn verwijderd.
+
 ## 2.0.0-beta.60
 
 - Sleep lampen rechtstreeks vanuit de lijst naar de gekozen muur. De muur licht op als je de lamp daar kunt neerzetten.
