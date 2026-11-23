@@ -466,6 +466,7 @@ test('Mijn Huis saves lamp moves, angles and sizes across browser sessions', asy
   await expect(marker.locator('.house-led-map')).toHaveCSS('rotate', -(step + 1) * 5 + 'deg');
  }
  await expect(marker.locator('.house-led-map')).toHaveCSS('rotate','-35deg');
+ await handle.scrollIntoViewIfNeeded();
  const handleBounds = await handle.boundingBox();
  await page.mouse.move(handleBounds.x + handleBounds.width / 2, handleBounds.y + handleBounds.height / 2);
  await page.mouse.down();

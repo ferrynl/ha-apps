@@ -438,3 +438,7 @@
   background: #182635; border: 1px solid #aa9061; }
 .house-marker-tools button:first-child { cursor: grab; }
 .house-marker-tools button:nth-child(2) { cursor: ew-resize; }
+
+.house-marker .house-resize-handle { z-index: 3; }
+.house-marker-tools { top: auto; bottom: calc(100% + 5px); }
+.house-marker:not(.handle-top) .house-marker-tools { top: calc(100% + 5px); bottom: auto; }
