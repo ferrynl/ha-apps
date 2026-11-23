@@ -328,7 +328,7 @@ def tree_placement(value):
 
 
 def plan_revision(data, slots):
-    parts = [slots, data.get("wall_placements", {}), data.get("room_names", {}), data.get("trees", {}), data.get("room_groups", {}), data.get("room_positions", {})]
+    parts = [slots, data.get("wall_placements", {}), data.get("room_names", {}), data.get("trees", {}), data.get("room_groups", {}), data.get("room_positions", {}), data.get("ceiling_lights", {})]
     return sha256(json.dumps(parts, sort_keys=True).encode()).hexdigest()
 
 
@@ -392,7 +392,7 @@ def install(app, lighting):
                 wall["placement"] = placements[wall_id]
             result.append(wall)
         return web.json_response({"revision": plan_revision(data, slots), "walls": result,
-                                  "room_names": names, "room_positions": data.get("room_positions", {}), "room_groups": data.get("room_groups", {}), "trees": data.get("trees", {})}, headers=HEADERS)
+                                  "room_names": names, "ceiling_lights": data.get("ceiling_lights", {}), "room_positions": data.get("room_positions", {}), "room_groups": data.get("room_groups", {}), "trees": data.get("trees", {})}, headers=HEADERS)
 
     async def overview(request):
         try:
@@ -451,6 +451,37 @@ def install(app, lighting):
                         links[room] = group
                 data = {**latest, "plan_slots": slots, "wall_placements": placements,
                         "room_names": names, "room_groups": links}
+                await asyncio.to_thread(store.write, path, data, PROJECT_LIMIT)
+                state = data
+                return overview_response(data)
+        except invalid:
+            return web.json_response({"error": "invalid_project"}, status=400, headers=HEADERS)
+        except OSError:
+            return web.json_response({"error": "project_storage_unavailable"}, status=503, headers=HEADERS)
+
+    async def place_ceiling_light(request):
+        nonlocal state
+        try:
+            body = await request.json()
+            room, light, point = (body[key] for key in ("room", "light", "point"))
+            if type(room) is not int or not 0 <= room < PLAN_SLOTS // 4:
+                raise ValueError("Invalid room")
+            light, _ = positions([[light, [50, 50] if point is None else point]])[0]
+            async with lock:
+                latest = await load()
+                slots = plan_slots(latest)
+                if body["revision"] != plan_revision(latest, slots):
+                    return web.json_response({"error": "project_conflict"}, status=409, headers=HEADERS)
+                if not any(slot // 4 == room for slot in slots.values()):
+                    raise ValueError("Unknown room")
+                ceilings = latest.get("ceiling_lights", {}).copy()
+                points = dict(ceilings.get(str(room), []))
+                if point is None:
+                    points.pop(light, None)
+                else:
+                    points[light] = point
+                ceilings[str(room)] = positions(list([key, value] for key, value in points.items()))
+                data = {**latest, "ceiling_lights": ceilings}
                 await asyncio.to_thread(store.write, path, data, PROJECT_LIMIT)
                 state = data
                 return overview_response(data)
@@ -654,4 +685,5 @@ def install(app, lighting):
     app.router.add_post("/lighting/projects/overview", move_wall)
     app.router.add_post("/lighting/projects/overview/tree", place_tree)
     app.router.add_post("/lighting/projects/overview/room", place_room)
+    app.router.add_post("/lighting/projects/overview/ceiling", place_ceiling_light)
     app.cleanup_ctx.append(playback.cleanup)
