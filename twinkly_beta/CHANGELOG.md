@@ -1,3 +1,7 @@
+## 2.0.0-beta.60
+
+- Sleep lampen rechtstreeks vanuit de lijst naar de gekozen muur. De muur licht op als je de lamp daar kunt neerzetten.
+
 ## 2.0.0-beta.59
 
 - Plaats, versleep, schaal en verwijder plafondlampen per kamer in Mijn Huis. De posities blijven na herladen bewaard.
