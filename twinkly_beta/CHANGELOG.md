@@ -1,3 +1,7 @@
+## 2.0.0-beta.59
+
+- Plaats, versleep, schaal en verwijder plafondlampen per kamer in Mijn Huis. De posities blijven na herladen bewaard.
+
 ## 2.0.0-beta.58
 
 - Versleep hele kamers op de plattegrond van het huis. De opgeslagen kamerposities werken door in 3D.

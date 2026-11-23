@@ -648,6 +648,8 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, pr
   }
 
   let showCeilings = false;
+  let ceilingRoom = "";
+  let ceilingLamp = "";
   let planResize;
   let planGeneration = 0;
   let planWall;
@@ -1001,8 +1003,9 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, pr
         lamps.replaceChildren(node("h4", floorText(2) + " " + roomName(id)));
         const group = groups.get(links[id]);
         const ids = new Set(group?.members || []);
-        if (!group) for (const wall of walls.filter(item => Math.floor(item.slot / 4) === id)) {
-          for (const [lightId] of wall.points) {
+        if (!group) for (const points of [snapshot.ceiling_lights?.[id] || [],
+          ...walls.filter(item => Math.floor(item.slot / 4) === id).map(wall => wall.points)]) {
+          for (const [lightId] of points) {
             for (const member of inventory?.spatial_groups?.[lightId]?.members || [lightId]) ids.add(member);
           }
         }
@@ -1166,6 +1169,15 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, pr
         ((1 + g) * b.y * u + (1 + h) * c.y * v + a.y * (1 - u - v)) / divisor];
     };
     return {toWall, toScreen};
+  }
+
+  function spatialPins(surface) {
+    return [[0, 0], [100, 0], [0, 100], [100, 100]].map(([left, top]) => {
+      const pin = node("span", "", "house-3d-pin");
+      Object.assign(pin.style, {left: left + "%", top: top + "%"});
+      surface.append(pin);
+      return pin;
+    });
   }
 
   function planLight(light, point, pins, save, layer, wallId) {
@@ -1343,6 +1355,12 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, pr
           top: (160 - ceilingHeight - floorDepth / 2) + "px"});
         room.append(ceiling);
         ceilings.push(ceiling);
+        const ceilingPins = spatialPins(ceiling);
+        for (const [id, point] of wallPoints(snapshot.ceiling_lights?.[roomId] || [])) {
+          const light = lights.get(id);
+          if (light) lightPositions.push(planLight(light, point, ceilingPins,
+            (key, next) => saveCeiling(roomId, key, next), layer, "ceiling-" + roomId));
+        }
         for (const wall of roomWalls) {
           const face = node("div", "", "house-3d-wall");
           face.dataset.wall = wall.id;
@@ -1367,12 +1385,7 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, pr
           const caption = wall.dimensions ? name + " · " + showDimensions(wall.dimensions) : name;
           face.append(node("span", caption, "house-3d-name"));
           if (inventory) {
-            const pins = [[0, 0], [100, 0], [0, 100], [100, 100]].map(([left, top]) => {
-              const pin = node("span", "", "house-3d-pin");
-              Object.assign(pin.style, {left: left + "%", top: top + "%"});
-              face.append(pin);
-              return pin;
-            });
+            const pins = spatialPins(face);
             const save = async (id, point) => {
               if (busy || savingPlan) return;
               busy = savingPlan = true;
@@ -1453,10 +1466,22 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, pr
         roomFilter.className = "house-3d-room-filter";
         controls.append(field(v(12), roomFilter));
       }
+      async function saveCeiling(room, light, point) {
+        if (busy || savingPlan) return;
+        savingPlan = true;
+        try {
+          const updated = await api(planPath + "/ceiling", {room, light, point, revision:snapshot.revision});
+          if (!plan.hidden) renderHouse3d(updated, planEdit(1), null);
+          if (!floorPlan.hidden) renderFloorPlan(updated);
+        } catch (error) {
+          if (!plan.hidden) renderHouse3d(undefined, error.message === "project_conflict" ? msg(5) : t(25), null);
+        } finally { savingPlan = false; }
+      }
       const ceilingToggle = Object.assign(node("input"), {type:"checkbox", checked:showCeilings});
       ceilingToggle.onchange = () => {
         showCeilings = ceilingToggle.checked;
         for (const ceiling of ceilings) ceiling.hidden = !showCeilings;
+        positionLights();
       };
       controls.append(field(({nl:"Plafond tonen",en:"Show ceiling",de:"Decke anzeigen",es:"Mostrar techo"})[language()] || "Show ceiling", ceilingToggle));
       controls.append(action(v(4), () => { camera.yaw -= 30; rotate(); }), action(v(5), () => { camera.yaw += 30; rotate(); }),
@@ -1467,6 +1492,37 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, pr
         }));
       status.textContent = [message, v(2), planEdit(0), !visibleTrees.length && !layoutWalls.some(wall => wall.photo_version || wall.dimensions) && v(6)].filter(Boolean).join(" ");
       plan.append(controls, scene);
+      const ceilingRooms = visibleRooms.filter(id => layoutWalls.some(wall => Math.floor(wall.slot / 4) === id));
+      if (snapshot.revision && ceilingRooms.length && lights.size) {
+        const words = ({
+          nl:["Plafondlampen", "Kamer voor plafondlamp", "Plafondlamp", "Plaats op plafond", "Verwijder van plafond"],
+          en:["Ceiling lights", "Room for ceiling light", "Ceiling light", "Place on ceiling", "Remove from ceiling"],
+          de:["Deckenlampen", "Raum", "Lampe", "An Decke platzieren", "Von Decke entfernen"],
+          es:["Luces de techo", "Habitación", "Luz", "Colocar en el techo", "Quitar del techo"],
+        })[language()] || ["Ceiling lights", "Room", "Light", "Place on ceiling", "Remove from ceiling"];
+        const room = dropdown(ceilingRooms.map(id => [String(id), roomLabel(id, roomNames)]), ceilingRoom);
+        if (!room.value) room.selectedIndex = 0;
+        const lamp = dropdown([...lights].map(([id, light]) => [id, light.name]), ceilingLamp);
+        if (!lamp.value) lamp.selectedIndex = 0;
+        const edit = node("div", "", "lighting-controls");
+        const hasLamp = () => wallPoints(snapshot.ceiling_lights?.[room.value] || []).has(lamp.value);
+        const place = action(words[3], () => {
+          showCeilings = true;
+          room.scrollIntoView({block:"nearest"});
+          saveCeiling(Number(room.value), lamp.value, [50,50,defaultSize]);
+        });
+        const remove = action(words[4], () => saveCeiling(Number(room.value), lamp.value, null));
+        const sync = () => {
+          ceilingRoom = room.value;
+          ceilingLamp = lamp.value;
+          place.disabled = hasLamp();
+          remove.disabled = !hasLamp();
+        };
+        room.onchange = lamp.onchange = sync;
+        sync();
+        edit.append(field(words[1], room), field(words[2], lamp), place, remove);
+        plan.append(node("h4", words[0]), edit);
+      }
       rotate();
       planResize = new ResizeObserver(positionLights);
       planResize.observe(scene);

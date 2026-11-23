@@ -1287,3 +1287,32 @@ test('Mijn Huis remembers room positions on the shared plan and shows them in 3D
  await page.getByRole('button',{name:'3D-weergave',exact:true}).click();
  await expect(page.locator('.house-3d-room').last()).toHaveAttribute('style',/translate3d\(195px, 0px, 32\.5px\)/);
 });
+
+test('Mijn Huis places and removes a ceiling light and reloads its saved position', async ({page}) => {
+ const light = {id:'ceiling-light',name:'Plafondspot',provider:'hue',status:'online',state:{},capabilities:{power:true}};
+ const wall = {id:'default',slot:0,name:'Wand',dimensions:{width_m:5,height_m:2.5},points:[]};
+ const snapshot = {walls:[wall],revision:'initial',ceiling_lights:{}};
+ await page.route('**/lighting', route => route.fulfill({json:{lights:[light],groups:{},scenes:{},connections:{}}}));
+ await page.route('**/lighting/projects/overview', route => route.fulfill({json:snapshot}));
+ await page.route('**/lighting/projects/overview/ceiling', route => {
+  const body = route.request().postDataJSON();
+  expect(body).toMatchObject({room:0,light:light.id,revision:snapshot.revision});
+  snapshot.ceiling_lights = {0:body.point ? [[light.id,body.point]] : []};
+  snapshot.revision += 'x';
+  return route.fulfill({json:snapshot});
+ });
+ await page.goto('http://127.0.0.1:8765/index.html#mijn-huis');
+ const open = page.getByRole('button',{name:'3D-weergave',exact:true});
+ await open.click();
+ await page.getByRole('button',{name:'Plaats op plafond'}).click();
+ const marker = page.locator('.house-3d-light[data-wall="ceiling-0"]');
+ await expect(marker).toBeVisible();
+ await marker.getByRole('button',{name:'Plafondspot · Locatie'}).press('ArrowRight');
+ await expect.poll(() => snapshot.ceiling_lights[0][0][1][0]).toBe(51);
+ await page.reload();
+ await open.click();
+ await page.getByLabel('Plafond tonen',{exact:true}).check();
+ await expect(marker).toBeVisible();
+ await page.getByRole('button',{name:'Verwijder van plafond'}).click();
+ await expect(marker).toHaveCount(0);
+});
