@@ -99,6 +99,7 @@
     es: ["Crea un área de entretenimiento en la aplicación Philips Hue y selecciónala aquí.", "Área de entretenimiento", "Arcoíris", "Atardecer", "Iniciar efecto", "Detener efecto", "Efecto activo", "No se encontraron áreas de entretenimiento.", "Vuelve a vincular el puente en Ajustes para transmitir efectos.", "El puente no está disponible.", "Detén la transmisión activa, la prueba Hue o la música mixta y vuelve a intentarlo.", "Se perdió la conexión con la transmisión Hue.", "El puente no confirmó que la transmisión se detuviera.", "No se pudo iniciar el efecto. Comprueba el puente y actualiza las áreas."],
   };
   let entertainmentRead = 0;
+  let entertainmentSelection;
   let entertainmentControls;
 
   function node(tag, text, className) {
@@ -1443,7 +1444,16 @@
       }
       effect.setAttribute("aria-label", "Hue Entertainment");
       const brightness = node("input");
-      Object.assign(brightness, {type: "number", min: 1, max: 100, value: 40, required: true});
+      Object.assign(brightness, {type: "number", min: 1, max: 100, value: entertainmentSelection?.brightness ?? 40, required: true});
+      const savedArea = choices.findIndex(choice => choice.bridge === entertainmentSelection?.bridge &&
+        choice.area === entertainmentSelection?.area);
+      if (savedArea >= 0) area.value = String(savedArea);
+      effect.value = entertainmentSelection?.effect ?? "rainbow";
+      const rememberSelection = () => {
+        if (!choices.length || !brightness.validity.valid) return;
+        entertainmentSelection = {...choices[Number(area.value)], effect: effect.value, brightness: brightness.valueAsNumber};
+      };
+      area.onchange = effect.onchange = brightness.onchange = rememberSelection;
       const start = node("button", labels[4]);
       const stop = node("button", labels[5]);
       start.type = stop.type = "button";

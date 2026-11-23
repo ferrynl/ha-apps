@@ -1197,3 +1197,18 @@ test('Demo sends native group commands for linked Twinkly lights', async ({page}
   .toEqual([['/control','native:wall','off'],['/control','native:wall','color'],['/control','native:wall','on']]);
  await dialog.getByRole('button',{name:'Stop',exact:true}).click();
 });
+
+test('Govee cloud shows saved lamps without syncing the account again', async ({page}) => {
+ let syncs = 0;
+ await page.route('**/providers/govee/cloud', route => route.fulfill({json:{
+  configured:true, devices:[{id:'saved',name:'Kerststrip',sku:'H605C'}],
+ }}));
+ await page.route('**/providers/govee/cloud/details', route => route.fulfill({json:{scenes:[],segments:{}}}));
+ await page.route('**/providers/govee/cloud/devices', route => {
+  syncs++;
+  return route.fulfill({json:{devices:[]}});
+ });
+ await page.goto('http://127.0.0.1:8765/index.html#govee');
+ await expect(page.locator('#govee-cloud').getByRole('combobox',{name:'Lamp',exact:true})).toHaveValue('saved');
+ expect(syncs).toBe(0);
+});

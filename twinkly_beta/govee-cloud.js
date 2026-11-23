@@ -265,6 +265,12 @@
       });
       content.append(load, devices, setupGuide(false));
       if (meta.devices?.length) await display(meta.devices);
+      else status.textContent = ({
+        nl:"Synchroniseer om je Govee-cloudlampen toe te voegen.",
+        en:"Sync to add your Govee cloud lights.",
+        de:"Synchronisiere, um deine Govee-Cloud-Lampen hinzuzufügen.",
+        es:"Sincroniza para añadir tus luces de Govee.",
+      })[language.value] || "Sync to add your Govee cloud lights.";
     } catch {
       status.textContent = t(14);
     }
