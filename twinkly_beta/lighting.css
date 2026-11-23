@@ -426,3 +426,7 @@
 .house-room-map-grid { position: relative; min-width: 100%; background: repeating-linear-gradient(0deg, transparent 0 31px, #ffffff16 31px 32px), repeating-linear-gradient(90deg, #172330 0 31px, #ffffff16 31px 32px); }
 .house-room-map-grid .house-room-map-tile { position: absolute; transform: translate(-50%, -50%); touch-action: none; cursor: grab; background: #354c62; border: 2px solid #879eb5; border-radius: .3rem; overflow: hidden; }
 .house-room-map-tile:active, .house-room-map-tile:focus-visible { z-index: 1; }
+
+.house-lamp-choice { cursor: grab; touch-action: none; }
+.house-lamp-choice:active { cursor: grabbing; }
+.lighting-spatial-stage.house-drop-target { outline: 2px solid var(--studio-gold); }

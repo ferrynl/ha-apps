@@ -1825,10 +1825,17 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, pr
       photo.style.aspectRatio = layout.dimensions.width_m + " / " + layout.dimensions.height_m;
     }
     stage.append(photo);
-    photo.onclick = event => {
+    const wallCoordinates = event => {
       const rect = photo.getBoundingClientRect();
-      if (selected && lights.has(selected)) setPosition(selected, 100 * (event.clientX - rect.left) / rect.width,
-        100 * (event.clientY - rect.top) / rect.height, placements.get(selected)?.[2]);
+      if (!rect.width || !rect.height) return null;
+      const x = 100 * (event.clientX - rect.left) / rect.width;
+      const y = 100 * (event.clientY - rect.top) / rect.height;
+      return x >= 0 && x <= 100 && y >= 0 && y <= 100 ? [x,y] : null;
+    };
+    const place = (id, at) => setPosition(id, ...at, placements.get(id)?.[2]);
+    photo.onclick = event => {
+      const at = wallCoordinates(event);
+      if (at && selected && lights.has(selected)) place(selected, at);
     };
     const cards = node("div", "", "house-lamp-list");
     let focus;
@@ -1839,6 +1846,31 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, pr
         renderSpatial("list");
       });
       choose.className = "house-lamp-choice";
+      let dragged = false;
+      choose.addEventListener("click", event => {
+        if (dragged && event.detail) event.stopImmediatePropagation();
+      }, true);
+      choose.onpointerdown = event => {
+        if (!event.isPrimary || event.button !== 0 || gesture || busy) return;
+        dragged = false;
+        gesture = choose;
+        choose.setPointerCapture(event.pointerId);
+        choose.onpointermove = move => {
+          if (gesture !== choose || move.pointerId !== event.pointerId) return;
+          dragged ||= Math.hypot(move.clientX - event.clientX, move.clientY - event.clientY) > 5;
+          stage.classList.toggle("house-drop-target", dragged && Boolean(wallCoordinates(move)));
+        };
+        choose.onpointerup = choose.onpointercancel = choose.onlostpointercapture = end => {
+          if (gesture !== choose || end.pointerId !== event.pointerId) return;
+          gesture = undefined;
+          stage.classList.remove("house-drop-target");
+          const at = dragged && end.type === "pointerup" && wallCoordinates(end);
+          if (at) {
+            selected = light.id;
+            place(light.id, at);
+          }
+        };
+      };
       choose.setAttribute("aria-pressed", String(light.id === selected));
       const icon = lampImage(light, true);
       choose.append(icon, node("span", light.name));
@@ -1915,7 +1947,12 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, pr
     const canvas = node("div", "", "house-canvas");
     canvas.append(stage, settings);
     editor.append(canvas, panel);
-    spatialSection.replaceChildren(dimensions, toolbar, spatialStatus, node("p", h(4)), editor, effectControls(stage));
+    spatialSection.replaceChildren(dimensions, toolbar, spatialStatus, node("p", ({
+      nl:"Sleep een lamp uit de lijst naar de muur. Sleep de geplaatste lamp om haar te verplaatsen en gebruik de ronde greep om haar te vergroten of verkleinen.",
+      en:"Drag a light from the list onto the wall. Drag a placed light to move it, or use the round handle to resize it.",
+      de:"Ziehe eine Lampe aus der Liste auf die Wand. Ziehe sie an ihre Position und ändere ihre Größe am runden Griff.",
+      es:"Arrastra una luz de la lista a la pared. Arrástrala para moverla o usa el tirador redondo para cambiar su tamaño.",
+    })[language()] || h(4)), editor, effectControls(stage));
     if (focusId === "dimensions") focus = dimensions.querySelector("button");
     focus?.focus();
   }

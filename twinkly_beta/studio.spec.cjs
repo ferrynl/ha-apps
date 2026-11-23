@@ -441,9 +441,15 @@ test('Mijn Huis saves lamp moves, angles and sizes across browser sessions', asy
  await house.locator('.house-lamp-choice').filter({hasText:'Twinkly Strings'}).click();
  await expect(house.locator('.house-lamp-choice .house-led-map canvas')).toBeVisible();
  await expect(house.getByText('TWS500SPP1',{exact:true})).toBeVisible();
- await house.getByRole('button',{name:'Plaats in het midden'}).click();
  const marker = house.locator('.house-marker-lamp');
  const stage = house.locator('.lighting-spatial-stage');
+ const choice = house.locator('.house-lamp-choice').filter({hasText:'Twinkly Strings'});
+ const source = await choice.boundingBox();
+ const target = await stage.boundingBox();
+ await page.mouse.move(source.x + source.width / 2, source.y + source.height / 2);
+ await page.mouse.down();
+ await page.mouse.move(target.x + target.width / 2, target.y + target.height / 2,{steps:8});
+ await page.mouse.up();
  await expect(marker).toHaveAccessibleName('Twinkly Strings · Locatie 50%, 50%');
  const photoBounds = await stage.boundingBox();
  const lampBounds = await marker.boundingBox();
