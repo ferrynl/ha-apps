@@ -1254,3 +1254,36 @@ test('Hue Entertainment preserves the setup and reports confirmed Bridge release
  await expect(page.getByText('Hue Bridge bevestigt dat de ruimte vrij is')).toBeVisible();
  expect(calls).toEqual([{action:'start',bridge:'b1',area:'second',effect:'sunset',brightness:25},{action:'stop'}]);
 });
+
+test('Mijn Huis remembers room positions on the shared plan and shows them in 3D', async ({page}) => {
+ const walls = [0,4].map(slot => ({id:'wall'+slot,slot,name:'Wand '+slot,
+  dimensions:{width_m:4,height_m:2.5},points:[]}));
+ const snapshot = {walls,revision:'initial',room_names:{0:'Hal',1:'Kantoor'}};
+ await page.route('**/lighting', route => route.fulfill({json:{lights:[],groups:{},scenes:{},connections:{}}}));
+ await page.route('**/lighting/projects/overview', route => route.fulfill({json:snapshot}));
+ await page.route('**/lighting/projects/overview/room', route => {
+  const body = route.request().postDataJSON();
+  expect(body).toEqual({room:1,x_m:6,z_m:1,revision:'initial'});
+  snapshot.room_positions = {1:{x_m:6,z_m:1}};
+  snapshot.revision = 'updated';
+  return route.fulfill({json:snapshot});
+ });
+ await page.goto('http://127.0.0.1:8765/index.html#mijn-huis');
+ const open = page.getByRole('button',{name:'2D-plattegrond',exact:true});
+ await open.click();
+ const tile = page.getByRole('button',{name:'Verplaats kamer · Kantoor'});
+ await tile.scrollIntoViewIfNeeded();
+ const box = await tile.boundingBox();
+ const x = box.x + box.width/2, y = box.y + box.height/2;
+ await page.mouse.move(x,y);
+ await page.mouse.down();
+ await page.mouse.move(x+32,y+32,{steps:4});
+ await page.mouse.up();
+ await expect.poll(() => snapshot.revision).toBe('updated');
+ await expect(tile).toHaveCSS('top','256px');
+ await page.reload();
+ await open.click();
+ await expect(tile).toHaveCSS('top','256px');
+ await page.getByRole('button',{name:'3D-weergave',exact:true}).click();
+ await expect(page.locator('.house-3d-room').last()).toHaveAttribute('style',/translate3d\(195px, 0px, 32\.5px\)/);
+});

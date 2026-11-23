@@ -1,3 +1,7 @@
+## 2.0.0-beta.58
+
+- Versleep hele kamers op de plattegrond van het huis. De opgeslagen kamerposities werken door in 3D.
+
 ## 2.0.0-beta.57
 
 - Hue Entertainment onthoudt zone, effect en helderheid tijdens het navigeren.
