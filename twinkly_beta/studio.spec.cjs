@@ -969,7 +969,9 @@ test('Home mixer sends color while the picker is open and keeps room settings on
  await expect.poll(() => reads).toBe(2);
  await expect(color).toHaveValue('#ff0000');
  await expect(fader).toHaveValue('73');
- await expect(home.locator('.mixer-fader output')).toHaveText('73%');
+ await expect(home.locator('.mixer-fader output').first()).toHaveText('73%');
+ await home.getByRole('slider',{name:'Philips Hue · Helderheid',exact:true}).fill('45');
+ await expect.poll(() => commands.at(-1)).toEqual({group:'room',provider:'hue',action:'brightness',value:45});
 });
 
 test('Hue product photo is shared with the 2D and 3D walls in My Home', async ({page}) => {
@@ -1338,4 +1340,27 @@ test('Mijn Huis places and removes a ceiling light and reloads its saved positio
  await expect(marker).toBeVisible();
  await page.getByRole('button',{name:'Verwijder van plafond'}).click();
  await expect(marker).toHaveCount(0);
+});
+
+test('Hue lamp cards show their Home room, assigned zones and scenes', async ({page}) => {
+ const id = JSON.stringify(['hue','bridge','lamp']);
+ await page.route('**/lighting', route => route.fulfill({json:{
+  lights:[{id,name:'Tafellamp',provider:'hue',state:{},capabilities:{}}],
+  groups:{home:{kind:'room',name:'Eetkamer',members:[id]}},scenes:{},connections:{},
+ }}));
+ await page.route('**/providers/hue/collections', route => route.fulfill({json:{bridges:[
+  {id:'bridge',address:'192.168.1.2',status:'online',collections:[
+    {kind:'room',name:'Woonkamer',id:'room',members:['lamp'],scenes:[{id:'scene',name:'Avondlicht'}]},
+    {kind:'zone',name:'Kersthoek',id:'zone',members:['lamp'],scenes:[],grouped_light:'group'},
+    {kind:'zone',name:'Andere zone',id:'other',members:['other'],scenes:[]},
+  ]},
+ ]}}));
+ await page.goto('http://127.0.0.1:8765/index.html#hue');
+ const room = page.locator('.hue-room-section').filter({has:page.getByRole('heading',{name:'Eetkamer',exact:true})});
+ const lamp = room.locator('article').filter({hasText:'Tafellamp'});
+ await lamp.getByText(/Kersthoek/).click();
+ await expect(lamp.getByRole('button',{name:'Aan',exact:true})).toBeVisible();
+ await lamp.getByText(/Scènes.*Woonkamer/).click();
+ await expect(lamp.getByRole('button',{name:'Avondlicht'})).toBeVisible();
+ await expect(lamp.getByText(/Andere zone/)).toHaveCount(0);
 });

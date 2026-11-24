@@ -124,21 +124,36 @@ class Hue:
 
     async def collections(self):
         grouped_lights = {light["id"]: light for light in await self.request("GET", "grouped_light")}
+        groups = [(kind, resource) for kind in ("room", "zone")
+                  for resource in await self.request("GET", kind)]
+        has_devices = any(child.get("rtype") == "device" for _, resource in groups
+                          for child in resource.get("children", []))
+        device_lights = {
+            device["id"]: [service["rid"] for service in device.get("services", [])
+                           if service.get("rtype") == "light" and "rid" in service]
+            for device in (await self.request("GET", "device") if has_devices else []) if "id" in device
+        }
         collections = []
-        for kind in ("room", "zone"):
-            for resource in await self.request("GET", kind):
-                grouped_id = next((service["rid"] for service in resource.get("services", [])
-                                   if service.get("rtype") == "grouped_light"), None)
-                grouped_light = grouped_lights.get(grouped_id, {})
-                collections.append({
-                    "id": resource["id"],
-                    "kind": kind,
-                    "name": resource.get("metadata", {}).get("name") or resource["id"],
-                    "grouped_light": grouped_id if grouped_light else None,
-                    "on": grouped_light.get("on", {}).get("on"),
-                    "brightness": grouped_light.get("dimming", {}).get("brightness"),
-                    "scenes": [],
-                })
+        for kind, resource in groups:
+            grouped_id = next((service["rid"] for service in resource.get("services", [])
+                               if service.get("rtype") == "grouped_light"), None)
+            grouped_light = grouped_lights.get(grouped_id, {})
+            members = []
+            for child in resource.get("children", []):
+                rid = child.get("rid")
+                if child.get("rtype") == "device":
+                    members.extend(device_lights.get(rid, []))
+                elif child.get("rtype") == "light" and rid:
+                    members.append(rid)
+            collections.append({
+                "id": resource["id"], "members": list(dict.fromkeys(members)),
+                "kind": kind,
+                "name": resource.get("metadata", {}).get("name") or resource["id"],
+                "grouped_light": grouped_id if grouped_light else None,
+                "on": grouped_light.get("on", {}).get("on"),
+                "brightness": grouped_light.get("dimming", {}).get("brightness"),
+                "scenes": [],
+            })
 
         by_group = {(entry["kind"], entry["id"]): entry for entry in collections}
         for scene in await self.request("GET", "scene"):

@@ -447,3 +447,14 @@
 .house-edge-grip[data-edge=n], .house-edge-grip[data-edge=s] { cursor: ns-resize; }
 .house-edge-grip[data-edge=nw], .house-edge-grip[data-edge=se] { cursor: nwse-resize; }
 .house-edge-grip[data-edge=ne], .house-edge-grip[data-edge=sw] { cursor: nesw-resize; }
+
+.hue-room-grid { grid-template-columns: minmax(0, 1fr); }
+.hue-room-section > h3 { margin: .4rem 0; }
+.hue-compact-grid { gap: .5rem; }
+.hue-compact-grid .lighting-card { padding: .65rem; }
+.hue-lamp-collection { margin-block: .25rem; }
+.hue-lamp-collection summary { cursor: pointer; }
+.mixer-brand-faders { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: .45rem; margin-top: .65rem; }
+.mixer-brand-faders section { min-width: 0; padding: .5rem; background: #22282d; border-radius: .45rem; }
+.mixer-brand-faders h4 { margin: 0 0 .35rem; overflow-wrap: anywhere; }
+.mixer-brand-faders .mixer-fader, .mixer-brand-faders input { width: 100%; min-width: 0; }

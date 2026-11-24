@@ -1,3 +1,8 @@
+## 2.0.0-beta.63
+
+- Hue-lampen staan compact per kamer, met gekoppelde zones en scènes op de lampkaart.
+- De Home-mixer heeft aparte helderheidsschuiven voor Philips Hue, Twinkly en Govee binnen de gekozen selectie.
+
 ## 2.0.0-beta.62
 
 - Lampen in Mijn Huis hebben acht gele schaalgrepen. Pas breedte of hoogte aan via een rand, of schaal proportioneel via een hoek.

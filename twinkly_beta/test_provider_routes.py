@@ -93,7 +93,9 @@ class RouteTests(unittest.IsolatedAsyncioTestCase):
         }})
         resources = {
             "room": [{"id": "room", "metadata": {"name": "Woonkamer"},
-                      "services": [{"rtype": "grouped_light", "rid": "room-control"}]}],
+                      "services": [{"rtype": "grouped_light", "rid": "room-control"}],
+                      "children": [{"rtype": "device", "rid": "lamp-device"}]}],
+            "device": [{"id": "lamp-device", "services": [{"rtype": "light", "rid": "lamp"}]}],
             "zone": [{"id": "zone", "metadata": {"name": "Kersthoek"}}],
             "grouped_light": [{"id": "room-control", "on": {"on": True}, "dimming": {"brightness": 42}}],
             "scene": [{"id": "scene", "metadata": {"name": "Avondlicht"},
@@ -111,9 +113,9 @@ class RouteTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.status, 200)
         self.assertEqual((await response.json())["bridges"], [
             {"id": "first", "status": "online", "address": "192.168.1.2", "collections": [
-                {"id": "room", "kind": "room", "name": "Woonkamer", "grouped_light": "room-control",
+                {"id": "room", "kind": "room", "members": ["lamp"], "name": "Woonkamer", "grouped_light": "room-control",
                  "on": True, "brightness": 42, "scenes": []},
-                {"id": "zone", "kind": "zone", "name": "Kersthoek", "grouped_light": None,
+                {"id": "zone", "kind": "zone", "members": [], "name": "Kersthoek", "grouped_light": None,
                  "on": None, "brightness": None, "scenes": [{"id": "scene", "name": "Avondlicht"}]},
             ]},
             {"id": "offline", "status": "unavailable", "address": "192.168.1.3", "collections": []},

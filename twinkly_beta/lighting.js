@@ -171,7 +171,7 @@
     return result;
   }
 
-  function controls(card, lights, target, state = {}, mixer = false, controlFeedback = feedback) {
+  function controls(card, lights, target, state = {}, mixer = false, controlFeedback = feedback, brightnessOnly = false) {
     const available = lights.filter(light => light.status !== "unavailable");
     const capable = key => available.some(light => light.capabilities[key]);
     const row = node("div", "", "lighting-controls");
@@ -249,7 +249,7 @@
       });
     }
 
-    if (capable("power")) {
+    if (!brightnessOnly && capable("power")) {
       for (const [value, index] of [[true, 7], [false, 8]]) {
         const toggle = button(t(index), () => send("power", value));
         if (typeof state.on === "boolean") toggle.setAttribute("aria-pressed", String(state.on === value));
@@ -266,7 +266,7 @@
       if (mixer) bindMixerValue(input, "brightness", read);
       else input.addEventListener("change", () => task(input, () => send("brightness", read())));
       if (mixer) {
-        input.setAttribute("aria-label", t(9));
+        input.setAttribute("aria-label", brightnessOnly ? brands[target.provider] + " · " + t(9) : t(9));
         const label = field(t(9), input);
         const value = node("output", state.brightness == null ? "–" : input.value + "%");
         input.addEventListener("input", () => { value.textContent = input.value + "%"; });
@@ -277,7 +277,7 @@
         row.append(field(t(9) + (state.brightness == null ? "" : " · " + Math.round(state.brightness) + "%"), input));
       }
     }
-    if (capable("rgb")) {
+    if (!brightnessOnly && capable("rgb")) {
       const input = node("input");
       input.type = "color";
       input.value = stateColor(state.color) || "#ffffff";
@@ -411,7 +411,10 @@
     head.append(mark, title);
     card.append(head, node("p", status(light), "lighting-state"));
     controls(card, [light], {id: light.id}, light.state);
-    if (light.provider === "hue") card.append(productPhotoSettings(light));
+    if (light.provider === "hue") {
+      appendHueLampCollections(card, light);
+      card.append(productPhotoSettings(light));
+    }
     return card;
   }
 
@@ -913,6 +916,58 @@
     return card;
   }
 
+  function hueLampCollections(light) {
+    if (!light.id.startsWith("[")) return [undefined, []];
+    const [, bridgeId, resourceId] = JSON.parse(light.id);
+    const bridge = collections.find(bridge => bridge.id === bridgeId);
+    return [bridge, (bridge?.collections || []).filter(entry => entry.members?.includes(resourceId))];
+  }
+
+  function appendHueLampCollections(card, light) {
+    const [bridge, entries] = hueLampCollections(light);
+    const labels = collectionWords[el("language").value] || collectionWords.nl;
+    for (const entry of entries) {
+      if (entry.kind !== "zone" && !entry.scenes.length) continue;
+      const section = node("details", "", "hue-lamp-collection");
+      section.append(node("summary", (entry.kind === "zone" ? labels[2] : labels[3]) + " · " + entry.name));
+      const send = async (id, action, value) => {
+        await api("providers/hue/collections/control", {bridge:bridge.id,id,action,value});
+        feedback.textContent = t(29);
+      };
+      if (entry.kind === "zone" && entry.grouped_light) {
+        const row = node("div", "", "lighting-controls");
+        row.append(button(t(7), () => send(entry.grouped_light, "power", true)),
+          button(t(8), () => send(entry.grouped_light, "power", false)));
+        section.append(row);
+      }
+      for (const scene of entry.scenes) {
+        section.append(button(scene.name, () => send(scene.id, "recall")));
+      }
+      card.append(section);
+    }
+  }
+
+  function hueRoomCards(lights) {
+    const rooms = new Map();
+    const homeRooms = Object.entries(data.groups || {}).filter(([, group]) => group.kind === "room");
+    const fallback = ({nl:"Zonder kamer",en:"Unassigned",de:"Ohne Raum",es:"Sin habitación"})[el("language").value] || "Unassigned";
+    for (const light of lights) {
+      const home = homeRooms.find(([, room]) => room.members.includes(light.id));
+      const [bridge, entries] = hueLampCollections(light);
+      const room = entries.find(entry => entry.kind === "room");
+      const key = home ? "home:" + home[0] : room ? bridge.id + "/" + room.id : "";
+      if (!rooms.has(key)) rooms.set(key, {name:home?.[1].name || room?.name || fallback, lights:[]});
+      rooms.get(key).lights.push(light);
+    }
+    return [...rooms.values()].map(room => {
+      const section = node("section", "", "hue-room-section");
+      const cards = node("div", "", "lighting-grid hue-compact-grid");
+      cards.append(...room.lights.map(lightCard));
+      section.append(node("h3", room.name), cards);
+      return section;
+    });
+  }
+
   function renderCollections() {
     hueCollections.hidden = context !== "hue";
     if (hueCollections.hidden) return;
@@ -927,9 +982,15 @@
       return;
     }
     if (!collections.length) hueCollections.append(node("p", labels[4]));
+    const hasInlineCollections = (data?.lights || []).some(light => light.provider === "hue" && hueLampCollections(light)[1].length);
+    const overview = hasInlineCollections ? node("details") : hueCollections;
+    if (hasInlineCollections) {
+      overview.append(node("summary", labels[0]));
+      hueCollections.append(overview);
+    }
     for (const bridge of collections) {
       const grid = node("div", "", "lighting-grid hue-collection-grid");
-      hueCollections.append(node("h3", "Hue Bridge · " + bridge.address), grid);
+      overview.append(node("h3", "Hue Bridge · " + bridge.address), grid);
       if (bridge.status !== "online" || !bridge.collections.length) {
         grid.append(node("p", bridge.status === "online" ? labels[4] : t(4)));
         continue;
@@ -983,6 +1044,7 @@
       if (request !== collectionsRead) return;
       collections = result.bridges;
       collectionsStatus = "ready";
+      if (context === "hue" && data) render();
     } catch {
       if (request !== collectionsRead) return;
       collectionsStatus = "failed";
@@ -1332,6 +1394,19 @@
     if (selected?.group) center.append(groupCard(selected.id, selected.lights, selected.target));
     else if (selected?.lights.length) controls(center, selected.lights, selected.target, selected.state, true);
 
+    if (selected && !selected.target.id && !selected.target.twinklyGroup && homeBrand === "all") {
+      const faders = node("div", "", "mixer-brand-faders");
+      for (const [provider, name] of Object.entries(brands)) {
+        const lights = selected.lights.filter(light => light.provider === provider && light.capabilities.brightness);
+        const channel = node("section");
+        channel.append(node("h4", name));
+        if (lights.some(light => light.status !== "unavailable")) {
+          controls(channel, lights, {...selected.target, provider}, {}, true, feedback, true);
+        } else channel.append(node("small", lights.length ? t(4) : "–"));
+        faders.append(channel);
+      }
+      center.append(faders);
+    }
     channels.append(targets, center, sceneList(visibleLights));
     mixer.append(channels);
     return mixer;
@@ -1368,9 +1443,11 @@
       grid.append(connectionCard("hue"), connectionCard("govee"));
     } else {
       const provider = context === "control" ? "twinkly" : context;
-      for (const light of data.lights.filter(light => light.provider === provider)) {
-        grid.append(lightCard(light));
-      }
+      const lights = data.lights.filter(light => light.provider === provider);
+      if (provider === "hue") {
+        grid.classList.add("hue-room-grid");
+        grid.append(...hueRoomCards(lights));
+      } else grid.append(...lights.map(lightCard));
       if (!grid.childElementCount) grid.append(node("p", t(11)));
       if (provider === "hue" || provider === "govee") {
         const link = node("a", t(33));
