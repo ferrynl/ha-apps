@@ -24,11 +24,9 @@
 - **GitHub.** Browsertests simuleren Hue Entertainment starten en stoppen met bevestigde vrijgave en controleren Govee-synchronisatie, scènes, segmentkleur en segmenthelderheid. De reactie van de fysieke lampen wordt tijdens de praktijktests gecontroleerd.
 
 ## Open voor stabiel
-- **Mijn Huis.** Vul de ingebouwde Hue-fotocatalogus aan voor modellen zonder geverifieerde transparante bronfoto.
 - **Hue Entertainment.** Test op een fysieke Bridge achtereenvolgens starten, dimmen, stoppen en vrijgave van de Entertainmentruimte. Herhaal via LedFX op Home.
 - **Govee.** Synchroniseer een echt account en controleer na een herstart de lampenlijst. Test scènes en segmentkleur en -helderheid op ondersteunde modellen.
 - **Spatial Light Studio.** Praktijktests voor de timingcorrectie. Bekijk per stap het verschil tussen geplande en werkelijke verzendtijd en controleer de lichtreactie op de muur.
-- **Security Center.** Aikido-audit voor stabiel. Het auditresultaat moet nog worden beoordeeld.
 - **Praktijktests.** De Hue-basisbediening is in de praktijk bevestigd. De Twinkly-muur, Govee en werking, timing en herstel van gemengde groepen staan nog op de testlijst. Home toont na het stoppen van gemengde muziek de uitkomst per merk.
 
 # 2.x — Verbeteringen na 2.0
@@ -51,7 +49,5 @@
 | Hue Entertainment en LedFX | Start een effect op de fysieke Bridge met een lage helderheid, stop, controleer vrijgave en start opnieuw met een andere helderheid. Herhaal met LedFX en controleer dat de Bridge de zone vrijgeeft. | Bridge-model, gebruikte zone en uitkomst van elke stop. |
 | Govee | Synchroniseer een account, herstart de add-on en controleer de apparaatlijst. Kies een scène en test kleur en helderheid op één ondersteund segment. Kijk of alleen dat segment reageert. | Model, testactie en zichtbare reactie. |
 | Twinkly en gemengde groepen | Speel de demo op de Twinkly-muur. Controleer dat gekoppelde lampen samen reageren. Vergelijk daarna een veeg met en zonder timingcorrectie en controleer per merk het herstel na stoppen. | Groep, tijdsverschil op de muur en herstelstatus per merk. |
-| Hue-foto’s | Noteer de modelcodes zonder correcte foto. Voeg per bevestigd model een transparante bronfoto met herkomst toe. | Modelcode, bron en werking in Mijn Huis. |
-| Aikido | Beoordeel het actuele rapport voor deze repository en leg per open bevinding de beslissing vast. | Rapportdatum, commit en open bevindingen. |
 
 Noteer bij iedere praktijktest ook de add-onversie en de datum. Een geaccepteerde opdracht vertelt of de software de opdracht kon versturen. Voor de zichtbare lichtreactie is een waarneming nodig.
