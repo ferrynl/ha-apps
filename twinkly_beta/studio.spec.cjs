@@ -196,7 +196,7 @@ test('Home combines providers and keeps pairing in Settings', async ({page}) => 
  await popup.getByRole('button',{name:'Opslaan'}).click();
  await expect(popup).toBeHidden();
  const group=home.locator('.mixer-center');
- await expect(group.getByRole('heading')).toHaveText('Together');
+ await expect(group.getByRole('heading',{level:3})).toHaveText('Together');
  await group.getByRole('button',{name:'Aan',exact:true}).click();
  await expect(page.locator('#lighting-feedback')).toContainText('Onbevestigd · 1');
  expect(groupControl).toEqual({group:'mixed',action:'power',value:true});
