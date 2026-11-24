@@ -9,7 +9,7 @@ Voeg één keer [deze repository](https://github.com/ferrynl/ha-apps) toe aan de
 | App | Installatie en configuratie |
 | --- | --- |
 | Christmas Control Center | [Stabiele app](twinkly/DOCS.md) voor dagelijks gebruik. |
-| Christmas Control Center Beta | Aparte app voor nieuwe licht-, groeps- en muziekeffecten. Zoek deze naam in de Appwinkel zodra er een [bètarelease](https://github.com/ferrynl/ha-twinkly/releases) is. |
+| Christmas Control Center Beta | Apart testkanaal voor de komende 2.x-verbeteringen, met eigen instellingen. |
 | Home Invest | [Handleiding](portfolio/DOCS.md) |
 | HA-Bandwidth | [Handleiding](ha_bandwidth/DOCS.md) |
 | MyBanksFlow (amd64) | [Handleiding](mybanksflow/DOCS.md) |
