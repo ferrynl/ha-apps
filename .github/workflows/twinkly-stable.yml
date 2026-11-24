@@ -1,0 +1,83 @@
+name: Twinkly stable tests
+on:
+  pull_request:
+    branches: [main]
+    paths: ['twinkly/**', 'scripts/smoke_twinkly.sh', '.github/workflows/twinkly-stable.yml']
+  push:
+    branches: [main]
+    paths: ['twinkly/**', 'scripts/smoke_twinkly.sh', '.github/workflows/twinkly-stable.yml']
+permissions:
+  contents: read
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-24.04, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --test twinkly/test_network_map.cjs
+      - run: docker build -t twinkly-stable twinkly
+      - run: bash scripts/smoke_twinkly.sh twinkly 18489 twinkly-stable
+      - name: Generate container SBOM
+        uses: anchore/sbom-action@57aae528053a48a3f6235f2d9461b05fbcb7366d # v0.23.1
+        with:
+          image: twinkly-stable:latest
+          format: spdx-json
+          artifact-name: twinkly-stable-${{ runner.arch }}.spdx.json
+          upload-release-assets: false
+      - name: Read stable version
+        id: stable
+        run: |
+          version="$(sed -n 's/^version: //p' twinkly/config.yaml | tr -d '"')"
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+      - name: Scan stable container vulnerabilities
+        id: scan
+        uses: anchore/scan-action@27805bf3b4e84b4a5c980df22ed233c00390a439 # v7.4.2
+        with:
+          image: twinkly-stable:latest
+          output-format: json
+          fail-build: false
+      - name: Summarize security findings
+        if: success()
+        env:
+          REPORT: ${{ steps.scan.outputs.json }}
+          VERSION: ${{ steps.stable.outputs.version }}
+        run: |
+          {
+            printf '## Christmas Control Center %s · %s\n\n' "$VERSION" "$RUNNER_ARCH"
+            printf '| Severity | Findings |\n| --- | ---: |\n'
+            jq -er '.matches | if type != "array" then error("Expected a Grype matches array") else . end
+              | group_by(.vulnerability.severity)
+              | if length == 0 then "| No findings | 0 |"
+                else .[] | "| \(.[0].vulnerability.severity) | \(length) |" end' "$REPORT"
+          } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always() && steps.scan.outputs.json != ''
+        with:
+          name: christmas-control-center-${{ steps.stable.outputs.version }}-${{ runner.arch }}-security
+          path: ${{ steps.scan.outputs.json }}
+          if-no-files-found: error
+  browser:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --no-save @playwright/test@1.56.1
+      - run: |
+          export TWINKLY_TEST_CHROME="$(command -v google-chrome)"
+          "$TWINKLY_TEST_CHROME" --version
+          python -m http.server 8765 --directory twinkly &
+          npx playwright test twinkly/studio.spec.cjs --workers=1
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: studio-browser-results
+          path: test-results/
