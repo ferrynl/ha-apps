@@ -458,3 +458,8 @@
 .mixer-brand-faders section { min-width: 0; padding: .5rem; background: #22282d; border-radius: .45rem; }
 .mixer-brand-faders h4 { margin: 0 0 .35rem; overflow-wrap: anywhere; }
 .mixer-brand-faders .mixer-fader, .mixer-brand-faders input { width: 100%; min-width: 0; }
+
+.house-marker-lamp { position: relative; overflow: hidden; }
+.house-marker-artwork { position: absolute; left: 50%; top: 0; width: var(--art-width, 100%); height: 100%;
+  transform: translateX(-50%) scaleX(var(--art-stretch, 1)); pointer-events: none; }
+.house-marker-artwork > * { display: block; width: 100%; height: 100%; object-fit: contain; }

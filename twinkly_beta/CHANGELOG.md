@@ -1,3 +1,8 @@
+## 2.0.0-beta.64
+
+- Hue gebruikt uitsluitend de kamerindeling uit de app. Hue-zones en scènes blijven op de lampkaart beschikbaar, met bestaande of ingebouwde productfoto’s.
+- De zijgrepen in Mijn Huis laten de lampafbeelding horizontaal meerekken met behoud van hoogte, ook als de lamp gedraaid is.
+
 ## 2.0.0-beta.63
 
 - Hue-lampen staan compact per kamer, met gekoppelde zones en scènes op de lampkaart.
