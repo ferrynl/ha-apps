@@ -1373,10 +1373,10 @@ test('Google Home generates scripts for an app room and a saved show', async ({p
  const pane = page.locator('#google-page');
  await expect(pane.locator('pre')).toContainText('room: "Woonkamer"');
  await expect(page.locator('#nav-google')).toHaveAttribute('aria-current','page');
- await pane.locator('figure').evaluateAll(figures => figures.forEach(figure => figure.hidden = true));
  await pane.getByLabel('Type',{exact:true}).selectOption('show');
  await expect(pane.locator('pre')).toContainText('show_id: "' + showId + '"');
  await expect(pane.locator('pre')).not.toContainText('room:');
- const show = await pane.screenshot({type:'jpeg',quality:48});
- console.log('GOOGLE_CAPTURE_SHOW ' + show.toString('base64'));
+ const screenshot = pane.getByRole('img',{name:'Voorbeeld: een eigen show koppelen'});
+ await screenshot.scrollIntoViewIfNeeded();
+ await expect.poll(() => screenshot.evaluate(image => image.naturalWidth)).toBeGreaterThan(0);
 });

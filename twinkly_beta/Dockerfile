@@ -2,7 +2,7 @@ FROM python:3.12-slim-trixie
 WORKDIR /app
 COPY requirements.lock ./
 RUN pip install --no-cache-dir --no-deps -r requirements.lock && pip check
-COPY app.py index.html lighting.js lighting-tools.js govee-cloud.js google-home.js lighting.css twinkly.svg twinkly-nav-logo.svg hue-app-icon.webp govee-logo.png config.yaml ./
+COPY app.py index.html lighting.js lighting-tools.js govee-cloud.js google-home.js google-home-demo.jpg google-home-show.jpg lighting.css twinkly.svg twinkly-nav-logo.svg hue-app-icon.webp govee-logo.png config.yaml ./
 COPY project.html project.css project.js security-center.js CHANGELOG.md ROADMAP.md ./
 COPY govee-guide-config.webp govee-guide-yaml.webp govee-guide-cloud.webp ./
 COPY effect_previews ./effect_previews
