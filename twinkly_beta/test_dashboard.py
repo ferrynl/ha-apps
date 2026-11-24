@@ -29,6 +29,23 @@ class DashboardSmokeTest(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(response.content_type, "image/svg+xml")
                 self.assertIn("<svg", await response.text())
 
+    async def test_google_home_assets_are_served_by_the_add_on(self):
+        application = Controller.__new__(Controller).app()
+        application.middlewares.clear()
+        application.cleanup_ctx.clear()
+        async with TestClient(TestServer(application)) as client:
+            async with client.get("/") as response:
+                self.assertIn('src="google-home.js"', await response.text())
+            async with client.get("/google-home.js") as response:
+                self.assertEqual(response.status, 200)
+                self.assertIn("christmas_control_center_demo", await response.text())
+            for image in ("google-home-demo.jpg", "google-home-show.jpg"):
+                with self.subTest(image=image):
+                    async with client.get("/" + image) as response:
+                        self.assertEqual(response.status, 200)
+                        self.assertEqual(response.content_type, "image/jpeg")
+                        self.assertTrue((await response.read()).startswith(b"\xff\xd8"))
+
     async def test_dashboard_and_music_gallery(self):
         # The test server uses loopback and does not start the live UDP stream.
         controller = Controller.__new__(Controller)
