@@ -1,3 +1,7 @@
+## 2.0.0-beta.67
+
+- De add-on serveert de Google Home-pagina nu met het script en beide screenshots via Home Assistant Ingress.
+
 ## 2.0.0-beta.66
 
 - Nieuwe Google Home-pagina met installatievoorbeelden en een scriptgenerator voor de kerstdemo of een zelfgemaakte show.

@@ -2354,6 +2354,7 @@ class Controller:
         for asset in (
             "lighting.js", "lighting-tools.js", "govee-cloud.js", "lighting.css", "twinkly-nav-logo.svg", "hue-app-icon.webp", "govee-logo.png",
             "project.html", "project.css", "project.js", "security-center.js", "CHANGELOG.md", "ROADMAP.md",
+            "google-home.js", "google-home-demo.jpg", "google-home-show.jpg",
             "govee-guide-config.webp", "govee-guide-yaml.webp", "govee-guide-cloud.webp",
         ):
             app.router.add_get("/" + asset, lambda _, filename=asset: web.FileResponse(
