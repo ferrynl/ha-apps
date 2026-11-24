@@ -102,17 +102,20 @@ def show_settings(data):
             cue["group"] = identifier(step["group"])
         normalized.append(cue)
     show = {"name": name.strip(), "group": group, "steps": normalized}
-    music = data.get("music")
-    if music is not None:
-        player, media_id = music["player"], music["media_id"]
-        media_type = music.get("media_type", "")
-        if (not isinstance(player, str) or len(player) > 255
-                or not re.fullmatch(r"media_player\.[a-z0-9_]+", player)
-                or not isinstance(media_id, str) or not 1 <= len(media_id.strip()) <= 500
-                or media_type not in ("", "track", "playlist", "album", "radio")):
-            raise ValueError("Invalid show music")
-        show["music"] = {"player": player, "media_id": media_id.strip(), "media_type": media_type}
+    if data.get("music") is not None:
+        show["music"] = music_settings(data["music"])
     return show
+
+
+def music_settings(music):
+    player, media_id = music["player"], music["media_id"]
+    media_type = music.get("media_type", "")
+    if (not isinstance(player, str) or len(player) > 255
+            or not re.fullmatch(r"media_player\.[a-z0-9_]+", player)
+            or not isinstance(media_id, str) or not 1 <= len(media_id.strip()) <= 500
+            or media_type not in ("", "track", "playlist", "album", "radio")):
+        raise ValueError("Invalid show music")
+    return {"player": player, "media_id": media_id.strip(), "media_type": media_type}
 
 
 def spatial_position(point, direction, effect):
@@ -150,16 +153,48 @@ def spatial_steps(eligible, lights, axis, sign, color, delay, end_color):
     return steps
 
 
-async def show_music_service(service, data):
+CORE_API = "http://supervisor/core/api"
+MUSIC_PLAYERS_TEMPLATE = """
+{%- set ns = namespace(players=[]) -%}
+{%- for entity in expand(integration_entities('music_assistant')) -%}
+  {%- if entity.domain == 'media_player' and entity.attributes.get('device_class') != 'tv' -%}
+    {%- set ns.players = ns.players + [{'id': entity.entity_id, 'name': entity.name, 'state': entity.state}] -%}
+  {%- endif -%}
+{%- endfor -%}
+{{ ns.players | to_json }}
+"""
+
+
+async def core_music_request(path, data):
     token = os.environ.get("SUPERVISOR_TOKEN")
     if not token:
         raise ValueError("Home Assistant API is unavailable")
     async with ClientSession(timeout=ClientTimeout(total=8)) as session:
         async with session.post(
-            f"http://supervisor/core/api/services/{service}",
+            f"{CORE_API}/{path}",
             headers={"Authorization": f"Bearer {token}"}, json=data, allow_redirects=False,
         ) as response:
             response.raise_for_status()
+            return await response.text()
+
+
+async def music_assistant_players():
+    return json.loads(await core_music_request("template", {"template": MUSIC_PLAYERS_TEMPLATE}))
+
+
+async def show_music_service(service, data):
+    await core_music_request(f"services/{service}", data)
+
+
+async def start_show_music(music):
+    players = await music_assistant_players()
+    if not any(player["id"] == music["player"] and player["state"] not in ("unknown", "unavailable")
+               for player in players):
+        raise ValueError("Selected Music Assistant player is unavailable")
+    payload = {"entity_id": music["player"], "media_id": music["media_id"], "enqueue": "play"}
+    if music.get("media_type"):
+        payload["media_type"] = music["media_type"]
+    await show_music_service("music_assistant/play_media", payload)
 
 
 class Playback:
@@ -177,6 +212,12 @@ class Playback:
             return await self.lighting.run_scene(step["scene"], step.get("group", show["group"]))
 
         self.schedule("show", show["steps"], apply, show["id"], music=show.get("music"))
+
+    def preview_music(self, music):
+        async def apply(_step):
+            return {"music": {"play": "accepted"}}
+
+        self.schedule("music", [{"seconds": 12}], apply, music=music)
 
     def start_spatial(self, points, direction, color, delay, end_color=None, effect=None):
         axis, sign = DIRECTIONS[direction]
@@ -234,15 +275,15 @@ class Playback:
         music_started = False
         try:
             if music and not self.stop.is_set():
-                payload = {"entity_id": music["player"], "media_id": music["media_id"], "enqueue": "replace"}
-                if music.get("media_type"):
-                    payload["media_type"] = music["media_type"]
                 try:
-                    await show_music_service("music_assistant/play_media", payload)
+                    await start_show_music(music)
                     music_started = True
                 except (ClientError, TimeoutError, ValueError):
                     LOG.warning("Music Assistant could not start show music", exc_info=True)
                     self.status["music_error"] = "start"
+                    if self.status["kind"] == "music":
+                        outcome = "failed"
+                        return
             if prepare:
                 steps = await prepare()
                 self.status["total"] = len(steps)
@@ -826,6 +867,9 @@ def install(app, lighting):
                                           "photo_version": uuid.uuid4().hex,
                                           "photo": await asyncio.to_thread(photo_jpeg, encoded),
                                           "points": positions(body["points"])})
+                elif action == "preview_music":
+                    playback.preview_music(music_settings(body["music"]))
+                    return response(data, wall_id)
                 elif action == "play":
                     playback.start(shows[identifier(body["id"])])
                     return response(data, wall_id)
@@ -859,6 +903,14 @@ def install(app, lighting):
         except web.HTTPConflict:
             return web.json_response({"error": "project_conflict"}, status=409, headers=HEADERS)
 
+    async def get_music_players(request):
+        try:
+            players = await music_assistant_players()
+        except (ClientError, TimeoutError, ValueError) as exc:
+            raise web.HTTPBadGateway() from exc
+        return web.json_response({"players": players}, headers=HEADERS)
+
+    app.router.add_get("/lighting/projects/music-players", get_music_players)
     app.router.add_get("/lighting/projects", get)
     app.router.add_post("/lighting/projects", change)
     app.router.add_get("/lighting/projects/photo", photo)

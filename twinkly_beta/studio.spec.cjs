@@ -399,8 +399,10 @@ function mockProjects(state) {
     state.layout.points = body.points;
    } else if (action === 'save') {
     state.shows.push({...body, id:'show-1', revision:'first'});
+   } else if (action === 'preview_music') {
+    state.playback = {state:'playing', kind:'music', step:1, total:1};
    } else if (action === 'play') {
-    state.playback = {state:'playing', id:body.id, step:1, total:2};
+    state.playback = {state:'playing', kind:'show', id:body.id, step:1, total:2};
    } else if (action === 'stop') {
     state.playback.state = 'stopped';
    }
@@ -512,7 +514,7 @@ test('a saved mixed show with Music Assistant keeps playing after leaving Showbo
    scenes:{warm:{name:'Warm',group:'room',on:true},cool:{name:'Koel',group:'hall',on:true}}, connections:{},
   }}));
   await context.route('**/lighting/projects', mockProjects(state));
-  await context.route('**/media-players', route => route.fulfill({json:{
+  await context.route('**/lighting/projects/music-players', route => route.fulfill({json:{
    players:[{id:'media_player.ma_room',name:'Music Assistant woonkamer',state:'idle'}],
   }}));
   const page = await context.newPage();
@@ -526,6 +528,11 @@ test('a saved mixed show with Music Assistant keeps playing after leaving Showbo
  await builder.getByLabel('Shownaam').fill('Kerstshow');
  await builder.getByLabel('Speler', {exact:true}).selectOption('media_player.ma_room');
  await builder.getByLabel('Nummer, afspeellijst of link').fill('library://playlist/42');
+ await builder.getByRole('button',{name:'Test muziek'}).click();
+ await expect(builder.getByRole('status')).toHaveText('Muziektest speelt');
+ await builder.getByRole('button',{name:'Stoppen'}).click();
+ await expect(builder.getByRole('status')).toHaveText('Muziektest gestopt');
+ await expect(builder.getByLabel('Nummer, afspeellijst of link')).toHaveValue('library://playlist/42');
  await builder.getByRole('button',{name:'Stap toevoegen'}).click();
  await builder.getByRole('button',{name:'Stap toevoegen'}).click();
  const steps = builder.locator('.lighting-show-step');
@@ -1387,4 +1394,20 @@ test('Google Home generates scripts for an app room and a saved show', async ({p
  const screenshot = pane.getByRole('img',{name:'Voorbeeld: een eigen show koppelen'});
  await screenshot.scrollIntoViewIfNeeded();
  await expect.poll(() => screenshot.evaluate(image => image.naturalWidth)).toBeGreaterThan(0);
+});
+
+test('all main pages fit a narrow viewport and main spans a wide viewport', async ({page}) => {
+ const tabs = ['home','house','control','hue','govee','tests','network','shows','google','settings'];
+ await page.route('**/lighting', route => route.fulfill({json:{lights:[], groups:{}, scenes:{}, connections:{}}}));
+ await page.route('**/lighting/projects', mockProjects(newProjects()));
+ await page.route('**/lighting/projects/music-players', route => route.fulfill({json:{players:[]}}));
+ await page.setViewportSize({width:320,height:850});
+ await page.goto('http://127.0.0.1:8765/index.html');
+ for (const tab of tabs) {
+  await page.locator('#nav-' + tab).click();
+  await expect(page.locator('#nav-' + tab)).toHaveAttribute('aria-current','page');
+  await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth), {message:tab}).toBe(320);
+ }
+ await page.setViewportSize({width:2400,height:1000});
+ await expect.poll(() => page.locator('main').evaluate(main => main.getBoundingClientRect().width)).toBe(2400);
 });

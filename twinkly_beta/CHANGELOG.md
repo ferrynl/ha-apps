@@ -1,3 +1,8 @@
+## 2.0.0-beta.69
+
+- De app gebruikt de volledige beschikbare breedte en laat bedieningselementen op kleinere schermen doorlopen op de volgende regel.
+- Showbouwer toont spelers van de Music Assistant-integratie en kan de gekozen muziek apart testen.
+
 ## 2.0.0-beta.68
 
 - Showbouwer heeft een eigen pagina met een tijdlijn met kamers en groepen per stap, opgeslagen shows en een optie om shows te dupliceren.
