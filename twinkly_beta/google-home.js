@@ -22,6 +22,8 @@
       const rooms = Object.values(inventory.groups || {}).filter(room => room.kind === "room");
       const shows = (Array.isArray(projects.shows) ? projects.shows : Object.values(projects.shows || {}));
       const type = node("select"), target = node("select");
+      type.setAttribute("aria-label", "Type");
+      target.setAttribute("aria-label", "Kamer of show");
       type.append(option("room", "Kerstdemo per kamer"), option("show", "Eigen opgeslagen show"));
       const label = (caption, input) => {
         const field = node("label", caption + " ");
@@ -83,10 +85,22 @@
       reload.type = "button";
       reload.onclick = render;
       page.replaceChildren(node("h2", "Google Home"), controls, reload, script, copy, status, node("h3", "Installatie"), steps);
+      script.style.whiteSpace = "pre-wrap";
+      script.style.overflowWrap = "anywhere";
+      const sources = node("p");
+      for (const [name, url] of [
+        ["Home Assistant · Google Assistant", "https://www.home-assistant.io/integrations/google_assistant/"],
+        ["Google Home · Routines", "https://support.google.com/googlenest/answer/7029585?hl=nl"],
+      ]) {
+        const link = node("a", name);
+        Object.assign(link, {href:url, target:"_blank", rel:"noopener noreferrer"});
+        sources.append(link, node("br"));
+      }
+      page.append(sources);
       type.onchange();
       for (const [file, caption] of [
-        ["google-home-demo.png", "Voorbeeld: kerstdemo per kamer"],
-        ["google-home-show.png", "Voorbeeld: een eigen show koppelen"],
+        ["google-home-demo.jpg", "Voorbeeld: kerstdemo per kamer"],
+        ["google-home-show.jpg", "Voorbeeld: een eigen show koppelen"],
       ]) {
         const figure = node("figure"), image = node("img");
         image.src = file;

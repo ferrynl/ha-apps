@@ -1374,8 +1374,6 @@ test('Google Home generates scripts for an app room and a saved show', async ({p
  await expect(pane.locator('pre')).toContainText('room: "Woonkamer"');
  await expect(page.locator('#nav-google')).toHaveAttribute('aria-current','page');
  await pane.locator('figure').evaluateAll(figures => figures.forEach(figure => figure.hidden = true));
- const demo = await pane.screenshot({type:'jpeg',quality:48});
- console.log('GOOGLE_CAPTURE_DEMO ' + demo.toString('base64'));
  await pane.getByLabel('Type',{exact:true}).selectOption('show');
  await expect(pane.locator('pre')).toContainText('show_id: "' + showId + '"');
  await expect(pane.locator('pre')).not.toContainText('room:');
