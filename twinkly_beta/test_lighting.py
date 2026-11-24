@@ -9,11 +9,39 @@ from aiohttp import web
 from aiohttp.test_utils import TestClient, TestServer
 
 from modules.lighting import light_key
+from modules.lighting_projects import Playback, show_settings
 from modules.provider_routes import install
 from modules.provider_store import ProviderStore
 from modules.hue_entertainment import HueEntertainment, RESOURCE
 
 AREA = "38a6171a-af01-4eea-a634-c84b79b56a05"
+
+
+class ShowMusicTests(unittest.IsolatedAsyncioTestCase):
+    async def test_show_music_starts_then_stops_on_cancel(self):
+        scene_applied = asyncio.Event()
+
+        async def apply(scene, group):
+            scene_applied.set()
+            return {"lamp": {"color": "accepted"}}
+
+        music = {"player": "media_player.ma_room", "media_id": "library://playlist/42", "media_type": "playlist"}
+        show = show_settings({"name": "Kerstshow", "group": "a" * 32, "music": music,
+                              "steps": [{"scene": "b" * 32, "seconds": 20}]})
+        lighting = SimpleNamespace(valid_show=lambda show: True, run_scene=apply)
+        playback = Playback(lighting)
+        with patch("modules.lighting_projects.show_music_service", new_callable=AsyncMock) as service:
+            playback.start({**show, "id": "show"})
+            task = playback.task
+            await asyncio.wait_for(scene_applied.wait(), 2)
+            playback.request_stop()
+            await asyncio.wait_for(task, 2)
+            self.assertEqual([interaction.args for interaction in service.await_args_list], [
+                ("music_assistant/play_media", {"entity_id": music["player"], "media_id": music["media_id"],
+                                                "enqueue": "replace", "media_type": "playlist"}),
+                ("media_player/media_stop", {"entity_id": music["player"]}),
+            ])
+        self.assertEqual(playback.status["state"], "stopped")
 
 
 class LightingTests(unittest.IsolatedAsyncioTestCase):

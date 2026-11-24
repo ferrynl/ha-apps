@@ -10,7 +10,7 @@ import os
 import re
 import uuid
 
-from aiohttp import ClientError, ClientSession, WSMsgType, web
+from aiohttp import ClientError, ClientSession, ClientTimeout, WSMsgType, web
 from PIL import Image, ImageOps, UnidentifiedImageError
 
 from .common import rgb
@@ -98,7 +98,18 @@ def show_settings(data):
         if type(seconds) is not int or not 1 <= seconds <= 300:
             raise ValueError("Invalid hold time")
         normalized.append({"scene": identifier(step["scene"]), "seconds": seconds})
-    return {"name": name.strip(), "group": group, "steps": normalized}
+    show = {"name": name.strip(), "group": group, "steps": normalized}
+    music = data.get("music")
+    if music is not None:
+        player, media_id = music["player"], music["media_id"]
+        media_type = music.get("media_type", "")
+        if (not isinstance(player, str) or len(player) > 255
+                or not re.fullmatch(r"media_player\.[a-z0-9_]+", player)
+                or not isinstance(media_id, str) or not 1 <= len(media_id.strip()) <= 500
+                or media_type not in ("", "track", "playlist", "album", "radio")):
+            raise ValueError("Invalid show music")
+        show["music"] = {"player": player, "media_id": media_id.strip(), "media_type": media_type}
+    return show
 
 
 def spatial_position(point, direction, effect):
@@ -136,6 +147,18 @@ def spatial_steps(eligible, lights, axis, sign, color, delay, end_color):
     return steps
 
 
+async def show_music_service(service, data):
+    token = os.environ.get("SUPERVISOR_TOKEN")
+    if not token:
+        raise ValueError("Home Assistant API is unavailable")
+    async with ClientSession(timeout=ClientTimeout(total=8)) as session:
+        async with session.post(
+            f"http://supervisor/core/api/services/{service}",
+            headers={"Authorization": f"Bearer {token}"}, json=data, allow_redirects=False,
+        ) as response:
+            response.raise_for_status()
+
+
 class Playback:
     def __init__(self, lighting):
         self.lighting = lighting
@@ -150,7 +173,7 @@ class Playback:
         async def apply(step):
             return await self.lighting.run_scene(step["scene"], show["group"])
 
-        self.schedule("show", show["steps"], apply, show["id"])
+        self.schedule("show", show["steps"], apply, show["id"], music=show.get("music"))
 
     def start_spatial(self, points, direction, color, delay, end_color=None, effect=None):
         axis, sign = DIRECTIONS[direction]
@@ -195,17 +218,28 @@ class Playback:
         self.schedule("spatial", [], apply, prepare=plan)
         self.status["effect"] = effect or ("gradient" if end_color is not None else "sweep")
 
-    def schedule(self, kind, steps, apply, identifier=None, prepare=None):
+    def schedule(self, kind, steps, apply, identifier=None, prepare=None, music=None):
         if self.task is not None:
             raise web.HTTPConflict()
         self.stop.clear()
         self.status = {"state": "playing", "kind": kind, "id": identifier, "step": 0, "total": len(steps),
                        "uncertain": False, "partial": False, "last": None}
-        self.task = asyncio.create_task(self.run(steps, apply, prepare))
+        self.task = asyncio.create_task(self.run(steps, apply, prepare, music))
 
-    async def run(self, steps, apply, prepare):
+    async def run(self, steps, apply, prepare, music=None):
         outcome = "complete"
+        music_started = False
         try:
+            if music and not self.stop.is_set():
+                payload = {"entity_id": music["player"], "media_id": music["media_id"], "enqueue": "replace"}
+                if music.get("media_type"):
+                    payload["media_type"] = music["media_type"]
+                try:
+                    await show_music_service("music_assistant/play_media", payload)
+                    music_started = True
+                except (ClientError, TimeoutError, ValueError):
+                    LOG.warning("Music Assistant could not start show music", exc_info=True)
+                    self.status["music_error"] = "start"
             if prepare:
                 steps = await prepare()
                 self.status["total"] = len(steps)
@@ -250,6 +284,12 @@ class Playback:
             LOG.exception("Lighting playback interrupted")
             outcome = "failed"
         finally:
+            if music_started:
+                try:
+                    await show_music_service("media_player/media_stop", {"entity_id": music["player"]})
+                except (ClientError, TimeoutError, ValueError):
+                    LOG.warning("Music Assistant could not stop show music", exc_info=True)
+                    self.status["music_error"] = "stop"
             self.status["state"] = "stopped" if self.stop.is_set() else outcome
             self.task = None
 

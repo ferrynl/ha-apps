@@ -11,7 +11,7 @@ for(const viewport of [{width:1440,height:900},{width:390,height:844}]){
   await expect(page.locator('#lighting-panel')).toBeVisible();
   await expect(page.getByRole('heading',{name:'Lichtmengtafel'})).toBeVisible();
   expect(await page.locator('.workspace-nav a').evaluateAll(links => links.map(link => link.id))).toEqual([
-   'nav-home','nav-house','nav-control','nav-hue','nav-govee','nav-tests','nav-network','nav-google','nav-settings',
+   'nav-home','nav-house','nav-control','nav-hue','nav-govee','nav-tests','nav-network','nav-shows','nav-google','nav-settings',
   ]);
   await expect(page.getByRole('link',{name:'Twinkly',exact:true}).locator('img')).toHaveAttribute('src','twinkly-nav-logo.svg');
   await expect(page.getByRole('link',{name:'Philips Hue',exact:true}).locator('img')).toHaveAttribute('src','hue-app-icon.webp');
@@ -503,7 +503,7 @@ test('Mijn Huis saves lamp moves, angles and sizes across browser sessions', asy
  await second.context.close();
 });
 
-test('a saved mixed show keeps playing after leaving Home and stops from a second browser', async ({browser}) => {
+test('a saved mixed show with Music Assistant keeps playing after leaving Showbouwer and stops from a second browser', async ({browser}) => {
  const state = newProjects();
  const setup = async () => {
   const context = await browser.newContext();
@@ -512,13 +512,20 @@ test('a saved mixed show keeps playing after leaving Home and stops from a secon
    scenes:{warm:{name:'Warm',group:'room',on:true},cool:{name:'Koel',group:'room',on:true}}, connections:{},
   }}));
   await context.route('**/lighting/projects', mockProjects(state));
+  await context.route('**/media-players', route => route.fulfill({json:{
+   players:[{id:'media_player.ma_room',name:'Music Assistant woonkamer',state:'idle'}],
+  }}));
   const page = await context.newPage();
   await page.goto('http://127.0.0.1:8765/index.html#home');
+  await expect(page.locator('#lighting-tools')).toBeHidden();
+  await page.locator('#nav-shows').click();
   return {context, page};
  };
  const {context, page} = await setup();
  const builder = page.locator('#lighting-tools section').filter({hasText:'Showbouwer'});
  await builder.getByLabel('Shownaam').fill('Kerstshow');
+ await builder.getByLabel('Speler', {exact:true}).selectOption('media_player.ma_room');
+ await builder.getByLabel('Nummer, afspeellijst of link').fill('library://playlist/42');
  await builder.getByRole('button',{name:'Stap toevoegen'}).click();
  await builder.getByRole('button',{name:'Stap toevoegen'}).click();
  const steps = builder.locator('.lighting-show-step');
@@ -527,6 +534,7 @@ test('a saved mixed show keeps playing after leaving Home and stops from a secon
  await builder.getByRole('button',{name:'Opslaan'}).click();
  await builder.getByRole('button',{name:'Afspelen'}).click();
  await expect(builder.getByRole('status')).toHaveText('Stap 1 / 2');
+ expect(state.shows[0].music).toEqual({player:'media_player.ma_room',media_id:'library://playlist/42'});
  expect(state.shows[0].steps.map(step => step.scene)).toEqual(['cool','warm']);
  await page.locator('#nav-settings').click();
  await context.close();

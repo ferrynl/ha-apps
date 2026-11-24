@@ -1,3 +1,8 @@
+## 2.0.0-beta.68
+
+- Showbouwer heeft een eigen pagina met een tijdlijn, opgeslagen shows en een optie om shows te dupliceren.
+- Voeg muziek toe via Music Assistant. De soundtrack wordt ook afgespeeld als je een eigen show via Google Home start.
+
 ## 2.0.0-beta.67
 
 - De add-on serveert de Google Home-pagina nu met het script en beide screenshots via Home Assistant Ingress.
