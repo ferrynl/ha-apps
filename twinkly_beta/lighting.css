@@ -463,3 +463,11 @@
 .house-marker-artwork { position: absolute; left: 50%; top: 0; width: var(--art-width, 100%); height: 100%;
   transform: translateX(-50%) scaleX(var(--art-stretch, 1)); pointer-events: none; }
 .house-marker-artwork > * { display: block; width: 100%; height: 100%; object-fit: contain; }
+
+.lighting-show-editor { display:grid; grid-template-columns:minmax(0,2fr) minmax(15rem,1fr); gap:1rem; align-items:start; }
+.lighting-show-library { display:grid; gap:.65rem; min-width:0; overflow-wrap:anywhere; }
+.lighting-show-music { min-inline-size:0; margin:.75rem 0; padding:.75rem; border:1px solid var(--line, #3c4550); border-radius:.5rem; }
+.lighting-show-music p { margin:.25rem 0 .75rem; }
+.lighting-show-music input { width:min(100%, 28rem); }
+.lighting-show-step { padding:.55rem; border:1px solid var(--line, #3c4550); border-radius:.4rem; }
+@media (max-width:800px) { .lighting-show-editor { grid-template-columns:1fr; } }

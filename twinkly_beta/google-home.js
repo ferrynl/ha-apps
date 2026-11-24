@@ -49,7 +49,7 @@
           "  - event: christmas_control_center_demo",
           "    event_data:",
           "      " + (show ? "show_id" : "room") + ": " + JSON.stringify(target.value),
-        ].join("\n") : (show ? "Sla eerst een show op in Show Studio." : "Maak eerst een kamer aan op Home.");
+        ].join("\n") : (show ? "Sla eerst een show op in Showbouwer." : "Maak eerst een kamer aan op Home.");
       };
       type.onchange = () => {
         target.replaceChildren(...(type.value === "show"

@@ -117,6 +117,7 @@ button:hover,.mixdesk button:hover{background:#2a313c;filter:none}.mixdesk butto
 <a id="nav-govee" href="#govee"><img class="brand-wordmark brand-wordmark-govee" src="govee-logo.png" alt="Govee"></a>
 <a id="nav-tests" href="#testcontrole"></a>
 <a id="nav-network" href="#security-center"></a>
+<a id="nav-shows" href="#showbouwer">Showbouwer</a>
 <a id="nav-google" href="#google-home">Google Home</a>
 <a id="nav-settings" href="#instellingen"></a>
 </nav></header>
@@ -1841,13 +1842,13 @@ document.addEventListener('visibilitychange',() => { if (!document.hidden) refre
 function showPage() {
   const projectPage = /^(#roadmap|#changelog|#release-[\w.-]+)$/.test(location.hash);
   const page = projectPage ? 'project' : isNetworkPage() ? 'network' :
-    {'#mijn-huis':'house','#google-home':'google','#instellingen':'settings','#testcontrole':'tests','#hue':'hue','#govee':'govee','#bediening':'control','#twinkly':'control'}[location.hash] || 'home';
+    {'#showbouwer':'shows','#mijn-huis':'house','#google-home':'google','#instellingen':'settings','#testcontrole':'tests','#hue':'hue','#govee':'govee','#bediening':'control','#twinkly':'control'}[location.hash] || 'home';
   byId('project-page').hidden = page !== 'project';
   for (const name of ['control','settings','network','tests','google']) {
     byId(name + '-page').hidden = page !== name;
     byId('nav-' + name).setAttribute('aria-current',page === name ? 'page' : 'false');
   }
-  for (const brand of ['home','hue','govee']) {
+  for (const brand of ['home','hue','govee','shows']) {
     byId('nav-' + brand).setAttribute('aria-current', page === brand ? 'page' : 'false');
   }
   byId('nav-tests').textContent = centerLabels[lang.value][0];

@@ -1567,7 +1567,7 @@
       loadCollections();
     }
     renderCollections();
-    if (previous !== context && ["home", "house", "hue", "govee", "control", "settings", "tests"].includes(context)) {
+    if (previous !== context && ["home", "house", "shows", "hue", "govee", "control", "settings", "tests"].includes(context)) {
       refresh(false).catch(() => { feedback.textContent = t(32); });
     }
   });

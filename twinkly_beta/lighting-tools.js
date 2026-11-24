@@ -185,6 +185,23 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, ro
   let generation = 0;
   let timer;
   let activePage;
+  let players = [];
+  let playersUnavailable = false;
+  const showText = () => ({
+    nl: ["Showbouwer", "Tijdlijn", "Music Assistant", "Speler", "Nummer, afspeellijst of link", "Automatisch", "Nummer", "Afspeellijst", "Album", "Radio", "Zonder muziek", "Kies een Music Assistant-speler uit Home Assistant. De muziek stopt wanneer de show stopt.", "Spelers ophalen mislukt", "Spelers vernieuwen", "Muziek kon niet starten", "Muziek kon niet stoppen", "Dupliceren", "Nieuwe show", "Opgeslagen shows"],
+    en: ["Show builder", "Timeline", "Music Assistant", "Player", "Track, playlist or link", "Automatic", "Track", "Playlist", "Album", "Radio", "No music", "Choose a Music Assistant player from Home Assistant. Music stops when the show stops.", "Could not load players", "Refresh players", "Music could not start", "Music could not stop", "Duplicate", "New show", "Saved shows"],
+    de: ["Show-Editor", "Zeitleiste", "Music Assistant", "Player", "Titel, Playlist oder Link", "Automatisch", "Titel", "Playlist", "Album", "Radio", "Ohne Musik", "Wähle einen Music Assistant-Player aus Home Assistant. Die Musik stoppt mit der Show.", "Player konnten nicht geladen werden", "Player aktualisieren", "Musik konnte nicht starten", "Musik konnte nicht gestoppt werden", "Duplizieren", "Neue Show", "Gespeicherte Shows"],
+    es: ["Editor de espectáculos", "Cronología", "Music Assistant", "Reproductor", "Canción, lista o enlace", "Automático", "Canción", "Lista", "Álbum", "Radio", "Sin música", "Elige un reproductor de Music Assistant en Home Assistant. La música se detiene al terminar el espectáculo.", "No se cargaron los reproductores", "Actualizar reproductores", "No se pudo iniciar la música", "No se pudo detener la música", "Duplicar", "Nuevo espectáculo", "Espectáculos guardados"],
+  }[language()]);
+  async function refreshShowPlayers() {
+    try {
+      players = (await api("media-players")).players;
+      playersUnavailable = false;
+    } catch {
+      playersUnavailable = true;
+    }
+    if (activePage === "shows" && inventory && initialized) renderShows();
+  }
   let gesture;
   let photoElement = node("img");
   const syncStatus = node("p");
@@ -298,7 +315,7 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, ro
       : state === "stopping" ? (spatial ? effectName + " · " + t(10) + "…" : msg(6))
       : spatial ? (gradient ? g({complete: 5, stopped: 6, failed: 7}[state]) : e({complete: 12, stopped: 13, failed: 14}[state]))
       : t({complete: 13, stopped: 14, failed: 15}[state]);
-    const status = [headline, playback.uncertain && t(16), playback.partial && t(35)].filter(Boolean).join(" · ");
+    const status = [headline, playback.music_error && showText()[playback.music_error === "start" ? 14 : 15], playback.uncertain && t(16), playback.partial && t(35)].filter(Boolean).join(" · ");
     showStatus.textContent = spatial && isPlaying() ? effectName + " · " + status : spatial ? "" : status;
     effectStatus.textContent = spatial ? (radial !== undefined && state !== "stopping" ? effectName + " · " + status : status)
       : isPlaying() ? t(0) + " · " + status : "";
@@ -383,22 +400,33 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, ro
     .map(([id, scene]) => [id, scene.name]);
 
   function valid(show) {
-    const sceneIds = new Set(scenes(show.group).map(([id]) => id));
-    return Boolean(inventory.groups?.[show.group] && show.steps.length &&
-      show.steps.every(step => sceneIds.has(step.scene)));
+    return show.steps.length > 0 && show.steps.every(step => {
+      const group = step.group || show.group;
+      return inventory.groups?.[group] && inventory.scenes?.[step.scene]?.group === group;
+    });
   }
 
   function renderShows() {
-    const list = node("div", "", "lighting-controls");
+    const labels = showText();
+    const list = node("div", "", "lighting-show-library");
+    list.append(node("h3", labels[18]));
+    const openDraft = show => {
+      draft = {
+        ...show,
+        steps: show.steps.map(step => ({...step, group: step.group || show.group})),
+        music: show.music ? {...show.music} : null,
+      };
+      renderShows();
+      showSection.querySelector("form input")?.focus();
+    };
     for (const show of shows) {
       const card = node("article", "", "lighting-card");
       const playable = valid(show);
-      card.append(node("h4", show.name), node("p", playable ? inventory.groups[show.group].name : t(34)),
+      const groupNames = [...new Set(show.steps.map(step => inventory.groups?.[step.group || show.group]?.name))];
+      card.append(node("h4", show.name), node("p", playable ? groupNames.join(" · ") : t(34)),
         action(t(9), () => change({action: "play", id: show.id}, showStatus), isPlaying() || !playable),
-        action(t(29), () => {
-          draft = {...show, steps: show.steps.map(step => ({...step}))};
-          renderShows();
-        }, isPlaying()),
+        action(t(29), () => openDraft(show), isPlaying()),
+        action(labels[16], () => openDraft({...show, id: undefined, revision: undefined}), isPlaying() || shows.length >= maxShows),
         action(t(7), async () => {
           if (!window.confirm(t(7) + " · " + show.name + "?")) return;
           if (await change({action: "delete", id: show.id, revision: show.revision}, showStatus)) {
@@ -406,6 +434,7 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, ro
             renderShows();
           }
         }, isPlaying()));
+      if (show.music) card.append(node("p", show.music.media_id));
       list.append(card);
     }
 
@@ -413,34 +442,72 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, ro
       .map(([id, group]) => [id, group.name]);
     const form = node("form", "", "lighting-show-form");
     if (groups.length && !isPlaying()) {
-      if (!draft.group) draft.group = groups[0][0];
+      if (!groups.some(([id]) => id === draft.group)) draft.group = groups[0][0];
       const name = node("input");
       name.maxLength = 60;
       name.required = true;
       name.value = draft.name;
       name.oninput = () => { draft.name = name.value; };
-      const group = dropdown(groups, draft.group, t(27));
+      const group = dropdown(groups, draft.group);
       group.onchange = () => {
         draft.group = group.value;
-        draft.steps = [];
         renderShows();
       };
-      form.append(field(t(1), name), field(t(27), group));
+      form.append(node("h3", draft.id ? draft.name : labels[17]), field(t(1), name), field(t(27), group));
+      const music = node("fieldset", "", "lighting-show-music");
+      music.append(node("legend", labels[2]), node("p", labels[11]));
+      const playerChoices = players.map(item => [item.id, item.name]);
+      if (draft.music?.player && !playerChoices.some(([id]) => id === draft.music.player)) {
+        playerChoices.push([draft.music.player, draft.music.player]);
+      }
+      const player = dropdown(playerChoices, draft.music?.player || "", labels[10]);
+      player.setAttribute("aria-label", labels[3]);
+      player.onchange = () => {
+        draft.music = player.value ? {...draft.music, player: player.value} : null;
+        renderShows();
+      };
+      music.append(field(labels[3], player), action(labels[13], refreshShowPlayers));
+      if (playersUnavailable) music.append(node("p", labels[12]));
+      if (draft.music) {
+        const media = Object.assign(node("input"), {required: true, maxLength: 500, value: draft.music.media_id || ""});
+        media.oninput = () => { draft.music.media_id = media.value; };
+        const type = dropdown([["track", labels[6]], ["playlist", labels[7]], ["album", labels[8]], ["radio", labels[9]]],
+          draft.music.media_type || "", labels[5]);
+        type.onchange = () => { draft.music.media_type = type.value; };
+        music.append(field(labels[4], media), field(labels[5], type));
+      }
+      form.append(music);
+      const duration = node("span");
+      const updateDuration = () => {
+        const total = draft.steps.reduce((sum, step) => sum + (step.seconds || 0), 0);
+        duration.textContent = Math.floor(total / 60) + ":" + String(total % 60).padStart(2, "0");
+      };
+      updateDuration();
+      const timeline = node("div", "", "lighting-heading");
+      timeline.append(node("h3", labels[1]), duration);
+      form.append(timeline);
       const available = scenes(draft.group);
       draft.steps.forEach((step, index) => {
         const row = node("div", "", "lighting-controls lighting-show-step");
-        const scene = dropdown(available, step.scene, t(2));
+        const target = dropdown(groups, step.group || draft.group, t(27));
+        target.setAttribute("aria-label", t(27));
+        target.onchange = () => {
+          step.group = target.value;
+          step.scene = scenes(target.value)[0]?.[0] || "";
+          renderShows();
+        };
+        const scene = dropdown(scenes(step.group || draft.group), step.scene, t(2));
         scene.required = true;
         scene.onchange = () => { step.scene = scene.value; };
         const seconds = node("input");
         Object.assign(seconds, {type: "number", min: "1", max: "300", required: true, value: step.seconds});
-        seconds.oninput = () => { step.seconds = seconds.valueAsNumber; };
+        seconds.oninput = () => { step.seconds = seconds.valueAsNumber; updateDuration(); };
         const move = offset => {
           const next = index + offset;
           [draft.steps[index], draft.steps[next]] = [draft.steps[next], draft.steps[index]];
           renderShows();
         };
-        row.append(node("strong", String(index + 1)), field(t(2), scene), field(t(3), seconds),
+        row.append(node("strong", String(index + 1)), field(t(27), target), field(t(2), scene), field(t(3), seconds),
           action(t(5), () => move(-1), index === 0),
           action(t(6), () => move(1), index === draft.steps.length - 1),
           action(t(7), () => { draft.steps.splice(index, 1); renderShows(); }));
@@ -450,7 +517,7 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, ro
       const submit = node("button", t(8));
       submit.type = "submit";
       controls.append(action(t(4), () => {
-        draft.steps.push({scene: available[0][0], seconds: 3});
+        draft.steps.push({group: draft.group, scene: available[0][0], seconds: 3});
         renderShows();
       }, !available.length || draft.steps.length >= maxSteps), submit);
       if (draft.id) controls.append(action(t(28), () => {
@@ -466,7 +533,7 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, ro
           showStatus.textContent = t(30);
           return;
         }
-        const show = {...draft, name};
+        const show = {...draft, name, music: draft.music ? {...draft.music, media_id: (draft.music.media_id || "").trim()} : null};
         submit.disabled = true;
         try {
           if (await change({...show, action: "save"}, showStatus)) {
@@ -481,9 +548,11 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, ro
       form.append(node("p", t(11)));
     }
     const header = node("div", "", "lighting-heading");
-    header.append(node("h3", t(0)));
+    header.append(node("h2", labels[0]));
     if (isPlaying()) header.append(action(t(10), () => change({action: "stop"}, showStatus), playback.state === "stopping"));
-    showSection.replaceChildren(header, node("p", t(26)), showStatus, reports[0], list, form);
+    const editor = node("div", "", "lighting-show-editor");
+    editor.append(form, list);
+    showSection.replaceChildren(header, node("p", t(26)), showStatus, reports[0], editor);
     if (legacyShows.length || legacyLayout.photo) showSection.append(action(msg(2), () => migrate()));
   }
 
@@ -1985,10 +2054,11 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, ro
   }
 
   return (page, data) => {
-    const visible = page === "home" || page === "house";
+    const visible = page === "shows" || page === "house";
     const opening = visible && page !== activePage;
     activePage = page;
-    mount.hidden = page !== "home";
+    mount.hidden = page !== "shows";
+    document.getElementById("nav-shows").textContent = showText()[0];
     house.hidden = page !== "house";
     nav.textContent = houseTitle.textContent = h(0);
     if (page === "house") {
@@ -2004,6 +2074,7 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, ro
       return;
     }
     if (opening) {
+      if (page === "shows") refreshShowPlayers();
       (page === "house" ? house : mount).append(syncStatus);
       if (!initialized) syncStatus.textContent = msg(0);
       refresh();
