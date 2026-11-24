@@ -1360,7 +1360,7 @@ test('Hue lamp cards show their Home room, assigned zones and scenes', async ({p
  const lamp = room.locator('article').filter({hasText:'Tafellamp'});
  await lamp.getByText(/Kersthoek/).click();
  await expect(lamp.getByRole('button',{name:'Aan',exact:true})).toBeVisible();
- await lamp.getByText(/Scènes.*Woonkamer/).click();
+ await lamp.getByText(/scènes.*Woonkamer/i).click();
  await expect(lamp.getByRole('button',{name:'Avondlicht'})).toBeVisible();
  await expect(lamp.getByText(/Andere zone/)).toHaveCount(0);
 });
