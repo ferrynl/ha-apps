@@ -1238,6 +1238,7 @@ test('Hue Entertainment preserves the setup and reports confirmed Bridge release
  const calls = [];
  let active = null;
  let released = false;
+ let stopError;
  await page.route(prefix, route => route.fulfill({json:{active,released,bridges:[
   {bridge:'b1',address:'192.168.1.2',has_client_key:true,areas:[{id:'first',name:'Kantoor'},{id:'second',name:'Woonkamer'}]},
  ]}}));
@@ -1246,8 +1247,8 @@ test('Hue Entertainment preserves the setup and reports confirmed Bridge release
   const body = route.request().postDataJSON();
   calls.push(body);
   active = body.action === 'start' ? body : null;
-  released = body.action === 'stop';
-  return route.fulfill({json:{active,released}});
+  released = body.action === 'stop' && !stopError;
+  return route.fulfill({json:{active,released,error:stopError}});
  });
  await page.goto('http://127.0.0.1:8765/index.html');
  await page.locator('#nav-hue').click();
@@ -1264,9 +1265,17 @@ test('Hue Entertainment preserves the setup and reports confirmed Bridge release
  await expect(brightness).toHaveValue('25');
  await page.getByRole('button',{name:'Start effect',exact:true}).click();
  await expect(page.getByText('Effect actief · Woonkamer')).toBeVisible();
+ stopError = 'stop_failed';
+ await page.getByRole('button',{name:'Stop effect',exact:true}).click();
+ await expect(page.getByText('De Bridge heeft het stoppen niet bevestigd.',{exact:true})).toBeVisible();
+ await expect(page.getByText('Hue Bridge bevestigt dat de ruimte vrij is')).toHaveCount(0);
+ stopError = undefined;
+ await page.getByRole('button',{name:'Start effect',exact:true}).click();
+ await expect(page.getByText('Effect actief · Woonkamer')).toBeVisible();
  await page.getByRole('button',{name:'Stop effect',exact:true}).click();
  await expect(page.getByText('Hue Bridge bevestigt dat de ruimte vrij is')).toBeVisible();
- expect(calls).toEqual([{action:'start',bridge:'b1',area:'second',effect:'sunset',brightness:25},{action:'stop'}]);
+ expect(calls).toEqual([{action:'start',bridge:'b1',area:'second',effect:'sunset',brightness:25},{action:'stop'},
+  {action:'start',bridge:'b1',area:'second',effect:'sunset',brightness:25},{action:'stop'}]);
 });
 
 test('Mijn Huis remembers room positions on the shared plan and shows them in 3D', async ({page}) => {
