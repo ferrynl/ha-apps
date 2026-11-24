@@ -113,3 +113,20 @@ Gebruik bij actieve LedFX-muziek op Home de **Masterfader muziek** voor de gemen
 De app toont Govee-bediening zodra een lokaal statusbericht de benodigde functies aangeeft. Bij een geldige gemelde wittemperatuur verschijnt ook de wittemperatuurregelaar. Govee bevestigt de uitvoering van opdrachten niet. De directe bediening gebruikt je lokale netwerk.
 
 Voor Govee-scènes en segmenten kun je optioneel de officiële cloudkoppeling gebruiken. Vraag in Govee Home een API-sleutel aan. De handleiding onder **Govee → Govee-cloud** toont waar je in Home Assistant bij **Configuratie** de ongebruikte optionele opties zichtbaar maakt en `govee_api_key` invult. Sla op en herstart de app. Open **Govee → Govee-cloud → Cloudlampen ophalen**. Kies een lamp om de functies voor dat model te zien. De lijst kan ook lampen bevatten die niet via LAN zijn gekoppeld.
+
+## Kerstdemo starten met Google Home
+
+Maak in Home Assistant een script **Kerstdemo**. Kies **Bewerken in YAML** en plak:
+
+```yaml
+alias: Kerstdemo
+mode: single
+sequence:
+  - event: christmas_control_center_demo
+    event_data:
+      room: Woonkamer
+```
+
+Gebruik bij `room` exact de kamernaam uit Christmas Control Center. Start het script één keer in Home Assistant om de kamer te controleren. Deel het script daarna via je Home Assistant-koppeling met Google Assistant. Maak in Google Home een routine met de gesproken starter **start de kerstdemo** en kies als actie het script **Kerstdemo** (een scène in Google Home).
+
+De show draait in de add-on en gebruikt de gekoppelde Twinkly-groepen en beschikbare kleurverlichting in de gekozen kamer. De initiële blackout en beide veegbewegingen wijzigen de lampen in die kamer. Het logboek toont wanneer een verkeerde kamernaam of een al actieve show de start verhindert.
