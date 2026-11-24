@@ -468,6 +468,7 @@ test('Mijn Huis saves lamp moves, angles and sizes across browser sessions', asy
  }
  await expect(marker.locator('.house-led-map')).toHaveCSS('rotate','-35deg');
  await handle.scrollIntoViewIfNeeded();
+ const beforeWidthDrag = await marker.boundingBox();
  const handleBounds = await handle.boundingBox();
  await page.mouse.move(handleBounds.x + handleBounds.width / 2, handleBounds.y + handleBounds.height / 2);
  await page.mouse.down();
@@ -475,6 +476,8 @@ test('Mijn Huis saves lamp moves, angles and sizes across browser sessions', asy
   handleBounds.y + handleBounds.height / 2, {steps:6});
  await page.mouse.up();
  await expect.poll(() => Math.round(state.layout.points[0][1][5])).toBe(17);
+ await expect.poll(async () => Math.round((await marker.boundingBox()).height)).toBe(Math.round(beforeWidthDrag.height));
+ await expect.poll(async () => (await marker.boundingBox()).width).toBeGreaterThan(beforeWidthDrag.width);
  await expect(house.getByRole('slider',{name:'Grootte',exact:true})).toHaveCount(0);
  const bottom = house.locator('.house-edge-grip[data-edge=s]:visible');
  await bottom.press('ArrowRight');
@@ -994,18 +997,11 @@ test('Hue product photo is shared with the 2D and 3D walls in My Home', async ({
    body:'<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"><circle cx="8" cy="8" r="5"/></svg>'});
  });
  await page.goto('http://127.0.0.1:8765/index.html#hue');
- await expect(page.getByText('Productfoto toevoegen',{exact:true})).toBeVisible();
+ await expect(page.getByText('Productfoto toevoegen',{exact:true})).toHaveCount(0);
  await expect(page.locator('.lighting-card-head .hue-product-photo')).toBeVisible();
  await page.locator('#nav-house').click();
  await page.locator('.house-lamp-choice').filter({hasText:'Bureau'}).click();
- const settings = page.locator('#house-page .hue-product-settings');
- await settings.getByText('Productfoto toevoegen',{exact:true}).click();
- const png = await page.evaluate(() => document.createElement('canvas').toDataURL('image/png').split(',')[1]);
- await settings.locator('input').setInputFiles({name:'strip.png',mimeType:'image/png',buffer:Buffer.from(png,'base64')});
- await expect(settings.getByText('Productfoto wijzigen',{exact:true})).toBeVisible();
- await page.locator('#nav-hue').click();
- await expect(page.locator('.lighting-card-head .hue-product-photo')).toBeVisible();
- await page.locator('#nav-house').click();
+ await expect(page.locator('#house-page .hue-product-settings')).toHaveCount(0);
  await expect(page.locator('.house-lamp-choice .hue-product-photo')).toBeVisible();
  await expect(page.locator('.house-marker .hue-product-photo')).toHaveCSS('rotate','45deg');
  await page.getByRole('button',{name:'3D-weergave',exact:true}).click();

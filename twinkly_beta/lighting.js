@@ -335,64 +335,6 @@
     card.append(row);
   }
 
-  function productPhotoSettings(light) {
-    const labels = {
-      nl: ["Productfoto", "Kies een transparante PNG (max. 480 × 480 px, 480 kB)", "Verwijder productfoto", "Deze foto geldt voor alle Hue-lampen van dit model, ook in Mijn Huis.", "Foto opslaan mislukt. Controleer formaat, afmetingen en transparantie."],
-      en: ["Product photo", "Choose a transparent PNG (max. 480 × 480 px, 480 kB)", "Remove product photo", "This photo applies to all Hue lights of this model, including in My Home.", "Could not save the photo. Check its format, dimensions and transparency."],
-      de: ["Produktfoto", "Transparentes PNG wählen (max. 480 × 480 px, 480 kB)", "Produktfoto entfernen", "Das Foto gilt für alle Hue-Lampen dieses Modells, auch in Mein Zuhause.", "Foto konnte nicht gespeichert werden. Prüfe Format, Größe und Transparenz."],
-      es: ["Foto del producto", "Elige un PNG transparente (máx. 480 × 480 px, 480 kB)", "Quitar foto del producto", "La foto se aplica a todas las luces Hue de este modelo, también en Mi casa.", "No se pudo guardar la foto. Comprueba el formato, el tamaño y la transparencia."],
-    };
-    const [title, choose, remove, help, invalid] = labels[el("language").value] || labels.nl;
-    const extra = {
-      nl: ["Productfoto toevoegen", "Productfoto wijzigen", "De Bridge heeft geen modelcode voor deze lamp doorgegeven."],
-      en: ["Add product photo", "Change product photo", "The Bridge did not report a model code for this light."],
-      de: ["Produktfoto hinzufügen", "Produktfoto ändern", "Die Bridge hat keinen Modellcode für diese Lampe gemeldet."],
-      es: ["Añadir foto del producto", "Cambiar foto del producto", "El puente no ha informado del código de modelo de esta luz."],
-    };
-    const [add, change, missing] = extra[el("language").value] || extra.nl;
-    const path = hueProductImagePath(light);
-    const details = node("details", "", "hue-product-settings");
-    details.append(node("summary", !path ? title : light.has_product_image ? change : add));
-    if (!path) {
-      details.append(node("p", missing));
-      return details;
-    }
-    const file = Object.assign(node("input"), {type: "file", accept: "image/png"});
-    const result = node("p");
-    result.setAttribute("role", "status");
-    const update = async image => {
-      await api(path, {image});
-      hueProductImageRevisions.set(path, Date.now());
-      for (const item of data.lights) {
-        if (item.provider === "hue" && hueProductImagePath(item) === path) item.has_product_image = image !== null;
-      }
-      render();
-    };
-    file.addEventListener("change", () => {
-      if (!file.files.length) return;
-      task(file, async () => {
-        const png = file.files[0];
-        try {
-          if (png.size > 480000) throw new Error();
-          const encoded = await new Promise((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onload = () => resolve(reader.result.split(",")[1]);
-            reader.onerror = reject;
-            reader.readAsDataURL(png);
-          });
-          await update(encoded);
-        } catch {
-          result.textContent = invalid;
-        } finally {
-          file.value = "";
-        }
-      });
-    });
-    details.append(node("p", help), field(choose, file), result);
-    if (light.has_product_image) details.append(button(remove, () => update(null)));
-    return details;
-  }
-
   function lightCard(light) {
     const card = node("article", "", "lighting-card");
     card.dataset.provider = light.provider;
@@ -411,10 +353,7 @@
     head.append(mark, title);
     card.append(head, node("p", status(light), "lighting-state"));
     controls(card, [light], {id: light.id}, light.state);
-    if (light.provider === "hue") {
-      appendHueLampCollections(card, light);
-      card.append(productPhotoSettings(light));
-    }
+    if (light.provider === "hue") appendHueLampCollections(card, light);
     return card;
   }
 
@@ -953,10 +892,8 @@
     const fallback = ({nl:"Zonder kamer",en:"Unassigned",de:"Ohne Raum",es:"Sin habitación"})[el("language").value] || "Unassigned";
     for (const light of lights) {
       const home = homeRooms.find(([, room]) => room.members.includes(light.id));
-      const [bridge, entries] = hueLampCollections(light);
-      const room = entries.find(entry => entry.kind === "room");
-      const key = home ? "home:" + home[0] : room ? bridge.id + "/" + room.id : "";
-      if (!rooms.has(key)) rooms.set(key, {name:home?.[1].name || room?.name || fallback, lights:[]});
+      const key = home?.[0] ?? "";
+      if (!rooms.has(key)) rooms.set(key, {name:home?.[1].name || fallback, lights:[]});
       rooms.get(key).lights.push(light);
     }
     return [...rooms.values()].map(room => {
@@ -1054,7 +991,7 @@
 
   const renderTools = window.createLightingTools({
     mount: el("lighting-tools"), house: el("house-page"), nav: el("nav-house"), api, node, field,
-    language: () => el("language").value, productPhotoSettings,
+    language: () => el("language").value,
     roomLightControls: (card, light, status) => controls(card, [light], {id: light.id}, light.state, false, status),
   });
 
