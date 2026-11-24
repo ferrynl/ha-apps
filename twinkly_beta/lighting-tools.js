@@ -461,6 +461,7 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, ro
         playerChoices.push([draft.music.player, draft.music.player]);
       }
       const player = dropdown(playerChoices, draft.music?.player || "", labels[10]);
+      player.setAttribute("aria-label", labels[3]);
       player.onchange = () => {
         draft.music = player.value ? {...draft.music, player: player.value} : null;
         renderShows();
@@ -489,6 +490,7 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, ro
       draft.steps.forEach((step, index) => {
         const row = node("div", "", "lighting-controls lighting-show-step");
         const target = dropdown(groups, step.group || draft.group, t(27));
+        target.setAttribute("aria-label", t(27));
         target.onchange = () => {
           step.group = target.value;
           step.scene = scenes(target.value)[0]?.[0] || "";
