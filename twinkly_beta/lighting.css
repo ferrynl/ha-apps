@@ -471,3 +471,23 @@
 .lighting-show-music input { width:min(100%, 28rem); }
 .lighting-show-step { padding:.55rem; border:1px solid var(--line, #3c4550); border-radius:.4rem; }
 @media (max-width:800px) { .lighting-show-editor { grid-template-columns:1fr; } }
+
+main > *, .workspace-nav, .lighting-surface, .lighting-show-step > *, .track-screen > div {
+  min-inline-size: 0;
+}
+main :is(button, p, summary, dd, a) { overflow-wrap: anywhere; }
+main :is(fieldset, select, textarea, progress, svg) { max-inline-size: 100%; }
+main fieldset { min-inline-size: 0; }
+main pre { max-inline-size: 100%; overflow: auto; }
+#google-page figure { margin-inline: 0; }
+#google-page figure img { display: block; max-inline-size: 100%; block-size: auto; }
+.lighting-show-music input { width: 100%; }
+.lighting-show-step { display: flex; flex-wrap: wrap; }
+.lighting-show-step label { flex: 1 1 9rem; }
+.lighting-show-step select { width: 100%; }
+@media (max-width: 760px) {
+  main :is(section, article) { padding-inline: clamp(8px, 2.2vw, 16px); }
+  .workspace-nav a { justify-content: center; }
+  .track-tv { max-width: none; }
+  #network-page .network-tools { flex-wrap: wrap; }
+}

@@ -195,7 +195,7 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, ro
   }[language()]);
   async function refreshShowPlayers() {
     try {
-      players = (await api("media-players")).players;
+      players = (await api("lighting/projects/music-players")).players;
       playersUnavailable = false;
     } catch {
       playersUnavailable = true;
@@ -315,7 +315,8 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, ro
       : state === "stopping" ? (spatial ? effectName + " · " + t(10) + "…" : msg(6))
       : spatial ? (gradient ? g({complete: 5, stopped: 6, failed: 7}[state]) : e({complete: 12, stopped: 13, failed: 14}[state]))
       : t({complete: 13, stopped: 14, failed: 15}[state]);
-    const status = [headline, playback.music_error && showText()[playback.music_error === "start" ? 14 : 15], playback.uncertain && t(16), playback.partial && t(35)].filter(Boolean).join(" · ");
+    const musicStatus = ({nl:["Muziektest speelt", "Muziektest klaar", "Muziektest gestopt", "Muziektest mislukt"], en:["Music test playing", "Music test complete", "Music test stopped", "Music test failed"], de:["Musiktest läuft", "Musiktest beendet", "Musiktest gestoppt", "Musiktest fehlgeschlagen"], es:["Prueba de música en curso", "Prueba de música completada", "Prueba de música detenida", "Error en la prueba de música"]})[language()];
+    const status = [playback.kind === "music" && state !== "stopping" ? musicStatus[{playing:0, complete:1, stopped:2, failed:3}[state]] : headline, playback.music_error && showText()[playback.music_error === "start" ? 14 : 15], playback.uncertain && t(16), playback.partial && t(35)].filter(Boolean).join(" · ");
     showStatus.textContent = spatial && isPlaying() ? effectName + " · " + status : spatial ? "" : status;
     effectStatus.textContent = spatial ? (radial !== undefined && state !== "stopping" ? effectName + " · " + status : status)
       : isPlaying() ? t(0) + " · " + status : "";
@@ -468,13 +469,20 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, ro
       };
       music.append(field(labels[3], player), action(labels[13], refreshShowPlayers));
       if (playersUnavailable) music.append(node("p", labels[12]));
+      else if (!players.length) music.append(node("p", ({nl:"Geen spelers gevonden. Voeg de Music Assistant-integratie toe in Home Assistant.", en:"No players found. Add the Music Assistant integration in Home Assistant.", de:"Keine Player gefunden. Füge die Music Assistant-Integration in Home Assistant hinzu.", es:"No se encontraron reproductores. Añade la integración Music Assistant en Home Assistant."})[language()]));
       if (draft.music) {
         const media = Object.assign(node("input"), {required: true, maxLength: 500, value: draft.music.media_id || ""});
-        media.oninput = () => { draft.music.media_id = media.value; };
+        media.oninput = () => {
+          draft.music.media_id = media.value;
+          preview.disabled = !media.value.trim();
+        };
         const type = dropdown([["track", labels[6]], ["playlist", labels[7]], ["album", labels[8]], ["radio", labels[9]]],
           draft.music.media_type || "", labels[5]);
         type.onchange = () => { draft.music.media_type = type.value; };
-        music.append(field(labels[4], media), field(labels[5], type));
+        const preview = action(({nl:"Test muziek", en:"Test music", de:"Musik testen", es:"Probar música"})[language()], () => {
+          change({action: "preview_music", music: draft.music}, showStatus);
+        }, !media.value.trim());
+        music.append(field(labels[4], media), field(labels[5], type), preview);
       }
       form.append(music);
       const duration = node("span");

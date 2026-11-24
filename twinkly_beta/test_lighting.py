@@ -9,7 +9,7 @@ from aiohttp import web
 from aiohttp.test_utils import TestClient, TestServer
 
 from modules.lighting import light_key
-from modules.lighting_projects import Playback, show_settings
+from modules.lighting_projects import Playback, show_settings, start_show_music
 from modules.provider_routes import install
 from modules.provider_store import ProviderStore
 from modules.hue_entertainment import HueEntertainment, RESOURCE
@@ -30,17 +30,38 @@ class ShowMusicTests(unittest.IsolatedAsyncioTestCase):
                               "steps": [{"scene": "b" * 32, "seconds": 20}]})
         lighting = SimpleNamespace(valid_show=lambda show: True, run_scene=apply)
         playback = Playback(lighting)
-        with patch("modules.lighting_projects.show_music_service", new_callable=AsyncMock) as service:
+        calls = []
+        supervisor = web.Application()
+
+        async def respond(request):
+            self.assertEqual(request.headers["Authorization"], "Bearer test-token")
+            calls.append((request.path, await request.json()))
+            if request.path == "/template":
+                return web.json_response([{"id": music["player"], "state": "idle"}])
+            return web.json_response([])
+
+        supervisor.router.add_post("/{path:.*}", respond)
+        server = TestServer(supervisor)
+        await server.start_server()
+        self.addAsyncCleanup(server.close)
+        with (patch.dict("os.environ", {"SUPERVISOR_TOKEN": "test-token"}),
+              patch("modules.lighting_projects.CORE_API", str(server.make_url("/")).rstrip("/"))):
             playback.start({**show, "id": "show"})
             task = playback.task
             await asyncio.wait_for(scene_applied.wait(), 2)
             playback.request_stop()
             await asyncio.wait_for(task, 2)
-            self.assertEqual([interaction.args for interaction in service.await_args_list], [
-                ("music_assistant/play_media", {"entity_id": music["player"], "media_id": music["media_id"],
-                                                "enqueue": "replace", "media_type": "playlist"}),
-                ("media_player/media_stop", {"entity_id": music["player"]}),
-            ])
+            with self.assertRaisesRegex(ValueError, "unavailable"):
+                await start_show_music({**music, "player": "media_player.regular_speaker"})
+        self.assertIn("integration_entities('music_assistant')", calls[0][1]["template"])
+        self.assertEqual(calls[1:3], [
+            ("/services/music_assistant/play_media", {"entity_id": music["player"], "media_id": music["media_id"],
+                                                     "enqueue": "play", "media_type": "playlist"}),
+            ("/services/media_player/media_stop", {"entity_id": music["player"]}),
+        ])
+        self.assertEqual([path for path, _ in calls], [
+            "/template", "/services/music_assistant/play_media", "/services/media_player/media_stop", "/template",
+        ])
         self.assertEqual(playback.status["state"], "stopped")
 
 
