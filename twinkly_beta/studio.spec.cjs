@@ -11,7 +11,7 @@ for(const viewport of [{width:1440,height:900},{width:390,height:844}]){
   await expect(page.locator('#lighting-panel')).toBeVisible();
   await expect(page.getByRole('heading',{name:'Lichtmengtafel'})).toBeVisible();
   expect(await page.locator('.workspace-nav a').evaluateAll(links => links.map(link => link.id))).toEqual([
-   'nav-home','nav-house','nav-control','nav-hue','nav-govee','nav-tests','nav-network','nav-settings',
+   'nav-home','nav-house','nav-control','nav-hue','nav-govee','nav-tests','nav-network','nav-google','nav-settings',
   ]);
   await expect(page.getByRole('link',{name:'Twinkly',exact:true}).locator('img')).toHaveAttribute('src','twinkly-nav-logo.svg');
   await expect(page.getByRole('link',{name:'Philips Hue',exact:true}).locator('img')).toHaveAttribute('src','hue-app-icon.webp');
@@ -1359,4 +1359,26 @@ test('Hue lamp cards show their Home room, assigned zones and scenes', async ({p
  await lamp.getByText(/scènes.*Woonkamer/i).click();
  await expect(lamp.getByRole('button',{name:'Avondlicht'})).toBeVisible();
  await expect(lamp.getByText(/Andere zone/)).toHaveCount(0);
+});
+
+test('Google Home generates scripts for an app room and a saved show', async ({page}) => {
+ const showId = '9afc4240306f45fdb394ba056e97729b';
+ await page.setViewportSize({width:1000,height:780});
+ await page.route('**/lighting', route => route.fulfill({json:{
+  lights:[], groups:{living:{kind:'room',name:'Woonkamer',members:[]}}, scenes:{}, connections:{},
+ }}));
+ await page.route('**/lighting/projects', route => route.fulfill({json:{shows:[{id:showId,name:'Mijn Kerstshow'}]}}));
+ await page.goto('http://127.0.0.1:8765/index.html');
+ await page.locator('#nav-google').click();
+ const pane = page.locator('#google-page');
+ await expect(pane.locator('pre')).toContainText('room: "Woonkamer"');
+ await expect(page.locator('#nav-google')).toHaveAttribute('aria-current','page');
+ await pane.locator('figure').evaluateAll(figures => figures.forEach(figure => figure.hidden = true));
+ const demo = await pane.screenshot({type:'jpeg',quality:48});
+ console.log('GOOGLE_CAPTURE_DEMO ' + demo.toString('base64'));
+ await pane.getByLabel('Type',{exact:true}).selectOption('show');
+ await expect(pane.locator('pre')).toContainText('show_id: "' + showId + '"');
+ await expect(pane.locator('pre')).not.toContainText('room:');
+ const show = await pane.screenshot({type:'jpeg',quality:48});
+ console.log('GOOGLE_CAPTURE_SHOW ' + show.toString('base64'));
 });

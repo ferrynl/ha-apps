@@ -1,3 +1,7 @@
+## 2.0.0-beta.66
+
+- Nieuwe Google Home-pagina met installatievoorbeelden en een scriptgenerator voor de kerstdemo of een zelfgemaakte show.
+
 ## 2.0.0-beta.65
 
 - Start de kerstdemo per kamer vanuit Home Assistant en Google Home, ook met de app gesloten.
