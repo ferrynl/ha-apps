@@ -237,8 +237,11 @@ class Lighting:
     def valid_show(self, show):
         group = show["group"]
         scenes = self.store.load_scenes()
-        return group in self.store.load_groups() and all(
-            scenes.get(step["scene"], {}).get("group") == group for step in show["steps"]
+        groups = self.store.load_groups()
+        return all(
+            step.get("group", group) in groups
+            and scenes.get(step["scene"], {}).get("group") == step.get("group", group)
+            for step in show["steps"]
         )
 
     async def run_scene(self, identifier, expected_group=None, provider="all"):

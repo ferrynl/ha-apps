@@ -97,7 +97,10 @@ def show_settings(data):
         seconds = step["seconds"]
         if type(seconds) is not int or not 1 <= seconds <= 300:
             raise ValueError("Invalid hold time")
-        normalized.append({"scene": identifier(step["scene"]), "seconds": seconds})
+        cue = {"scene": identifier(step["scene"]), "seconds": seconds}
+        if "group" in step:
+            cue["group"] = identifier(step["group"])
+        normalized.append(cue)
     show = {"name": name.strip(), "group": group, "steps": normalized}
     music = data.get("music")
     if music is not None:
@@ -171,7 +174,7 @@ class Playback:
             raise ValueError("Unavailable scene")
 
         async def apply(step):
-            return await self.lighting.run_scene(step["scene"], show["group"])
+            return await self.lighting.run_scene(step["scene"], step.get("group", show["group"]))
 
         self.schedule("show", show["steps"], apply, show["id"], music=show.get("music"))
 

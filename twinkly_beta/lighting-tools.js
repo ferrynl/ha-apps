@@ -400,9 +400,10 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, ro
     .map(([id, scene]) => [id, scene.name]);
 
   function valid(show) {
-    const sceneIds = new Set(scenes(show.group).map(([id]) => id));
-    return Boolean(inventory.groups?.[show.group] && show.steps.length &&
-      show.steps.every(step => sceneIds.has(step.scene)));
+    return show.steps.length > 0 && show.steps.every(step => {
+      const group = step.group || show.group;
+      return inventory.groups?.[group] && inventory.scenes?.[step.scene]?.group === group;
+    });
   }
 
   function renderShows() {
@@ -412,7 +413,7 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, ro
     const openDraft = show => {
       draft = {
         ...show,
-        steps: show.steps.map(step => ({...step})),
+        steps: show.steps.map(step => ({...step, group: step.group || show.group})),
         music: show.music ? {...show.music} : null,
       };
       renderShows();
@@ -421,7 +422,8 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, ro
     for (const show of shows) {
       const card = node("article", "", "lighting-card");
       const playable = valid(show);
-      card.append(node("h4", show.name), node("p", playable ? inventory.groups[show.group].name : t(34)),
+      const groupNames = [...new Set(show.steps.map(step => inventory.groups?.[step.group || show.group]?.name))];
+      card.append(node("h4", show.name), node("p", playable ? groupNames.join(" · ") : t(34)),
         action(t(9), () => change({action: "play", id: show.id}, showStatus), isPlaying() || !playable),
         action(t(29), () => openDraft(show), isPlaying()),
         action(labels[16], () => openDraft({...show, id: undefined, revision: undefined}), isPlaying() || shows.length >= maxShows),
@@ -440,16 +442,15 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, ro
       .map(([id, group]) => [id, group.name]);
     const form = node("form", "", "lighting-show-form");
     if (groups.length && !isPlaying()) {
-      if (!draft.group) draft.group = groups[0][0];
+      if (!groups.some(([id]) => id === draft.group)) draft.group = groups[0][0];
       const name = node("input");
       name.maxLength = 60;
       name.required = true;
       name.value = draft.name;
       name.oninput = () => { draft.name = name.value; };
-      const group = dropdown(groups, draft.group, t(27));
+      const group = dropdown(groups, draft.group);
       group.onchange = () => {
         draft.group = group.value;
-        draft.steps = [];
         renderShows();
       };
       form.append(node("h3", draft.id ? draft.name : labels[17]), field(t(1), name), field(t(27), group));
@@ -487,7 +488,13 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, ro
       const available = scenes(draft.group);
       draft.steps.forEach((step, index) => {
         const row = node("div", "", "lighting-controls lighting-show-step");
-        const scene = dropdown(available, step.scene, t(2));
+        const target = dropdown(groups, step.group || draft.group, t(27));
+        target.onchange = () => {
+          step.group = target.value;
+          step.scene = scenes(target.value)[0]?.[0] || "";
+          renderShows();
+        };
+        const scene = dropdown(scenes(step.group || draft.group), step.scene, t(2));
         scene.required = true;
         scene.onchange = () => { step.scene = scene.value; };
         const seconds = node("input");
@@ -498,7 +505,7 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, ro
           [draft.steps[index], draft.steps[next]] = [draft.steps[next], draft.steps[index]];
           renderShows();
         };
-        row.append(node("strong", String(index + 1)), field(t(2), scene), field(t(3), seconds),
+        row.append(node("strong", String(index + 1)), field(t(27), target), field(t(2), scene), field(t(3), seconds),
           action(t(5), () => move(-1), index === 0),
           action(t(6), () => move(1), index === draft.steps.length - 1),
           action(t(7), () => { draft.steps.splice(index, 1); renderShows(); }));
@@ -508,7 +515,7 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, ro
       const submit = node("button", t(8));
       submit.type = "submit";
       controls.append(action(t(4), () => {
-        draft.steps.push({scene: available[0][0], seconds: 3});
+        draft.steps.push({group: draft.group, scene: available[0][0], seconds: 3});
         renderShows();
       }, !available.length || draft.steps.length >= maxSteps), submit);
       if (draft.id) controls.append(action(t(28), () => {

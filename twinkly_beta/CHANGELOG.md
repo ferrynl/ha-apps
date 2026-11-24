@@ -1,6 +1,6 @@
 ## 2.0.0-beta.68
 
-- Showbouwer heeft een eigen pagina met een tijdlijn, opgeslagen shows en een optie om shows te dupliceren.
+- Showbouwer heeft een eigen pagina met een tijdlijn met kamers en groepen per stap, opgeslagen shows en een optie om shows te dupliceren.
 - Voeg muziek toe via Music Assistant. De soundtrack wordt ook afgespeeld als je een eigen show via Google Home start.
 
 ## 2.0.0-beta.67

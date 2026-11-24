@@ -508,8 +508,8 @@ test('a saved mixed show with Music Assistant keeps playing after leaving Showbo
  const setup = async () => {
   const context = await browser.newContext();
   await context.route('**/lighting', route => route.fulfill({json:{
-   lights:[], groups:{room:{name:'Kamer',members:[]}},
-   scenes:{warm:{name:'Warm',group:'room',on:true},cool:{name:'Koel',group:'room',on:true}}, connections:{},
+   lights:[], groups:{room:{name:'Kamer',members:[]}, hall:{name:'Hal',members:[]}},
+   scenes:{warm:{name:'Warm',group:'room',on:true},cool:{name:'Koel',group:'hall',on:true}}, connections:{},
   }}));
   await context.route('**/lighting/projects', mockProjects(state));
   await context.route('**/media-players', route => route.fulfill({json:{
@@ -529,13 +529,13 @@ test('a saved mixed show with Music Assistant keeps playing after leaving Showbo
  await builder.getByRole('button',{name:'Stap toevoegen'}).click();
  await builder.getByRole('button',{name:'Stap toevoegen'}).click();
  const steps = builder.locator('.lighting-show-step');
- await steps.nth(1).getByLabel('Scène').selectOption('cool');
+ await steps.nth(1).getByLabel('Groep').selectOption('hall');
  await steps.nth(1).getByRole('button',{name:'Omhoog'}).click();
  await builder.getByRole('button',{name:'Opslaan'}).click();
  await builder.getByRole('button',{name:'Afspelen'}).click();
  await expect(builder.getByRole('status')).toHaveText('Stap 1 / 2');
  expect(state.shows[0].music).toEqual({player:'media_player.ma_room',media_id:'library://playlist/42'});
- expect(state.shows[0].steps.map(step => step.scene)).toEqual(['cool','warm']);
+ expect(state.shows[0].steps.map(step => [step.group, step.scene])).toEqual([['hall','cool'],['room','warm']]);
  await page.locator('#nav-settings').click();
  await context.close();
  const second = await setup();
