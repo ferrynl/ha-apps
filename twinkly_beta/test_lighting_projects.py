@@ -80,6 +80,36 @@ class LightingProjectsTest(unittest.IsolatedAsyncioTestCase):
                              "christmas_control_center_demo")
             await client.close()
 
+    async def test_home_assistant_event_plays_the_saved_show(self):
+        saved = await (await self.change("save", **SHOW)).json()
+        show_id = saved["shows"][0]["id"]
+        queued = asyncio.Event()
+
+        async def events():
+            yield SimpleNamespace(type=WSMsgType.TEXT, json=lambda: {
+                "type": "event", "event": {"data": {"show_id": show_id}}
+            })
+            await queued.wait()
+
+        socket = AsyncMock()
+        socket.receive_json.side_effect = [{"type": "auth_required"}, {"type": "auth_ok"}, {"success": True}]
+        socket.__aiter__.side_effect = events
+        session = AsyncMock()
+        session.ws_connect = lambda *args, **kwargs: socket
+        with patch.dict("os.environ", {"SUPERVISOR_TOKEN": "test-token"}), \
+                patch("modules.lighting_projects.ClientSession", return_value=session):
+            session.__aenter__.return_value = session
+            socket.__aenter__.return_value = socket
+            client = await self.connect()
+            for _ in range(100):
+                if self.lighting.run_scene.await_count:
+                    break
+                await asyncio.sleep(.02)
+            self.lighting.run_scene.assert_any_await(FIRST, GROUP)
+            self.assertEqual(socket.send_json.await_args_list[1].args[0]["event_type"],
+                             "christmas_control_center_demo")
+            await client.close()
+
     async def change(self, action, **body):
         return await self.client.post("/lighting/projects", json={"action": action, **body})
 

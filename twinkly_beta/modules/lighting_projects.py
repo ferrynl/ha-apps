@@ -467,7 +467,11 @@ def install(app, lighting):
                                 event = packet["event"].get("data")
                                 try:
                                     if isinstance(event, dict):
-                                        await start_voice_demo(event)
+                                        if "show_id" in event:
+                                            projects = await current()
+                                            playback.start(projects["shows"][identifier(event["show_id"])])
+                                        else:
+                                            await start_voice_demo(event)
                                 except web.HTTPConflict:
                                     LOG.info("Voice demo ignored because a show is already playing")
                                 except (ValueError, OSError, KeyError):

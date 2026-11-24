@@ -130,3 +130,5 @@ sequence:
 Gebruik bij `room` exact de kamernaam uit Christmas Control Center. Start het script één keer in Home Assistant om de kamer te controleren. Deel het script daarna via je Home Assistant-koppeling met Google Assistant. Maak in Google Home een routine met de gesproken starter **start de kerstdemo** en kies als actie het script **Kerstdemo** (een scène in Google Home).
 
 De show draait in de add-on en gebruikt de gekoppelde Twinkly-groepen en beschikbare kleurverlichting in de gekozen kamer. De initiële blackout en beide veegbewegingen wijzigen de lampen in die kamer. Het logboek toont wanneer een verkeerde kamernaam of een al actieve show de start verhindert.
+
+Open **Google Home** in het menu voor een kopieerbaar script. Kies **Eigen opgeslagen show** om een show uit Show Studio met een eigen gesproken starter te starten.

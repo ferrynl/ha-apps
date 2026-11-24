@@ -117,6 +117,7 @@ button:hover,.mixdesk button:hover{background:#2a313c;filter:none}.mixdesk butto
 <a id="nav-govee" href="#govee"><img class="brand-wordmark brand-wordmark-govee" src="govee-logo.png" alt="Govee"></a>
 <a id="nav-tests" href="#testcontrole"></a>
 <a id="nav-network" href="#security-center"></a>
+<a id="nav-google" href="#google-home">Google Home</a>
 <a id="nav-settings" href="#instellingen"></a>
 </nav></header>
 <svg width="0" height="0" aria-hidden="true" class="menu-logo-filters">
@@ -199,6 +200,7 @@ button:hover,.mixdesk button:hover{background:#2a313c;filter:none}.mixdesk butto
 </form>
 </dialog>
 <section id="tests-page" hidden><h2 id="tests-title"></h2><p id="tests-help"></p><label id="tests-target-label" for="tests-target"></label> <select id="tests-target"></select><div id="tests-content"></div><div class="gap"><h2 id="individual-tests-title"></h2><select id="individual-tests-target"></select><div id="individual-tests-list"></div></div></section>
+<section id="google-page" hidden></section>
 <div id="settings-page" hidden><div class="settings-grid">
 <section id="lighting-settings" class="lighting-surface"></section>
 <section><h2 id="settings-general"></h2><select id="language" aria-label="Language"><option value="nl">Nederlands</option><option value="en">English</option><option value="es">Español</option><option value="de">Deutsch</option></select></section>
@@ -1839,9 +1841,9 @@ document.addEventListener('visibilitychange',() => { if (!document.hidden) refre
 function showPage() {
   const projectPage = /^(#roadmap|#changelog|#release-[\w.-]+)$/.test(location.hash);
   const page = projectPage ? 'project' : isNetworkPage() ? 'network' :
-    {'#mijn-huis':'house','#instellingen':'settings','#testcontrole':'tests','#hue':'hue','#govee':'govee','#bediening':'control','#twinkly':'control'}[location.hash] || 'home';
+    {'#mijn-huis':'house','#google-home':'google','#instellingen':'settings','#testcontrole':'tests','#hue':'hue','#govee':'govee','#bediening':'control','#twinkly':'control'}[location.hash] || 'home';
   byId('project-page').hidden = page !== 'project';
-  for (const name of ['control','settings','network','tests']) {
+  for (const name of ['control','settings','network','tests','google']) {
     byId(name + '-page').hidden = page !== name;
     byId('nav-' + name).setAttribute('aria-current',page === name ? 'page' : 'false');
   }
@@ -2290,5 +2292,5 @@ pollTrack();
 loadTvSources();
 loadGifLibrary().catch(() => {});
 loadMatrixGallery();
-</script><script src="lighting-tools.js"></script><script src="lighting.js"></script><script src="security-center.js"></script><script src="govee-cloud.js"></script>
+</script><script src="lighting-tools.js"></script><script src="lighting.js"></script><script src="security-center.js"></script><script src="govee-cloud.js"></script><script src="google-home.js"></script>
 </html>
