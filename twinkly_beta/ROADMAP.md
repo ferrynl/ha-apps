@@ -43,3 +43,15 @@
 - **Matter-stopcontacten.** Aan/uit en status in de app, met bediening vanuit groepen en scènes. De precieze koppeling en ondersteunde apparaten worden nog uitgewerkt.
 - **Lasers en lichtshows.** Integratie van lasers met een aparte veiligheidslaag, gecombineerd met verlichting in uitgebreidere shows.
 - **DMX en Art-Net.** Voorbereiding in de architectuur is besproken. De concrete protocolondersteuning staat nog open.
+
+## Praktijkcontrole vóór 2.0
+
+| Onderdeel | Wanneer de controle slaagt | Vastleggen |
+| --- | --- | --- |
+| Hue Entertainment en LedFX | Start een effect op de fysieke Bridge met een lage helderheid, stop, controleer vrijgave en start opnieuw met een andere helderheid. Herhaal met LedFX en controleer dat de Bridge de zone vrijgeeft. | Bridge-model, gebruikte zone en uitkomst van elke stop. |
+| Govee | Synchroniseer een account, herstart de add-on en controleer de apparaatlijst. Kies een scène en test kleur en helderheid op één ondersteund segment. Kijk of alleen dat segment reageert. | Model, testactie en zichtbare reactie. |
+| Twinkly en gemengde groepen | Speel de demo op de Twinkly-muur. Controleer dat gekoppelde lampen samen reageren. Vergelijk daarna een veeg met en zonder timingcorrectie en controleer per merk het herstel na stoppen. | Groep, tijdsverschil op de muur en herstelstatus per merk. |
+| Hue-foto’s | Noteer de modelcodes zonder correcte foto. Voeg per bevestigd model een transparante bronfoto met herkomst toe. | Modelcode, bron en werking in Mijn Huis. |
+| Aikido | Beoordeel het actuele rapport voor deze repository en leg per open bevinding de beslissing vast. | Rapportdatum, commit en open bevindingen. |
+
+Noteer bij iedere praktijktest ook de add-onversie en de datum. Een geaccepteerde opdracht vertelt of de software de opdracht kon versturen. Voor de zichtbare lichtreactie is een waarneming nodig.
