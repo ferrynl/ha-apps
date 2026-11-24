@@ -5,10 +5,12 @@ from hashlib import sha256
 from io import BytesIO
 import json
 import logging
+import math
+import os
 import re
 import uuid
 
-from aiohttp import web
+from aiohttp import ClientError, ClientSession, WSMsgType, web
 from PIL import Image, ImageOps, UnidentifiedImageError
 
 from .common import rgb
@@ -349,6 +351,138 @@ def install(app, lighting):
             state.setdefault("walls", {})
         return state
 
+    async def start_voice_demo(event):
+        room_name = event.get("room")
+        if not isinstance(room_name, str) or not room_name.strip():
+            raise ValueError("Specify a room name")
+        groups = store.load_groups()
+        matches = [(key, group) for key, group in groups.items()
+                   if group.get("kind") == "room" and group["name"].casefold() == room_name.strip().casefold()]
+        if len(matches) != 1:
+            raise ValueError("Select a unique app room")
+        room_id, room = matches[0]
+        members = set(room["members"])
+        data = await current()
+
+        async def prepare():
+            lights = await lighting.command_lights(room["members"], "all")
+            grouped, claimed, targets = set(), set(), []
+            spatial = lighting.spatial_groups(groups)
+            for key, group in spatial.items():
+                if group.get("provider") != "twinkly":
+                    continue
+                native = json.loads(key)[1].removeprefix("twinkly:")
+                ids = set(group["members"])
+                grouped.update(ids)
+                if ids and ids <= members and not ids & claimed:
+                    claimed.update(ids)
+                    targets.append((key, native, group["members"]))
+            targets.extend((key, None, [key]) for key in room["members"]
+                           if key in lights and key not in grouped)
+
+            def color_capable(target):
+                return any(lights.get(key, {}).get("capabilities", {}).get("rgb")
+                           and lights[key]["capabilities"].get("power")
+                           and lights[key]["status"] != "unavailable" for key in target[2])
+
+            coordinates = {}
+            linked = next((int(slot) for slot, group in data.get("room_groups", {}).items() if group == room_id), None)
+            for wall, slot in plan_slots(data).items():
+                if linked is not None and slot // 4 != linked:
+                    continue
+                layout = wall_layout(data, wall)
+                for key, point in layout["points"]:
+                    side = slot % 4
+                    offset = (point[0] / 100 - .5) * (layout.get("dimensions") or {}).get("width_m", 4)
+                    placement = data.get("wall_placements", {}).get(wall)
+                    x = ([offset, 3, -offset, -3][side] if placement is None else
+                         placement["x_m"] + offset * math.cos(math.radians(placement["angle"])))
+                    coordinates.setdefault(key, x)
+                    for member in spatial.get(key, {}).get("members", []):
+                        coordinates.setdefault(member, x)
+
+            def position(target):
+                key, _, ids = target
+                return coordinates.get(key, min(coordinates.get(member, math.inf) for member in ids))
+
+            colors = sorted(filter(color_capable, targets), key=position)
+            if not colors:
+                raise ValueError("Room has no available demo lights")
+            palette = [(225,38,69), (24,170,91), (255,173,68), (100,68,238), (255,214,148)]
+            steps = [{"commands": [(target, "power", False) for target in targets], "lights": lights, "seconds": .65}]
+            for index, target in enumerate(colors + colors[::-1]):
+                commands = [(target, "color", list(palette[index % len(palette)])), (target, "power", True)]
+                steps.append({"commands": commands, "lights":lights, "seconds":1.2 if index < len(colors) else .75})
+                steps.append({"commands":[(target, "power", False)], "lights":lights, "seconds":0})
+            return steps
+
+        async def apply(step):
+            async with lighting.control_lock:
+                results = {}
+                for (key, native, ids), action, value in step["commands"]:
+                    if playback.stop.is_set():
+                        break
+                    if any(member in lighting.music.members or
+                           (lighting.lamp_test and lighting.lamp_test.target == member) for member in ids):
+                        results[key] = {action: "skipped"}
+                    elif native:
+                        mode = action if action == "color" else ("on" if value else "off")
+                        payload = {"group":native, "action":mode,
+                                   "value":"#" + bytes(value).hex() if action == "color" else value}
+                        reply = await lighting.controller.apply_control(payload)
+                        results[key] = {action:"failed" if reply.get("failed") or reply.get("offline") else "accepted"}
+                    else:
+                        results[key] = {action:await lighting.send(key, step["lights"].get(key), action, value)}
+                return results
+
+        playback.schedule("demo", [], apply, identifier=room_id, prepare=prepare)
+
+    async def voice_events(_app):
+        token = os.environ.get("SUPERVISOR_TOKEN")
+        if not token:
+            yield
+            return
+
+        async def listen():
+            async with ClientSession() as session:
+                while True:
+                    try:
+                        async with session.ws_connect("ws://supervisor/core/websocket", heartbeat=30) as socket:
+                            hello = await socket.receive_json(timeout=10)
+                            if hello.get("type") != "auth_required":
+                                raise ValueError("Unexpected Home Assistant handshake")
+                            await socket.send_json({"type":"auth", "access_token":token})
+                            if (await socket.receive_json(timeout=10)).get("type") != "auth_ok":
+                                raise ValueError("Home Assistant authentication failed")
+                            await socket.send_json({"id":1, "type":"subscribe_events",
+                                                    "event_type":"christmas_control_center_demo"})
+                            if not (await socket.receive_json(timeout=10)).get("success"):
+                                raise ValueError("Home Assistant event subscription failed")
+                            async for message in socket:
+                                if message.type != WSMsgType.TEXT:
+                                    continue
+                                packet = message.json()
+                                if packet.get("type") != "event":
+                                    continue
+                                event = packet["event"].get("data")
+                                try:
+                                    if isinstance(event, dict):
+                                        await start_voice_demo(event)
+                                except web.HTTPConflict:
+                                    LOG.info("Voice demo ignored because a show is already playing")
+                                except (ValueError, OSError, KeyError):
+                                    LOG.warning("Voice demo could not start. Check the room name and configuration.")
+                    except (ClientError, TimeoutError, OSError, ValueError, KeyError, TypeError):
+                        LOG.warning("Home Assistant voice demo connection unavailable; retrying")
+                    await asyncio.sleep(10)
+
+        listener = asyncio.create_task(listen())
+        try:
+            yield
+        finally:
+            listener.cancel()
+            await asyncio.gather(listener, return_exceptions=True)
+
     async def current():
         if state is not None:
             return state
@@ -687,3 +821,4 @@ def install(app, lighting):
     app.router.add_post("/lighting/projects/overview/room", place_room)
     app.router.add_post("/lighting/projects/overview/ceiling", place_ceiling_light)
     app.cleanup_ctx.append(playback.cleanup)
+    app.cleanup_ctx.append(voice_events)

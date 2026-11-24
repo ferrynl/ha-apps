@@ -1,3 +1,7 @@
+## 2.0.0-beta.65
+
+- Start de kerstdemo per kamer vanuit Home Assistant en Google Home, ook met de app gesloten.
+
 ## 2.0.0-beta.64
 
 - Hue gebruikt uitsluitend de kamerindeling uit de app. Hue-zones en scènes blijven op de lampkaart beschikbaar, met bestaande of ingebouwde productfoto’s.

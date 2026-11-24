@@ -5,9 +5,9 @@ import stat
 import tempfile
 import unittest
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, patch
 
-from aiohttp import ClientSession, web
+from aiohttp import ClientSession, WSMsgType, web
 from aiohttp.test_utils import TestClient, TestServer
 from PIL import Image
 
@@ -38,6 +38,47 @@ class LightingProjectsTest(unittest.IsolatedAsyncioTestCase):
         await client.start_server()
         self.addAsyncCleanup(client.close)
         return client
+
+    async def test_home_assistant_demo_event_only_controls_the_selected_room(self):
+        member = POINT[0]
+        self.store.save_groups({GROUP: {"name": "Woonkamer", "kind": "room", "members": [member]}})
+        light = {"status": "online", "capabilities": {"rgb": True, "power": True}}
+        self.lighting.command_lights = AsyncMock(return_value={member: light})
+        self.lighting.spatial_groups = lambda groups: {}
+        self.lighting.control_lock = asyncio.Lock()
+        self.lighting.music = SimpleNamespace(members=set())
+        self.lighting.lamp_test = None
+        self.lighting.send = AsyncMock(return_value="accepted")
+        queued = asyncio.Event()
+
+        async def events():
+            yield SimpleNamespace(type=WSMsgType.TEXT, json=lambda: {
+                "type": "event", "event": {"data": {"room": "Woonkamer"}}
+            })
+            await queued.wait()
+
+        socket = AsyncMock()
+        socket.receive_json.side_effect = [{"type": "auth_required"}, {"type": "auth_ok"}, {"success": True}]
+        socket.__aiter__.side_effect = events
+        session = AsyncMock()
+        session.ws_connect = lambda *args, **kwargs: socket
+        with patch.dict("os.environ", {"SUPERVISOR_TOKEN": "test-token"}), \
+                patch("modules.lighting_projects.ClientSession", return_value=session):
+            session.__aenter__.return_value = session
+            socket.__aenter__.return_value = socket
+            client = await self.connect()
+            for _ in range(100):
+                if self.lighting.send.await_count >= 3:
+                    break
+                await asyncio.sleep(.02)
+            self.assertEqual([call.args for call in self.lighting.send.await_args_list[:3]], [
+                (member, light, "power", False),
+                (member, light, "color", [225, 38, 69]),
+                (member, light, "power", True),
+            ])
+            self.assertEqual(socket.send_json.await_args_list[1].args[0]["event_type"],
+                             "christmas_control_center_demo")
+            await client.close()
 
     async def change(self, action, **body):
         return await self.client.post("/lighting/projects", json={"action": action, **body})
