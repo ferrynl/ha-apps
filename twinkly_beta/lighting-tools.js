@@ -477,7 +477,7 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, ro
         music.append(field(labels[4], media), field(labels[5], type));
       }
       form.append(music);
-      const duration = node("output");
+      const duration = node("span");
       const updateDuration = () => {
         const total = draft.steps.reduce((sum, step) => sum + (step.seconds || 0), 0);
         duration.textContent = Math.floor(total / 60) + ":" + String(total % 60).padStart(2, "0");
