@@ -1,6 +1,4 @@
 import concurrent.futures
-import csv
-import io
 import ipaddress
 import http.client
 import json
@@ -20,16 +18,20 @@ from contextlib import closing
 from datetime import date, datetime, timedelta
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.error import HTTPError, URLError
-from urllib.parse import parse_qs, urlencode, urlsplit
-from urllib.request import ProxyHandler, Request, build_opener
+from urllib.error import URLError
+from urllib.parse import parse_qs, urlsplit
+
 from zoneinfo import ZoneInfo
 
-from budget import BYTES_PER_GB, cycle_bounds, settings as budget_settings, status as evaluate_budget
+from csv_export import CSV_COLUMNS, csv_safe, csv_text
+from ipinfo import fetch_ipinfo as lookup_ipinfo, public_ip, stored_ipinfo
+from periods import period_bounds, previous_period, previous_totals
+from topology import router_topology
+from budget import SOURCES, BYTES_PER_GB, cycle_bounds, settings as budget_settings, status as evaluate_budget
 from live_monitor import LiveMonitor
 from destinations import AppDestinations, NetworkCapture, PROTOCOLS, bridge_apps
 from modem import DirectZyxel, modem_reading
-from openwrt import NoRedirect, OpenWrt, hosts_by_ip
+from openwrt import OpenWrt, hosts_by_ip
 from ha_dashboard import provision_dashboard
 from ha_mqtt import budget_entities, publish as publish_to_ha, setup_status, spike_entities
 from storage_backup import MAX_BACKUP_SIZE, restore, snapshot
@@ -77,6 +79,14 @@ def load_app_settings():
     days = data.get("retention_days")
     if isinstance(days, int) and not isinstance(days, bool) and RETENTION_RANGE[0] <= days <= RETENTION_RANGE[1]:
         settings["retention_days"] = days
+    saved = data.get("budget")
+    if isinstance(saved, dict):
+        limit, source = saved.get("limit_gb"), saved.get("source")
+        day, warn = saved.get("reset_day"), saved.get("warn_percent")
+        whole = lambda value, low, high: isinstance(value, int) and not isinstance(value, bool) and low <= value <= high
+        if (isinstance(limit, (int, float)) and not isinstance(limit, bool) and math.isfinite(limit) and 0 <= limit <= 1_000_000
+                and source in SOURCES and whole(day, 1, 28) and whole(warn, 1, 99)):
+            settings["budget"] = {"limit_gb": limit, "source": source, "reset_day": day, "warn_percent": warn}
     calibration = data.get("budget_calibration")
     if isinstance(calibration, dict):
         offset = calibration.get("offset")
@@ -336,15 +346,6 @@ def record(now, rows, prune, destinations=()):
             db.execute("DELETE FROM traffic_alerts WHERE timestamp < ?", (cutoff,))
 
 
-CSV_COLUMNS = ("bucket", "kind", "source", "label", "download_bytes", "upload_bytes", "total_bytes")
-
-
-def csv_safe(value):
-    """Voorkom dat een spreadsheet een apparaatnaam als formule uitvoert (CSV-injectie)."""
-    value = str(value or "")
-    return "'" + value if value[:1] in ("=", "+", "-", "@", "\t", "\r") else value
-
-
 def export_csv(day, period, kind, source):
     """De getoonde periode als CSV, in dezelfde indeling als de grafiek: uur, dag of maand per bron."""
     start, end = period_bounds(day, period)
@@ -357,13 +358,7 @@ def export_csv(day, period, kind, source):
         params.append(source)
     with closing(database()) as db:
         rows = db.execute(sql + " GROUP BY bucket, kind, source ORDER BY bucket, kind, source", params).fetchall()
-    out = io.StringIO()
-    writer = csv.writer(out)
-    writer.writerow(CSV_COLUMNS)
-    for row in rows:
-        writer.writerow([row["bucket"], row["kind"], csv_safe(row["source"]), csv_safe(row["label"]),
-                         row["rx"], row["tx"], row["rx"] + row["tx"]])
-    return "\ufeff" + out.getvalue()  # Met BOM, zodat Excel de UTF-8-tekens goed leest.
+    return csv_text(rows)
 
 
 def store_alerts(alerts):
@@ -408,6 +403,47 @@ def alerts_today(now):
 BUDGET_LABELS = {"openwrt": "OpenWrt WAN", "host": "Server"}
 
 
+def budget_options():
+    """De budgetopties: de pagina Instellingen gaat voor op Configuratie."""
+    saved = load_app_settings().get("budget")
+    if not saved:
+        return SETTINGS
+    return {**SETTINGS, "data_budget_gb": saved["limit_gb"], "data_budget_source": saved["source"],
+            "data_budget_reset_day": saved["reset_day"], "data_budget_warn_percent": saved["warn_percent"]}
+
+
+def budget_state():
+    """De geldende budgetinstellingen voor het formulier. Een limiet van 0 betekent uit."""
+    config = budget_settings(budget_options())
+    return {"limit_gb": config["limit"] / BYTES_PER_GB if config else 0,
+            "source": config["source"] if config else "modem",
+            "reset_day": config["reset_day"] if config else 1,
+            "warn_percent": config["warn_percent"] if config else 80,
+            "from_settings_page": "budget" in load_app_settings()}
+
+
+def change_budget(body):
+    """Valideer en bewaar de budgetinstellingen. Een limiet van 0 zet het budget uit."""
+    if not isinstance(body, dict):
+        return 400, {"error": "Ongeldige instellingen."}
+    limit, source = body.get("limit_gb"), body.get("source")
+    day, warn = body.get("reset_day"), body.get("warn_percent")
+    whole = lambda value, low, high: isinstance(value, int) and not isinstance(value, bool) and low <= value <= high
+    if isinstance(limit, bool) or not isinstance(limit, (int, float)) or not math.isfinite(limit) or not 0 <= limit <= 1_000_000:
+        return 400, {"error": "Vul een limiet in van 0 tot en met 1.000.000 gigabyte."}
+    if source not in SOURCES:
+        return 400, {"error": "Kies een geldige bron."}
+    if not whole(day, 1, 28):
+        return 400, {"error": "Kies een dag van 1 tot en met 28."}
+    if not whole(warn, 1, 99):
+        return 400, {"error": "Kies een percentage van 1 tot en met 99."}
+    with SETTINGS_LOCK:
+        save_app_settings({**load_app_settings(), "budget": {
+            "limit_gb": limit, "source": source, "reset_day": day, "warn_percent": warn}})
+    logging.info("Databudget ingesteld: %s GB, bron %s", limit, source)
+    return 200, budget_state()
+
+
 def measured_budget_bytes(config, start, end):
     """De gemeten bytes en het aantal meetrijen van de gekozen bron in een cyclus."""
     with closing(database()) as db:
@@ -422,9 +458,9 @@ def calibrate_budget(body, now=None):
     Body: {"used_gb": 37.5} stelt in, {"used_gb": null} wist. Geeft (status, antwoord) terug.
     """
     now = now or datetime.now(ZONE)
-    config = budget_settings(SETTINGS)
+    config = budget_settings(budget_options())
     if config is None:
-        return 400, {"error": "Het databudget staat uit. Stel eerst data_budget_gb in bij Configuratie."}
+        return 400, {"error": "Het databudget staat uit. Stel eerst een limiet in."}
     if not isinstance(body, dict) or "used_gb" not in body:
         return 400, {"error": "Vul het verbruik in gigabytes in."}
     value = body["used_gb"]
@@ -448,7 +484,7 @@ def calibrate_budget(body, now=None):
 
 def budget_status(now=None):
     """Het huidige databudget, of None als het budget is uitgeschakeld."""
-    config = budget_settings(SETTINGS)
+    config = budget_settings(budget_options())
     if config is None:
         return None
     now = now or datetime.now(ZONE)
@@ -642,72 +678,6 @@ def collect():
             time.sleep(max(0, INTERVAL - (time.monotonic() - started)))
 
 
-def period_bounds(day, period):
-    if period == "day":
-        return day, day + timedelta(days=1)
-    if period == "week":
-        start = day - timedelta(days=day.weekday())
-        return start, start + timedelta(days=7)
-    if period == "month":
-        start = day.replace(day=1)
-        return start, (start + timedelta(days=32)).replace(day=1)
-    return day.replace(month=1, day=1), date(day.year + 1, 1, 1)
-
-
-def previous_period(day, period, now):
-    """Bepaal de vorige periode. Loopt de gekozen periode nog, dan stopt de vorige op hetzelfde moment.
-
-    De uren zijn lokale klokuren, zoals in de tabel `traffic`. Een zomertijdwissel
-    verschuift de vergelijking hooguit een uur.
-    """
-    start, end = period_bounds(day, period)
-    before_start, before_end = period_bounds(start - timedelta(days=1), period)
-    midnight = datetime.min.time()
-    first_hour = datetime.combine(before_start, midnight)
-    stop = datetime.combine(before_end, midnight)
-    partial = start <= now.date() < end
-    if partial:
-        this_hour = now.replace(tzinfo=None, minute=0, second=0, microsecond=0) + timedelta(hours=1)
-        stop = min(stop, first_hour + (this_hour - datetime.combine(start, midnight)))
-    return before_start, before_end, first_hour, stop, partial
-
-
-def previous_totals(db, day, period, kind, source, now, first):
-    before_start, before_end, first_hour, stop, partial = previous_period(day, period, now)
-    sql = "SELECT COALESCE(SUM(rx), 0) AS rx, COALESCE(SUM(tx), 0) AS tx, COUNT(*) AS rows " \
-          "FROM traffic WHERE hour >= ? AND hour < ? AND kind = ?"
-    params = [first_hour.strftime("%Y-%m-%dT%H"), stop.strftime("%Y-%m-%dT%H"), kind]
-    if source:
-        sql += " AND source = ?"
-        params.append(source)
-    row = db.execute(sql, params).fetchone()
-    # De vorige periode is alleen vergelijkbaar als de metingen er helemaal in vielen.
-    comparable = bool(first) and first[:13] <= params[0] and row["rows"] > 0 and row["rx"] + row["tx"] > 0
-    return {
-        "start": before_start.isoformat(), "end": (before_end - timedelta(days=1)).isoformat(),
-        "rx": row["rx"], "tx": row["tx"], "partial": partial, "comparable": comparable,
-    }
-
-
-def router_topology(hosts, links, router_url):
-    devices = {}
-    try:
-        router = str(ipaddress.ip_address(urlsplit(router_url).hostname))
-    except ValueError:
-        router = ""
-    router_mac = hosts.get(router, {}).get("mac")
-    for ip, host in hosts.items():
-        mac = host["mac"]
-        if ip == router or (router_mac and mac == router_mac):
-            continue
-        device = devices.setdefault(mac or ip, {"name": host["name"], "ips": [], **links.get(mac, {})})
-        device["ips"].append(ip)
-    for mac, link in links.items():
-        if mac != router_mac:
-            devices.setdefault(mac, {"name": "", "ips": [], **link})
-    return [dict(device, source=key) for key, device in devices.items()]
-
-
 def report(day, period, kind, source, now=None):
     router_hosts = ROUTER_HOSTS
     now = now or datetime.now(ZONE)
@@ -798,62 +768,19 @@ def report(day, period, kind, source, now=None):
     }
 
 
-def public_ip(value):
-    try:
-        address = ipaddress.ip_address(value)
-    except ValueError:
-        return None
-    if getattr(address, "scope_id", None) or not address.is_global or address.is_multicast or address.is_reserved:
-        return None
-    return str(address)
-
-
-def stored_ipinfo(db, addresses):
-    if not addresses:
-        return {}
-    placeholders = ", ".join("?" for _ in addresses)
-    rows = db.execute(
-        f"SELECT ip, asn, as_name, as_domain FROM ipinfo_cache WHERE ip IN ({placeholders})",
-        tuple(addresses),
-    )
-    return {row["ip"]: {key: row[key] for key in ("asn", "as_name", "as_domain")} for row in rows}
-
-
 def ipinfo_lookup(address):
     # Recheck under the lock so simultaneous clicks only make one request.
     with IPINFO_LOCK, closing(database()) as db:
         cached = stored_ipinfo(db, (address,)).get(address)
         if cached is not None:
             return cached
-        details = fetch_ipinfo(address)
+        details = lookup_ipinfo(SETTINGS.get("ipinfo_token", ""), address)
         if any(details.values()):
             with db:
                 db.execute("INSERT INTO ipinfo_cache VALUES (?, ?, ?, ?)", (
                     address, *(details.get(key, "") for key in ("asn", "as_name", "as_domain"))
                 ))
         return details
-
-
-def fetch_ipinfo(address):
-    token = SETTINGS.get("ipinfo_token", "").strip()
-    if not token:
-        raise ValueError("Vul ipinfo_token in bij HA-Bandwidth → Configuratie.")
-    query = urlencode({"token": token})
-    opener = build_opener(ProxyHandler({}), NoRedirect())
-    request = Request(f"https://api.ipinfo.io/lite/{address}?{query}", headers={"Accept": "application/json"})
-    try:
-        with opener.open(request, timeout=5) as response:
-            data = json.loads(response.read(16384))
-    except HTTPError as error:
-        if error.code in (401, 403):
-            raise ValueError("IPinfo accepteert het ingestelde token niet.") from None
-        raise ValueError(f"IPinfo gaf HTTP {error.code}.") from None
-    except (OSError, ValueError, http.client.HTTPException):
-        raise ValueError("IPinfo is tijdelijk niet bereikbaar.") from None
-    if not isinstance(data, dict):
-        raise ValueError("IPinfo gaf een onverwacht antwoord.")
-    return {key: data[key][:250] for key in ("asn", "as_name", "as_domain")
-            if isinstance(data.get(key), str)}
 
 
 class Dashboard(BaseHTTPRequestHandler):
@@ -887,6 +814,9 @@ class Dashboard(BaseHTTPRequestHandler):
                 return
             payload = {"enabled": False} if status is None else dict(status, enabled=True)
             self.reply(json.dumps(payload).encode(), "application/json")
+            return
+        if url.path == "/api/settings/budget":
+            self.reply(json.dumps(budget_state()).encode(), "application/json")
             return
         if url.path == "/api/live":
             self.reply(json.dumps(LIVE.snapshot()).encode(), "application/json")
@@ -1000,7 +930,8 @@ class Dashboard(BaseHTTPRequestHandler):
     def do_POST(self):
         path = urlsplit(self.path).path
         # Een eigen header dwingt een CORS-preflight af, zodat andere websites hier niet naartoe kunnen posten.
-        change = {"/api/settings": change_retention, "/api/settings/budget": calibrate_budget}.get(path)
+        change = {"/api/settings": change_retention, "/api/settings/budget": calibrate_budget,
+                  "/api/settings/budget-config": change_budget}.get(path)
         header = "X-HA-Bandwidth-Settings" if change else "X-HA-Bandwidth-Restore"
         if self.client_address[0] != "172.30.32.2" or self.headers.get(header) != "1":
             self.send_error(403)
