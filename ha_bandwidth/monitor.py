@@ -3,7 +3,6 @@ import ipaddress
 import http.client
 import json
 import logging
-import math
 from logging.handlers import RotatingFileHandler
 import os
 import re
@@ -23,11 +22,15 @@ from urllib.parse import parse_qs, urlsplit
 
 from zoneinfo import ZoneInfo
 
+import app_settings
+from app_settings import retention_days
+import rollup
+from migrations import migrate
 from csv_export import CSV_COLUMNS, csv_safe, csv_text
 from ipinfo import fetch_ipinfo as lookup_ipinfo, public_ip, stored_ipinfo
 from periods import period_bounds, previous_period, previous_totals
 from topology import router_topology
-from budget import SOURCES, BYTES_PER_GB, cycle_bounds, settings as budget_settings, status as evaluate_budget
+from budget import BYTES_PER_GB, cycle_bounds, settings as budget_settings, status as evaluate_budget
 from live_monitor import LiveMonitor
 from destinations import AppDestinations, NetworkCapture, PROTOCOLS, bridge_apps
 from modem import DirectZyxel, modem_reading
@@ -46,20 +49,25 @@ ZONE = ZoneInfo(SETTINGS.get("timezone", "Europe/Amsterdam"))
 STATUS = {}
 ROUTER_HOSTS = {}
 ROUTER_LINKS = {}
+# De bestanden van het dashboard staan vast. Ze worden één keer gelezen, zodat een verzoek nooit een pad
+# kiest: de URL is alleen een sleutel in deze tabel.
+STATIC_FILES = {
+    "/": ("dashboard.html", "text/html; charset=utf-8"),
+    "/lovelace.json": ("lovelace.json", "application/json"),
+    "/lovelace-card.js": ("lovelace-card.js", "text/javascript; charset=utf-8"),
+    "/dashboard.js": ("dashboard.js", "text/javascript; charset=utf-8"),
+    "/dashboard.css": ("dashboard.css", "text/css; charset=utf-8"),
+}
+STATIC_ASSETS = {route: ((ROOT / name).read_bytes(), kind) for route, (name, kind) in STATIC_FILES.items()}
 PERIODS = {"day": 13, "week": 10, "month": 10, "year": 7}
 
 
-def retention_days(options):
-    """Het aantal lokale kalenderdagen dat metingen bewaard blijven (30 tot en met 3650, standaard 400)."""
-    try:
-        days = int(options.get("retention_days", 400))
-    except (TypeError, ValueError):
-        return 400
-    return min(3650, max(30, days))
+
 
 
 RETENTION_DAYS = retention_days(SETTINGS)
-RETENTION_RANGE = (30, 3650)
+HOURLY_DAYS = 0
+RETENTION_RANGE = app_settings.RETENTION_RANGE
 SETTINGS_LOCK = threading.Lock()
 
 
@@ -68,49 +76,20 @@ def app_settings_file():
 
 
 def load_app_settings():
-    """Instellingen die op de pagina Instellingen zijn opgeslagen. Ongeldig of afwezig geeft een lege lijst."""
-    try:
-        data = json.loads(app_settings_file().read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return {}
-    if not isinstance(data, dict):
-        return {}
-    settings = {}
-    days = data.get("retention_days")
-    if isinstance(days, int) and not isinstance(days, bool) and RETENTION_RANGE[0] <= days <= RETENTION_RANGE[1]:
-        settings["retention_days"] = days
-    saved = data.get("budget")
-    if isinstance(saved, dict):
-        limit, source = saved.get("limit_gb"), saved.get("source")
-        day, warn = saved.get("reset_day"), saved.get("warn_percent")
-        whole = lambda value, low, high: isinstance(value, int) and not isinstance(value, bool) and low <= value <= high
-        if (isinstance(limit, (int, float)) and not isinstance(limit, bool) and math.isfinite(limit) and 0 <= limit <= 1_000_000
-                and source in SOURCES and whole(day, 1, 28) and whole(warn, 1, 99)):
-            settings["budget"] = {"limit_gb": limit, "source": source, "reset_day": day, "warn_percent": warn}
-    calibration = data.get("budget_calibration")
-    if isinstance(calibration, dict):
-        offset = calibration.get("offset")
-        try:
-            cycle = date.fromisoformat(calibration["cycle_start"]).isoformat()
-        except (KeyError, TypeError, ValueError):
-            cycle = None
-        if cycle and isinstance(offset, int) and not isinstance(offset, bool) and abs(offset) <= 10**15:
-            settings["budget_calibration"] = {"cycle_start": cycle, "offset": offset}
-    return settings
+    """Instellingen die op de pagina Instellingen zijn opgeslagen."""
+    return app_settings.load(app_settings_file())
 
 
 def apply_app_settings():
     """Laat de pagina Instellingen voorgaan op de optie in Configuratie."""
-    global RETENTION_DAYS
-    RETENTION_DAYS = retention_days({**SETTINGS, **load_app_settings()})
+    global RETENTION_DAYS, HOURLY_DAYS
+    saved = load_app_settings()
+    RETENTION_DAYS = retention_days({**SETTINGS, **saved})
+    HOURLY_DAYS = app_settings.hourly_days(saved)
 
 
 def save_app_settings(settings):
-    """Schrijf atomair, zodat een onderbreking nooit een half bestand achterlaat."""
-    target = app_settings_file()
-    staging = target.with_suffix(".tmp")
-    staging.write_text(json.dumps(settings), encoding="utf-8")
-    staging.replace(target)
+    app_settings.save(app_settings_file(), settings)
 
 
 def stored_days():
@@ -200,32 +179,9 @@ def database():
 
 def initialize():
     DATA.mkdir(parents=True, exist_ok=True)
-    with closing(database()) as db, db:
-        db.executescript("""
-            PRAGMA journal_mode = WAL;
-            CREATE TABLE IF NOT EXISTS traffic (
-                hour TEXT, kind TEXT, source TEXT, label TEXT,
-                rx INTEGER NOT NULL, tx INTEGER NOT NULL,
-                PRIMARY KEY (hour, kind, source)
-            ) WITHOUT ROWID;
-            CREATE TABLE IF NOT EXISTS app_destinations (
-                app TEXT, day TEXT, ip TEXT, protocol INTEGER, port INTEGER, domain TEXT,
-                evidence TEXT, rx INTEGER NOT NULL, tx INTEGER NOT NULL,
-                PRIMARY KEY (app, day, ip, protocol, port, domain, evidence)
-            ) WITHOUT ROWID;
-            CREATE TABLE IF NOT EXISTS ipinfo_cache (
-                ip TEXT PRIMARY KEY, asn TEXT NOT NULL, as_name TEXT NOT NULL, as_domain TEXT NOT NULL
-            ) WITHOUT ROWID;
-            CREATE TABLE IF NOT EXISTS traffic_alerts (
-                timestamp TEXT NOT NULL, kind TEXT NOT NULL, source TEXT NOT NULL,
-                label TEXT NOT NULL DEFAULT '', bps INTEGER NOT NULL, baseline_bps INTEGER NOT NULL,
-                reason TEXT NOT NULL DEFAULT '', interval_start TEXT, leaders TEXT NOT NULL DEFAULT '{}',
-                PRIMARY KEY (timestamp, kind, source)
-            ) WITHOUT ROWID;
-            CREATE INDEX IF NOT EXISTS app_destinations_day ON app_destinations(day);
-            CREATE INDEX IF NOT EXISTS traffic_kind_hour ON traffic(kind, hour);
-            CREATE INDEX IF NOT EXISTS traffic_kind_source_hour ON traffic(kind, source, hour);
-        """)
+    with closing(database()) as db:
+        db.execute("PRAGMA journal_mode = WAL")
+        migrate(db)
 
 
 def choose_interface():
@@ -344,6 +300,8 @@ def record(now, rows, prune, destinations=()):
             db.execute("DELETE FROM traffic WHERE hour < ?", (cutoff,))
             db.execute("DELETE FROM app_destinations WHERE day < ?", (cutoff,))
             db.execute("DELETE FROM traffic_alerts WHERE timestamp < ?", (cutoff,))
+            if HOURLY_DAYS:
+                rollup.summarize(db, (now.date() - timedelta(days=HOURLY_DAYS)).isoformat())
 
 
 def export_csv(day, period, kind, source):
@@ -357,6 +315,8 @@ def export_csv(day, period, kind, source):
         sql += " AND source = ?"
         params.append(source)
     with closing(database()) as db:
+        # De SQL-tekst bestaat uit vaste stukken; alle waarden gaan als parameters mee.
+        # nosemgrep: python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query
         rows = db.execute(sql + " GROUP BY bucket, kind, source ORDER BY bucket, kind, source", params).fetchall()
     return csv_text(rows)
 
@@ -403,13 +363,40 @@ def alerts_today(now):
 BUDGET_LABELS = {"openwrt": "OpenWrt WAN", "host": "Server"}
 
 
+def hourly_cutoff(days=None, now=None):
+    days = HOURLY_DAYS if days is None else days
+    return ((now or datetime.now(ZONE)).date() - timedelta(days=days)).isoformat()
+
+
+def hourly_state():
+    with closing(database()) as db:
+        pending = rollup.detail_days(db, hourly_cutoff()) if HOURLY_DAYS else 0
+    return {"hourly_days": HOURLY_DAYS, "min": app_settings.HOURLY_RANGE[0], "max": app_settings.HOURLY_RANGE[1],
+            "retention_days": RETENTION_DAYS, "stored_days": stored_days(), "pending_days": pending}
+
+
+def change_hourly(body):
+    """Stel in na hoeveel dagen uurmetingen tot dagtotalen worden samengevat (0 = nooit)."""
+    days = body.get("hourly_days") if isinstance(body, dict) else None
+    low, high = app_settings.HOURLY_RANGE
+    if days != 0 and not app_settings.whole(days, low, high) or isinstance(days, bool):
+        return 400, {"error": f"Kies 0 of een heel aantal dagen van {low} tot en met {high}."}
+    with SETTINGS_LOCK:
+        if days:
+            with closing(database()) as db:
+                affected = rollup.detail_days(db, hourly_cutoff(days))
+            if affected and body.get("confirm") is not True:
+                return 409, {"error": "Het uurdetail van oudere dagen verdwijnt. Bevestig dat je dat wilt.",
+                             "affected_days": affected}
+        save_app_settings({**load_app_settings(), "hourly_days": days})
+        apply_app_settings()
+    logging.info("Uurdetail ingesteld op %s dagen", days)
+    return 200, hourly_state()
+
+
 def budget_options():
     """De budgetopties: de pagina Instellingen gaat voor op Configuratie."""
-    saved = load_app_settings().get("budget")
-    if not saved:
-        return SETTINGS
-    return {**SETTINGS, "data_budget_gb": saved["limit_gb"], "data_budget_source": saved["source"],
-            "data_budget_reset_day": saved["reset_day"], "data_budget_warn_percent": saved["warn_percent"]}
+    return app_settings.budget_options(SETTINGS, load_app_settings().get("budget"))
 
 
 def budget_state():
@@ -424,23 +411,12 @@ def budget_state():
 
 def change_budget(body):
     """Valideer en bewaar de budgetinstellingen. Een limiet van 0 zet het budget uit."""
-    if not isinstance(body, dict):
-        return 400, {"error": "Ongeldige instellingen."}
-    limit, source = body.get("limit_gb"), body.get("source")
-    day, warn = body.get("reset_day"), body.get("warn_percent")
-    whole = lambda value, low, high: isinstance(value, int) and not isinstance(value, bool) and low <= value <= high
-    if isinstance(limit, bool) or not isinstance(limit, (int, float)) or not math.isfinite(limit) or not 0 <= limit <= 1_000_000:
-        return 400, {"error": "Vul een limiet in van 0 tot en met 1.000.000 gigabyte."}
-    if source not in SOURCES:
-        return 400, {"error": "Kies een geldige bron."}
-    if not whole(day, 1, 28):
-        return 400, {"error": "Kies een dag van 1 tot en met 28."}
-    if not whole(warn, 1, 99):
-        return 400, {"error": "Kies een percentage van 1 tot en met 99."}
+    values, error = app_settings.clean_budget(body)
+    if error:
+        return 400, {"error": error}
     with SETTINGS_LOCK:
-        save_app_settings({**load_app_settings(), "budget": {
-            "limit_gb": limit, "source": source, "reset_day": day, "warn_percent": warn}})
-    logging.info("Databudget ingesteld: %s GB, bron %s", limit, source)
+        save_app_settings({**load_app_settings(), "budget": values})
+    logging.info("Databudget ingesteld: %s GB, bron %s", values["limit_gb"], values["source"])
     return 200, budget_state()
 
 
@@ -461,13 +437,10 @@ def calibrate_budget(body, now=None):
     config = budget_settings(budget_options())
     if config is None:
         return 400, {"error": "Het databudget staat uit. Stel eerst een limiet in."}
-    if not isinstance(body, dict) or "used_gb" not in body:
-        return 400, {"error": "Vul het verbruik in gigabytes in."}
-    value = body["used_gb"]
+    value, error = app_settings.clean_used_gb(body)
+    if error:
+        return 400, {"error": error}
     clear = value is None
-    if not clear and (isinstance(value, bool) or not isinstance(value, (int, float))
-                      or not math.isfinite(value) or not 0 <= value <= 1_000_000):
-        return 400, {"error": "Vul een getal in van 0 tot en met 1.000.000 gigabyte."}
     with SETTINGS_LOCK:
         settings = load_app_settings()
         if clear:
@@ -714,6 +687,8 @@ def report(day, period, kind, source, now=None):
         if source:
             sql += " AND source = ?"
             params += (source,)
+        # De SQL-tekst bestaat uit vaste stukken; alle waarden gaan als parameters mee.
+        # nosemgrep: python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query
         buckets = db.execute(sql + " GROUP BY bucket ORDER BY bucket", params).fetchall()
         first = db.execute("SELECT MIN(hour) FROM traffic").fetchone()[0]
         previous = previous_totals(db, day, period, kind, source, now, first)
@@ -725,6 +700,8 @@ def report(day, period, kind, source, now=None):
             else:
                 clause = "app = ?"
                 owner = source
+            # De SQL-tekst bestaat uit vaste stukken; alle waarden gaan als parameters mee.
+            # nosemgrep: python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query
             matching = db.execute(f"""
                 SELECT ip, protocol, port, domain, evidence, SUM(rx) AS rx, SUM(tx) AS tx
                 FROM app_destinations WHERE {clause} AND day >= ? AND day < ?
@@ -815,6 +792,9 @@ class Dashboard(BaseHTTPRequestHandler):
             payload = {"enabled": False} if status is None else dict(status, enabled=True)
             self.reply(json.dumps(payload).encode(), "application/json")
             return
+        if url.path == "/api/settings/hourly":
+            self.reply(json.dumps(hourly_state()).encode(), "application/json")
+            return
         if url.path == "/api/settings/budget":
             self.reply(json.dumps(budget_state()).encode(), "application/json")
             return
@@ -879,18 +859,11 @@ class Dashboard(BaseHTTPRequestHandler):
                 return
             self.reply(json.dumps(data).encode(), "application/json")
             return
-        assets = {
-            "/": ("dashboard.html", "text/html; charset=utf-8"),
-            "/lovelace.json": ("lovelace.json", "application/json"),
-            "/lovelace-card.js": ("lovelace-card.js", "text/javascript; charset=utf-8"),
-            "/dashboard.js": ("dashboard.js", "text/javascript; charset=utf-8"),
-            "/dashboard.css": ("dashboard.css", "text/css; charset=utf-8"),
-        }
-        if url.path not in assets:
+        asset = STATIC_ASSETS.get(url.path)
+        if asset is None:
             self.send_error(404)
             return
-        file, content_type = assets[url.path]
-        self.reply((ROOT / file).read_bytes(), content_type)
+        self.reply(*asset)
 
     def download_backup(self, previous):
         logging.info("Back-up: download aangevraagd (%s)", "herstelkopie" if previous else "nieuwe back-up")
@@ -921,7 +894,8 @@ class Dashboard(BaseHTTPRequestHandler):
             self.end_headers()
             with target.open("rb") as source:
                 try:
-                    shutil.copyfileobj(source, self.wfile)
+                    while chunk := source.read(64 * 1024):
+                        self.wfile.write(chunk)
                 except OSError:
                     logging.warning("Back-up: download afgebroken")
                     return
@@ -931,7 +905,8 @@ class Dashboard(BaseHTTPRequestHandler):
         path = urlsplit(self.path).path
         # Een eigen header dwingt een CORS-preflight af, zodat andere websites hier niet naartoe kunnen posten.
         change = {"/api/settings": change_retention, "/api/settings/budget": calibrate_budget,
-                  "/api/settings/budget-config": change_budget}.get(path)
+                  "/api/settings/budget-config": change_budget,
+                  "/api/settings/hourly": change_hourly}.get(path)
         header = "X-HA-Bandwidth-Settings" if change else "X-HA-Bandwidth-Restore"
         if self.client_address[0] != "172.30.32.2" or self.headers.get(header) != "1":
             self.send_error(403)
