@@ -1,3 +1,8 @@
+## 2.0.0-beta.70
+
+- Mijn Huis schaalt de 3D-kamer gelijk in alle richtingen. Vier gelijke wanden sluiten vierkant aan, ook bij zoomen. Het bovenaanzicht en de automatische wanduitlijning helpen om de opstelling te controleren.
+- Verlichting draait mee met de wand of het plafond en blijft op haar plek bij zoomen. Verplaatsen en vergroten blijven beschikbaar.
+
 ## 2.0.0-beta.69
 
 - De app gebruikt de volledige beschikbare breedte en laat bedieningselementen op kleinere schermen doorlopen op de volgende regel.
