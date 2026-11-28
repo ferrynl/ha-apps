@@ -250,6 +250,9 @@ class LightingProjectsTest(unittest.IsolatedAsyncioTestCase):
             key: {"status": "online", "capabilities": {"rgb": True}, "state": {"on": key != off}}
             for key in (left, right, off)
         }
+        self.lighting.spatial_groups = lambda: {
+            '["group","living"]': {"name": "Living room", "kind": "room", "members": [left, right, off]}
+        }
         self.lighting.lights = AsyncMock(return_value=(lights, {}))
         self.lighting.send_spatial_color = AsyncMock(side_effect=["unconfirmed", "accepted"])
         response = await self.change("layout", revision=None, photo=self.image(),
