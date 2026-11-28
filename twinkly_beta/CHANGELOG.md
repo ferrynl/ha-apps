@@ -1,3 +1,7 @@
+## 2.0.0-beta.75
+
+- Tik in de wandeditor op een geplaatste lamp om haar rood aan te zetten. Lampen zonder kleur gaan in hun eigen kleur aan. Lampen verslepen en vergroten verandert hun verlichting niet.
+
 ## 2.0.0-beta.74
 
 - De lampenkiezer naast de muur heeft kamertabs. Open bijvoorbeeld Woonkamer om de lampen apart te selecteren en naar de muur te slepen. Niet ingedeelde lampen en Twinkly-groepen blijven vindbaar.

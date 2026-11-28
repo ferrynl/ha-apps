@@ -1180,6 +1180,62 @@ test('2D floor plan saves wall drag and controls the selected room light', async
  expect(moves[0].placement.x_m).toBeGreaterThan(0);
 });
 
+test('clicking a wall light turns it red without activating it during edits', async ({page}) => {
+ await page.setViewportSize({width:1440,height:1000});
+ const hue = '["hue","bridge","reading"]';
+ const white = '["hue","bridge","white"]';
+ const group = '["group","twinkly:native:wall"]';
+ const twinkly = '["twinkly","wall-member"]';
+ const state = newProjects();
+ state.layout.dimensions = {width_m:5,height_m:2.5};
+ state.layout.points = [[hue,[20,50,14]],[group,[50,50,14]],[white,[80,50,14]]];
+ const commands = [];
+ await page.route('**/lighting', route => route.fulfill({json:{
+  lights:[
+   {id:hue,name:'Leeslamp',provider:'hue',status:'online',capabilities:{power:true,rgb:true},state:{on:false}},
+   {id:white,name:'Witte lamp',provider:'hue',status:'online',capabilities:{power:true},state:{on:false}},
+   {id:twinkly,name:'Ledset',provider:'twinkly',status:'online',capabilities:{power:true,rgb:true},state:{on:false}},
+  ],
+  spatial_groups:{[group]:{name:'Kerstmuur',provider:'twinkly',members:[twinkly]}},
+  groups:{},scenes:{},connections:{},
+ }}));
+ await page.route('**/lighting/projects', mockProjects(state));
+ await page.route('http://127.0.0.1:8765/lighting/control', route => {
+  const body = route.request().postDataJSON();
+  commands.push(body);
+  return route.fulfill({json:{results:{[body.id]:'accepted'}}});
+ });
+ await page.route('http://127.0.0.1:8765/control', route => {
+  commands.push(route.request().postDataJSON());
+  return route.fulfill({json:{failed:[],offline:[]}});
+ });
+ await page.goto('http://127.0.0.1:8765/index.html#mijn-huis');
+ const marker = page.getByRole('button',{name:/Leeslamp · Locatie/});
+ await marker.click();
+ await expect.poll(() => commands).toEqual([
+  {id:hue,action:'power',value:true},{id:hue,action:'color',value:[255,0,0]},
+ ]);
+ const move = async (control, dx) => {
+  const box = await control.boundingBox();
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width / 2 + dx, box.y + box.height / 2, {steps:8});
+  await page.mouse.up();
+ };
+ await move(marker, 35);
+ await expect.poll(() => state.layout.revision).toBe(1);
+ await move(page.locator('.house-edge-grip[data-edge="e"]:visible'), 18);
+ await expect.poll(() => state.layout.revision).toBe(2);
+ expect(commands).toHaveLength(2);
+ await page.getByRole('button',{name:/Kerstmuur · Locatie/}).click();
+ await expect.poll(() => commands.slice(2)).toEqual([
+  {group:'native:wall',action:'on'},{group:'native:wall',action:'color',value:'#ff0000'},
+ ]);
+ await page.getByRole('button',{name:/Witte lamp · Locatie/}).click();
+ await expect(page.getByText('Witte lamp · Gelukt',{exact:true})).toBeVisible();
+ expect(commands.slice(4)).toEqual([{id:white,action:'power',value:true}]);
+});
+
 test('Mijn Huis lets you drag individual room lights from the wall editor sidebar', async ({page}) => {
  await page.setViewportSize({width:1440,height:1000});
  const lamp = {provider:'hue',status:'online',capabilities:{power:true,brightness:true,rgb:true},state:{}};
@@ -1212,7 +1268,10 @@ test('Mijn Huis lets you drag individual room lights from the wall editor sideba
  await expect(choices.getByRole('button')).toHaveCount(2);
  await expect(choices.getByRole('button',{name:/Wandlamp/})).toContainText('Geplaatst');
  const stage = page.locator('.house-blank-wall');
- const source = await choices.getByRole('button',{name:'Leeslamp'}).boundingBox();
+ const reading = choices.getByRole('button',{name:'Leeslamp'});
+ await page.locator('.house-editor').evaluate(editor => editor.scrollIntoView({block:'center'}));
+ await reading.scrollIntoViewIfNeeded();
+ const source = await reading.boundingBox();
  const target = await stage.boundingBox();
  await page.mouse.move(source.x + source.width / 2, source.y + source.height / 2);
  await page.mouse.down();

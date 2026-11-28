@@ -989,9 +989,41 @@
     renderCollections();
   }
 
+  async function identifyWallLight(light) {
+    const members = light.members
+      ? (data?.lights || []).filter(member => light.members.includes(member.id))
+      : [light];
+    const available = members.filter(member => member.status !== "unavailable" && member.capabilities?.power);
+    if (!available.length) return t(4);
+    const key = light.members ? JSON.parse(light.id)[1] : null;
+    const native = light.provider === "twinkly" && key?.startsWith("twinkly:");
+    const red = [255, 0, 0];
+    if (native) {
+      const group = key.slice("twinkly:".length);
+      const on = await request("control", {group, action: "on"});
+      const failed = result => (result.failed?.length || 0) + (result.offline?.length || 0);
+      if (failed(on) >= light.members.length) return t(32);
+      const color = await request("control", {group, action: "color", value: stateColor(red)});
+      if (failed(color) >= light.members.length) return t(32);
+      return failed(on) || failed(color) ? t(30) : t(29);
+    }
+    const target = light.members ? {group: key} : {id: light.id};
+    const on = await api("lighting/control", {...target, action: "power", value: true});
+    const sent = value => value === "accepted" || value === "unconfirmed";
+    const powered = available.filter(member => sent(on.results[member.id]));
+    if (!powered.length) return t(32);
+    const colored = powered.filter(member => member.capabilities.rgb);
+    const color = colored.length ? await api("lighting/control", {...target, action: "color", value: red}) : null;
+    if (color && !colored.some(member => sent(color.results[member.id]))) return t(32);
+    const complete = powered.length === members.length && powered.every(member => on.results[member.id] === "accepted")
+      && (!color || colored.every(member => color.results[member.id] === "accepted"));
+    return complete ? t(29) : t(30);
+  }
+
   const renderTools = window.createLightingTools({
     mount: el("lighting-tools"), house: el("house-page"), nav: el("nav-house"), api, node, field,
     language: () => el("language").value,
+    identifyWallLight,
     roomLightControls: (card, lights, status, group) => {
       const target = group ? {twinklyGroup: group} : {id: lights[0].id};
       const state = group ? mixerState(lights, target) : lights[0].state;
