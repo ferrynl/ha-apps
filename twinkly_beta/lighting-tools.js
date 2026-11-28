@@ -2214,12 +2214,14 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, ro
     const canvas = node("div", "", "house-canvas");
     canvas.append(stage);
     editor.append(canvas, panel);
-    spatialSection.replaceChildren(dimensions, toolbar, spatialStatus, node("p", ({
+    const editHelp = ({
       nl:"Sleep een lamp uit de lijst naar de muur. Sleep de geplaatste lamp om haar te verplaatsen en gebruik de gele grepen aan de randen en hoeken om haar te schalen.",
       en:"Drag a light from the list onto the wall. Drag a placed light to move it, or use the yellow edge and corner handles to resize it.",
       de:"Ziehe eine Lampe aus der Liste auf die Wand. Ziehe sie an ihre Position und ändere ihre Größe am runden Griff.",
       es:"Arrastra una luz de la lista a la pared. Arrástrala para moverla o usa el tirador redondo para cambiar su tamaño.",
-    })[language()] || h(4)), node("p", (identifyWallWords[language()] || identifyWallWords.nl)[2]), editor, effectControls(stage));
+    })[language()] || h(4);
+    spatialSection.replaceChildren(dimensions, toolbar, spatialStatus,
+      node("p", editHelp + " " + (identifyWallWords[language()] || identifyWallWords.nl)[2]), editor, effectControls(stage));
     if (focusId === "dimensions") focus = dimensions.querySelector("button");
     focus?.focus();
   }

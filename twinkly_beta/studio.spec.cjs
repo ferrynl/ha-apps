@@ -1268,7 +1268,10 @@ test('Mijn Huis lets you drag individual room lights from the wall editor sideba
  await expect(choices.getByRole('button')).toHaveCount(2);
  await expect(choices.getByRole('button',{name:/Wandlamp/})).toContainText('Geplaatst');
  const stage = page.locator('.house-blank-wall');
- const source = await choices.getByRole('button',{name:'Leeslamp'}).boundingBox();
+ const reading = choices.getByRole('button',{name:'Leeslamp'});
+ await page.locator('.house-editor').evaluate(editor => editor.scrollIntoView({block:'center'}));
+ await reading.scrollIntoViewIfNeeded();
+ const source = await reading.boundingBox();
  const target = await stage.boundingBox();
  await page.mouse.move(source.x + source.width / 2, source.y + source.height / 2);
  await page.mouse.down();
