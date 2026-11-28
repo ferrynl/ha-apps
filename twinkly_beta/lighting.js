@@ -992,7 +992,11 @@
   const renderTools = window.createLightingTools({
     mount: el("lighting-tools"), house: el("house-page"), nav: el("nav-house"), api, node, field,
     language: () => el("language").value,
-    roomLightControls: (card, light, status) => controls(card, [light], {id: light.id}, light.state, false, status),
+    roomLightControls: (card, lights, status, group) => {
+      const target = group ? {twinklyGroup: group} : {id: lights[0].id};
+      const state = group ? mixerState(lights, target) : lights[0].state;
+      controls(card, lights, target, state, false, status);
+    },
   });
 
   function openDialog(title, content, opener) {

@@ -694,6 +694,7 @@ test('Mijn Huis shows an existing Twinkly group as a single panel and identifies
  });
  expect(samples).toEqual([255,255,0]);
  await expect(page.getByText(/Losse set/)).toHaveCount(0);
+ await expect(page.getByRole('tabpanel').getByRole('heading',{name:'Kerstmuur'})).toBeVisible();
  await expect(page.locator('.house-marker')).toHaveCount(1);
  const strip = page.locator('.house-lamp-choice').filter({hasText:'Bureau'});
  await expect(strip.getByText('Hue lightstrip · LST002')).toBeVisible();

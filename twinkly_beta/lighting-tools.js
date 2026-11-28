@@ -638,7 +638,7 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, ro
 
   function wallGroupOwners() {
     const owners = new Map();
-    for (const [id, group] of Object.entries(inventory.spatial_groups || {})) {
+    for (const [id, group] of Object.entries(inventory?.spatial_groups || {})) {
       for (const member of group.members) if (!owners.has(member)) owners.set(member, id);
     }
     return owners;
@@ -814,7 +814,7 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, ro
     const members = new Set(linkedGroup?.members || []);
     const points = [snapshot.ceiling_lights?.[room] || [],
       ...snapshot.walls.filter(wall => Math.floor(wall.slot / 4) === room).map(wall => wall.points || [])];
-    for (const [id] of points.flat()) {
+    for (const id of wallPoints(points.flat()).keys()) {
       for (const member of inventory?.spatial_groups?.[id]?.members || [id]) members.add(member);
     }
     return members;
@@ -822,8 +822,12 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, ro
 
   function showRoomLighting(snapshot) {
     roomLightingRequest++;
-    if (JSON.stringify(snapshot) === JSON.stringify(roomLightingSnapshot)) return;
-    roomLightingSnapshot = snapshot;
+    const next = {
+      ...snapshot,
+      walls: snapshot.walls.map((wall, index) => ({...wall, slot: wall.slot ?? index})),
+    };
+    if (JSON.stringify(next) === JSON.stringify(roomLightingSnapshot)) return;
+    roomLightingSnapshot = next;
     renderRoomLighting();
   }
 
@@ -922,7 +926,18 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, ro
     const cards = node("div", "", "house-room-light-cards");
     const feedback = node("p");
     feedback.setAttribute("role", "status");
-    for (const light of lights) {
+    const available = new Map(lights.map(light => [light.id, light]));
+    const entries = [];
+    for (const [id, group] of Object.entries(inventory?.spatial_groups || {})) {
+      if (group.provider !== "twinkly" || !group.members.length || !group.members.every(member => available.has(member))) continue;
+      const [, key] = JSON.parse(id);
+      if (typeof key !== "string" || !key.startsWith("twinkly:")) continue;
+      entries.push({light: {...group, id}, targets: group.members.map(member => available.get(member)),
+        group: key.slice("twinkly:".length)});
+      for (const member of group.members) available.delete(member);
+    }
+    for (const light of available.values()) entries.push({light, targets: [light]});
+    for (const {light, targets, group} of entries) {
       const card = node("article");
       const title = node("h5", light.name);
       if (showArtwork) {
@@ -930,7 +945,7 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, ro
         label.append(lampImage(light), title);
         card.append(label);
       } else card.append(title);
-      roomLightControls(card, light, feedback);
+      roomLightControls(card, targets, feedback, group);
       cards.append(card);
     }
     panel.append(cards, feedback);
