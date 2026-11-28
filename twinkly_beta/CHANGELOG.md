@@ -1,3 +1,7 @@
+## 2.0.0-beta.73
+
+- Mijn Huis toont lampen direct in tabs per kamer, met bediening voor aan/uit, helderheid en kleur waar de lamp dit ondersteunt. Lampen zonder toegewezen kamer staan onder Niet ingedeeld.
+
 ## 2.0.0-beta.72
 
 - Mijn Huis toont wandlampen en lichtgordijnen aan de binnenkant van de kamer, met dezelfde links-rechtsrichting als in de wandeditor. Bij het draaien geeft de voorste wand zicht op de kamer.

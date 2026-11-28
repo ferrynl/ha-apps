@@ -694,6 +694,7 @@ test('Mijn Huis shows an existing Twinkly group as a single panel and identifies
  });
  expect(samples).toEqual([255,255,0]);
  await expect(page.getByText(/Losse set/)).toHaveCount(0);
+ await expect(page.getByRole('tabpanel').getByRole('heading',{name:'Kerstmuur'})).toBeVisible();
  await expect(page.locator('.house-marker')).toHaveCount(1);
  const strip = page.locator('.house-lamp-choice').filter({hasText:'Bureau'});
  await expect(strip.getByText('Hue lightstrip · LST002')).toBeVisible();
@@ -1178,6 +1179,51 @@ test('2D floor plan saves wall drag and controls the selected room light', async
  await expect.poll(() => moves.length).toBe(1);
  expect(moves[0]).toMatchObject({wall:'office',slot:4,placement:{angle:0}});
  expect(moves[0].placement.x_m).toBeGreaterThan(0);
+});
+
+test('Mijn Huis lets you find and control lights from the room tabs', async ({page}) => {
+ await page.setViewportSize({width:390,height:844});
+ const lamp = {provider:'hue',status:'online',capabilities:{power:true,brightness:true,rgb:true},state:{}};
+ const wall = {id:'default',slot:0,name:'Voorwand',points:[['wall',[20,50,24]]]};
+ const commands = [];
+ await page.route('**/lighting', route => route.fulfill({json:{
+  lights:[
+   {...lamp,id:'reading',name:'Leeslamp'},
+   {...lamp,id:'wall',name:'Wandlamp'},
+   {...lamp,id:'ceiling',name:'Plafondspot'},
+   {...lamp,id:'desk',name:'Bureaulamp'},
+   {...lamp,id:'loose',name:'Losse lamp'},
+  ],
+  groups:{
+   living:{name:'Woonkamer',kind:'room',members:['reading']},
+   office:{name:'Kantoor',kind:'room',members:['desk']},
+  },
+  scenes:{},connections:{},
+ }}));
+ await page.route('**/lighting/projects', route => route.fulfill({json:{
+  walls:[wall],wall_id:'default',shows:[],layout:{...wall,revision:'layout'},playback:{state:'idle'},
+ }}));
+ await page.route('**/lighting/projects/overview', route => route.fulfill({json:{
+  revision:'home',walls:[wall],room_groups:{0:'living'},ceiling_lights:{0:[['ceiling',[50,50,24]]]},
+ }}));
+ await page.route('**/lighting/control', route => {
+  commands.push(route.request().postDataJSON());
+  return route.fulfill({json:{results:{wall:'accepted'}}});
+ });
+ await page.goto('http://127.0.0.1:8765/index.html#mijn-huis');
+ const tabs = page.getByRole('tablist',{name:'Lampen per kamer'});
+ const living = tabs.getByRole('tab',{name:'Woonkamer'});
+ await living.click();
+ const panel = page.getByRole('tabpanel',{name:'Woonkamer'});
+ await expect(panel.getByRole('heading')).toHaveText(['Leeslamp','Wandlamp','Plafondspot']);
+ await panel.locator('article').filter({hasText:'Wandlamp'}).getByRole('button',{name:'Aan',exact:true}).click();
+ await expect.poll(() => commands).toEqual([{id:'wall',action:'power',value:true}]);
+ await living.focus();
+ await living.press('ArrowRight');
+ await expect(page.getByRole('tabpanel',{name:'Kantoor'}).getByRole('heading')).toHaveText('Bureaulamp');
+ await tabs.getByRole('tab',{name:'Niet ingedeeld'}).click();
+ await expect(page.getByRole('tabpanel',{name:'Niet ingedeeld'}).getByRole('heading')).toHaveText('Losse lamp');
+ expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBeTruthy();
 });
 
 test('Home room membership is available before drawing and links a wall by group ID', async ({page}) => {
