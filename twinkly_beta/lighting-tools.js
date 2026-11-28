@@ -1266,7 +1266,8 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, ro
     const marker = node("button", "", "house-3d-lamp-button");
     marker.type = "button";
     marker.setAttribute("aria-label", light.name + " · " + t(32));
-    marker.append(rotatedLampImage(light, angle));
+    const artwork = lampArtwork(light);
+    marker.append(artwork.frame);
     const handle = node("button", "", "house-3d-resize");
     handle.type = "button";
     handle.setAttribute("aria-label", h(2) + " · " + light.name);
@@ -1278,14 +1279,14 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, ro
       item.hidden = !projection;
       if (!projection) return;
       const [left, top, size] = placement;
-      const width = surface.clientWidth;
-      const height = surface.clientHeight;
+      const width = customWidth ?? size;
       Object.assign(item.style, {
         left: left + "%",
         top: top + "%",
-        width: (customWidth ?? size) + "%",
-        height: size * width / height + "%",
+        width: width + "%",
+        aspectRatio: String(width / size),
       });
+      artwork.fit(angle, width / size);
     };
     const display = values => {
       placement = values;
@@ -1647,10 +1648,18 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, ro
     return light.provider === "hue" ? hueProductImage(light, illustration) : illustration;
   }
 
-  function rotatedLampImage(light, angle) {
+  function lampArtwork(light) {
+    const frame = node("span", "", "house-lamp-artwork");
     const image = lampImage(light);
-    if (angle) image.style.rotate = angle + "deg";
-    return image;
+    frame.append(image);
+    function fit(rotation, ratio) {
+      const radians = rotation * Math.PI / 180;
+      frame.style.setProperty("--art-width", 100 / ratio + "%");
+      frame.style.setProperty("--art-stretch", ratio);
+      image.style.rotate = rotation + "deg";
+      image.style.scale = String(1 / (Math.abs(Math.cos(radians)) + Math.abs(Math.sin(radians))));
+    }
+    return {frame, fit};
   }
 
   function lampMarker(photo, light, point) {
@@ -1662,10 +1671,8 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, ro
       renderSpatial(light.id);
     });
     marker.className = "house-marker-lamp";
-    const artwork = rotatedLampImage(light, angle);
-    const artworkFrame = node("span", "", "house-marker-artwork");
-    artworkFrame.append(artwork);
-    marker.append(artworkFrame);
+    const artwork = lampArtwork(light);
+    marker.append(artwork.frame);
     marker.setAttribute("aria-label", light.name + " · " + t(32) + " " + Math.round(x) + "%, " + Math.round(y) + "%");
     marker.setAttribute("aria-pressed", String(light.id === selected));
     item.classList.toggle("is-selected", light.id === selected);
@@ -1701,13 +1708,7 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, ro
       item.style.width = (span ?? scale) + "%";
       item.style.aspectRatio = String((span ?? scale) / scale);
       item.classList.toggle("house-custom-width", span !== undefined);
-      const ratio = (span ?? scale) / scale;
-      const radians = rotation * Math.PI / 180;
-      const fit = 1 / (Math.abs(Math.cos(radians)) + Math.abs(Math.sin(radians)));
-      artworkFrame.style.setProperty("--art-width", 100 / ratio + "%");
-      artworkFrame.style.setProperty("--art-stretch", ratio);
-      artwork.style.rotate = rotation + "deg";
-      artwork.style.scale = String(fit);
+      artwork.fit(rotation, (span ?? scale) / scale);
     }
     display(x, y, size);
 

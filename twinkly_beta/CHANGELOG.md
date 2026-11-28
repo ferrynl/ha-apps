@@ -1,3 +1,7 @@
+## 2.0.0-beta.71
+
+- Mijn Huis tekent gedraaide en uitgerekte lichtgordijnen in 3D met dezelfde verhouding en rotatie als in de wandeditor.
+
 ## 2.0.0-beta.70
 
 - Mijn Huis schaalt de 3D-kamer gelijk in alle richtingen. Vier gelijke wanden sluiten vierkant aan, ook bij zoomen. Het bovenaanzicht en de automatische wanduitlijning helpen om de opstelling te controleren.

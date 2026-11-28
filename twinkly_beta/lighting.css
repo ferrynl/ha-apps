@@ -171,7 +171,8 @@
 .house-3d-cutaway > img, .house-3d-cutaway > .house-3d-name { opacity: .22; }
 .house-3d-pin { position: absolute; width: 0; height: 0; pointer-events: none; }
 .house-3d-light > button { touch-action: none; pointer-events: auto; }
-.house-3d-light > .house-3d-lamp-button { display: block; padding: 0; width: 100%; height: 100%; min-width: 0; min-height: 0;
+.house-3d-light > .house-3d-lamp-button { display: block; position: relative; overflow: hidden;
+  padding: 0; width: 100%; height: 100%; min-width: 0; min-height: 0;
   border: 1px solid transparent; background: transparent; cursor: move; }
 .house-3d-light:hover > .house-3d-lamp-button,
 .house-3d-light:focus-within > .house-3d-lamp-button { border-color: var(--studio-gold); }
@@ -184,7 +185,6 @@
   color: #fff; background: #141c26dd; border-radius: 4px; transform: translateZ(2px); }
 .house-3d-light { position: absolute; transform: translate3d(-50%, -50%, -1px); }
 .house-3d-light[hidden] { display: none; }
-.house-3d-light .house-lamp-art { transform: scale(.65); }
 .house-3d-placement { margin-block: .75rem; }
 .house-3d-placement .lighting-controls { flex-wrap: wrap; align-items: end; }
 .house-3d-placement p { margin-block: .35rem; }
@@ -461,9 +461,10 @@
 .mixer-brand-faders .mixer-fader, .mixer-brand-faders input { width: 100%; min-width: 0; }
 
 .house-marker-lamp { position: relative; overflow: hidden; }
-.house-marker-artwork { position: absolute; left: 50%; top: 0; width: var(--art-width, 100%); height: 100%;
+.house-lamp-artwork { position: absolute; left: 50%; top: 0; width: var(--art-width, 100%); height: 100%;
   transform: translateX(-50%) scaleX(var(--art-stretch, 1)); pointer-events: none; }
-.house-marker-artwork > * { display: block; width: 100%; height: 100%; object-fit: contain; }
+.house-lamp-artwork > * { width: 100%; height: 100%; }
+.house-lamp-artwork > .hue-product-photo { object-fit: contain; }
 
 .lighting-show-editor { display:grid; grid-template-columns:minmax(0,2fr) minmax(15rem,1fr); gap:1rem; align-items:start; }
 .lighting-show-library { display:grid; gap:.65rem; min-width:0; overflow-wrap:anywhere; }

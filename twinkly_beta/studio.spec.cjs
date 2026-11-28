@@ -664,6 +664,8 @@ test('Mijn Huis saves a measured wall without a photo and renders it to scale', 
 test('Mijn Huis shows an existing Twinkly group as a single panel and identifies a Hue strip', async ({page}) => {
  const group = '["group","twinkly:native:wall"]';
  const members = ['["twinkly","a"]','["twinkly","b"]'];
+ const dimensions = {width_m:5,height_m:2.5};
+ const curtain = [50,50,40,0,90,92];
  const hue = {id:'["hue","bridge","strip"]',name:'Bureau',product_name:'Hue lightstrip',model:'LST002',archetype:'hue_lightstrip',
   provider:'hue',status:'online',capabilities:{rgb:true},state:{on:true}};
  const lights = [hue,...members.map((id,i)=>({id,name:'Losse set '+i,provider:'twinkly',status:'online',
@@ -671,7 +673,7 @@ test('Mijn Huis shows an existing Twinkly group as a single panel and identifies
  await page.route('**/lighting', route => route.fulfill({json:{lights,groups:{},scenes:{},connections:{},
   spatial_groups:{[group]:{name:'Kerstmuur',provider:'twinkly',members}}}}));
  await page.route('**/lighting/projects', route => route.fulfill({json:{
-  shows:[],layout:{revision:'legacy',photo_version:'photo',points:members.map((key,i)=>[key,[20+i*30,60]])},
+  shows:[],layout:{revision:'legacy',photo_version:'photo',dimensions,points:[[members[0],curtain],[members[1],[50,60]]]},
   playback:{state:'idle'}
  }}));
  await page.route('**/lighting/projects/photo?*', route => route.fulfill({contentType:'image/svg+xml',
@@ -680,7 +682,7 @@ test('Mijn Huis shows an existing Twinkly group as a single panel and identifies
   members:[{points:[[0,0,0],[0,1,0]]},{points:[[1,1,0]]}]
  }}));
  await page.route('**/lighting/projects/overview', route => route.fulfill({json:{walls:[
-  {id:'default',name:'Voorwand',photo_version:'first',points:[[group,[50,50,20,0,45]]]},
+  {id:'default',name:'Voorwand',photo_version:'first',dimensions,points:[[group,curtain]]},
   {id:'north',name:'Zijwand',photo_version:'second',points:[]}
  ]}}));
  await page.goto('http://127.0.0.1:8765/index.html#mijn-huis');
@@ -700,7 +702,21 @@ test('Mijn Huis shows an existing Twinkly group as a single panel and identifies
  const scene = page.locator('.house-3d-scene');
  await expect(scene.locator('.house-3d-wall')).toHaveCount(2);
  await expect(scene.locator('.house-led-map')).toHaveAttribute('data-led-count','3');
- await expect(scene.locator('.house-led-map')).toHaveCSS('rotate','45deg');
+ await expect(scene.locator('.house-led-map')).toHaveCSS('rotate','90deg');
+ const shape = marker => marker.evaluate(element => {
+  const frame = element.querySelector('.house-lamp-artwork');
+  const artwork = frame.firstElementChild;
+  return {
+   position: [element.style.left, element.style.top],
+   ratio: Number(getComputedStyle(element).aspectRatio.split('/')[0]),
+   stretch: new DOMMatrix(getComputedStyle(frame).transform).a,
+   rotation: getComputedStyle(artwork).rotate,
+   squareArtwork: Math.abs(artwork.clientWidth - artwork.clientHeight) <= 3,
+  };
+ });
+ const editorShape = await shape(page.locator('.house-marker'));
+ expect(editorShape).toEqual({position:['50%','50%'],ratio:2.3,stretch:2.3,rotation:'90deg',squareArtwork:true});
+ expect(await shape(scene.locator('.house-3d-light'))).toEqual(editorShape);
  const world = scene.locator('.house-3d-world');
  const before = await world.evaluate(element=>element.style.transform);
  await page.getByRole('button',{name:'Rechts draaien'}).click();
