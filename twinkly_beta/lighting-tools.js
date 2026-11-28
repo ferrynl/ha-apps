@@ -20,7 +20,7 @@ function hueProductImage(light, fallback) {
   return image;
 }
 
-window.createLightingTools = ({mount, house, nav, api, node, field, language, roomLightControls}) => {
+window.createLightingTools = ({mount, house, nav, api, node, field, language, roomLightControls, identifyWallLight}) => {
   const labels = {
     nl: ["Showbouwer", "Shownaam", "Scène", "Wachttijd (sec.)", "Stap toevoegen", "Omhoog", "Omlaag", "Verwijderen", "Opslaan", "Afspelen", "Stoppen", "Maak eerst een scène voor een gemengde groep op Home.", "Stap", "Show klaar", "Show gestopt", "Show onderbroken", "Geen bevestiging", "Spatial Light Studio", "Kies een foto", "Kies een lamp", "Plaats in het midden", "Verwijder plaatsing", "Klik op de foto om de gekozen lamp te plaatsen. Verplaats een markering met de pijltjestoetsen.", "Foto wissen", "Kies een geldige JPG, PNG of WebP van maximaal 15 MB.", "Opslaan op de server is mislukt.", "Shows en foto-indeling staan op je Home Assistant-server. Een show loopt door als je de pagina sluit.", "Groep", "Nieuwe show", "Bewerken", "Definieer minimaal één geldige stap.", "Onbekende lamp", "Locatie", "Foto van de ruimte", "Scène of groep ontbreekt", "Opdrachten gedeeltelijk uitgevoerd"],
     en: ["Show builder", "Show name", "Scene", "Hold (sec.)", "Add step", "Move up", "Move down", "Remove", "Save", "Play", "Stop", "First create a scene for a mixed group on Home.", "Step", "Show complete", "Show stopped", "Show interrupted", "Unconfirmed", "Spatial Light Studio", "Choose a photo", "Choose a light", "Place in the centre", "Remove placement", "Click the photo to place the selected light. Move a marker with the arrow keys.", "Clear photo", "Choose a valid JPG, PNG or WebP up to 15 MB.", "Could not save to the server.", "Shows and photo layouts are saved on your Home Assistant server. Playback continues when you close this page.", "Group", "New show", "Edit", "Add at least one valid step.", "Unknown light", "Position", "Photo of the space", "Scene or group missing", "Some commands did not complete"],
@@ -1777,15 +1777,36 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, ro
     return {frame, fit};
   }
 
+  const identifyingWallLights = new Set();
+  const identifyWallWords = {
+    nl: ["Zet de lamp aan en maak haar indien mogelijk rood", "Lichtcommando mislukt", "Tik op een geplaatste lamp om haar rood aan te zetten."],
+    en: ["Turn the light on and make it red if supported", "Light command failed", "Tap a placed light to turn it red."],
+    de: ["Lampe einschalten und wenn möglich rot einstellen", "Lichtbefehl fehlgeschlagen", "Tippe auf eine platzierte Lampe, um sie rot einzuschalten."],
+    es: ["Enciende la luz y ponla en rojo si es compatible", "Error al controlar la luz", "Toca una luz colocada para encenderla en rojo."],
+  };
+
   function lampMarker(photo, light, point) {
     const [x, y, size = defaultSize, advance = 0, angle = 0, width] = point;
     const item = node("div", "", "house-marker");
     item.dataset.lamp = light.id;
-    const marker = action("", () => {
+    const words = identifyWallWords[language()] || identifyWallWords.nl;
+    const marker = action("", async () => {
       selected = light.id;
       renderSpatial(light.id);
+      if (identifyingWallLights.has(light.id)) return;
+      identifyingWallLights.add(light.id);
+      spatialStatus.textContent = "";
+      try {
+        const outcome = await identifyWallLight(light);
+        spatialStatus.textContent = light.name + " · " + outcome;
+      } catch {
+        spatialStatus.textContent = light.name + " · " + words[1];
+      } finally {
+        identifyingWallLights.delete(light.id);
+      }
     });
     marker.className = "house-marker-lamp";
+    marker.title = words[0];
     const artwork = lampArtwork(light);
     marker.append(artwork.frame);
     marker.setAttribute("aria-label", light.name + " · " + t(32) + " " + Math.round(x) + "%, " + Math.round(y) + "%");
@@ -2198,7 +2219,7 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, ro
       en:"Drag a light from the list onto the wall. Drag a placed light to move it, or use the yellow edge and corner handles to resize it.",
       de:"Ziehe eine Lampe aus der Liste auf die Wand. Ziehe sie an ihre Position und ändere ihre Größe am runden Griff.",
       es:"Arrastra una luz de la lista a la pared. Arrástrala para moverla o usa el tirador redondo para cambiar su tamaño.",
-    })[language()] || h(4)), editor, effectControls(stage));
+    })[language()] || h(4)), node("p", (identifyWallWords[language()] || identifyWallWords.nl)[2]), editor, effectControls(stage));
     if (focusId === "dimensions") focus = dimensions.querySelector("button");
     focus?.focus();
   }
