@@ -226,6 +226,8 @@ class Playback:
             groups = getattr(self.lighting, "spatial_groups", lambda: {})()
             owners = {}
             for group, row in groups.items():
+                if row.get("kind") == "room":
+                    continue
                 for member in row["members"]:
                     owners.setdefault(member, group)
             placements = dict(points)

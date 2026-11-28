@@ -1,3 +1,7 @@
+## 2.0.0-beta.74
+
+- De lampenkiezer naast de muur heeft kamertabs. Open bijvoorbeeld Woonkamer om de lampen apart te selecteren en naar de muur te slepen. Niet ingedeelde lampen en Twinkly-groepen blijven vindbaar.
+
 ## 2.0.0-beta.73
 
 - Mijn Huis toont lampen direct in tabs per kamer, met bediening voor aan/uit, helderheid en kleur waar de lamp dit ondersteunt. Lampen zonder toegewezen kamer staan onder Niet ingedeeld.

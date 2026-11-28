@@ -127,7 +127,6 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, ro
   const guide = node("details", "", "house-guide");
   guide.open = true;
   let guideLanguage;
-  const roomLighting = node("section", "", "house-room-lighting");
   const wallPicker = node("div", "", "house-wall-picker");
   const wallStatus = node("p");
   wallStatus.setAttribute("role", "status");
@@ -147,7 +146,7 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, ro
     if (!floorPlan.hidden) renderFloorPlan();
   });
   openFloor.setAttribute("aria-expanded", "false");
-  house.append(houseTitle, roomLighting, guide, openFloor, floorPlan, openPlan, plan, wallPicker, spatialSection);
+  house.append(houseTitle, guide, openFloor, floorPlan, openPlan, plan, wallPicker, spatialSection);
   function renderWallGuide() {
     const current = language();
     if (guideLanguage === current) return;
@@ -291,7 +290,6 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, ro
     }
     if (inventory && (showsChanged || runningChanged)) renderShows();
     if (inventory && layoutChanged) renderSpatial(focusId);
-    if (layoutChanged && (!switched || busy) && activePage === "house") refreshRoomLighting();
     if (refreshPlan && activePage === "house") renderHouse3d();
   }
 
@@ -639,6 +637,7 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, ro
   function wallGroupOwners() {
     const owners = new Map();
     for (const [id, group] of Object.entries(inventory?.spatial_groups || {})) {
+      if (group.kind === "room") continue;
       for (const member of group.members) if (!owners.has(member)) owners.set(member, id);
     }
     return owners;
@@ -800,15 +799,13 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, ro
     return {links, groups: new Map(groups)};
   }
 
-  const roomLightingWords = {
-    nl: ["Lampen per kamer", "Niet ingedeeld", "Geen lampen in deze kamer.", "Geen lampen gevonden."],
-    en: ["Lights by room", "Unassigned", "No lights in this room.", "No lights found."],
-    de: ["Lampen nach Raum", "Nicht zugeordnet", "Keine Lampen in diesem Raum.", "Keine Lampen gefunden."],
-    es: ["Luces por habitación", "Sin asignar", "No hay luces en esta habitación.", "No se encontraron luces."],
+  const lampTabWords = {
+    nl: ["Alle lampen", "Niet ingedeeld", "Geen lampen in deze kamer."],
+    en: ["All lights", "Unassigned", "No lights in this room."],
+    de: ["Alle Lampen", "Nicht zugeordnet", "Keine Lampen in diesem Raum."],
+    es: ["Todas las luces", "Sin asignar", "No hay luces en esta habitación."],
   };
-  let roomLightingSnapshot = {walls: []};
-  let roomLightingRequest = 0;
-  let selectedLightRoom;
+  let lampTab = "all";
 
   function roomMembers(snapshot, room, linkedGroup) {
     const members = new Set(linkedGroup?.members || []);
@@ -820,104 +817,66 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, ro
     return members;
   }
 
-  function showRoomLighting(snapshot) {
-    roomLightingRequest++;
-    const next = {
-      ...snapshot,
-      walls: snapshot.walls.map((wall, index) => ({...wall, slot: wall.slot ?? index})),
-    };
-    if (JSON.stringify(next) === JSON.stringify(roomLightingSnapshot)) return;
-    roomLightingSnapshot = next;
-    renderRoomLighting();
-  }
-
-  async function refreshRoomLighting() {
-    const request = ++roomLightingRequest;
-    try {
-      const snapshot = await api(planPath);
-      if (request === roomLightingRequest && activePage === "house") showRoomLighting(snapshot);
-    } catch {
-      // Inventory rooms and unassigned lights remain available if the plan cannot be loaded.
-    }
-  }
-
-  function renderRoomLighting() {
-    const words = roomLightingWords[language()] || roomLightingWords.nl;
-    const heading = node("h3", words[0]);
-    heading.id = "house-room-lighting-title";
-    roomLighting.setAttribute("aria-labelledby", heading.id);
-    roomLighting.replaceChildren(heading);
-    if (!inventory) return;
-
-    const snapshot = roomLightingSnapshot;
-    const {links, groups} = homeRooms(snapshot);
-    const roomIds = new Set([...snapshot.walls.map(wall => Math.floor(wall.slot / 4)),
-      ...Object.keys(snapshot.room_names || {}).map(Number), ...Object.keys(snapshot.trees || {}).map(Number),
-      ...Object.keys(snapshot.ceiling_lights || {}).map(Number), ...Object.keys(links).map(Number)]);
+  function wallLampTabs(heading, cards, choices, lights, updateSelection) {
+    const words = lampTabWords[language()] || lampTabWords.nl;
+    const all = [...choices.keys()];
+    const tabs = [{key: "all", label: words[0], ids: all}];
     const assigned = new Set();
-    const lights = inventory.lights || [];
-    const tabs = [...roomIds].sort((a, b) => a - b).map(room => {
-      const group = groups.get(links[room]);
-      const members = roomMembers(snapshot, room, group);
-      for (const id of members) assigned.add(id);
-      return {key: group ? "group:" + links[room] : "room:" + room, label: group?.name || roomLabel(room, snapshot.room_names),
-        lights: lights.filter(light => members.has(light.id))};
-    });
-    // A full drawing can leave provider rooms without a free plan slot.
-    for (const [id, group] of groups) {
-      if (Object.values(links).includes(id)) continue;
-      const members = new Set(group.members || []);
-      for (const member of members) assigned.add(member);
-      tabs.push({key: "group:" + id, label: group.name, lights: lights.filter(light => members.has(light.id))});
+    for (const [id, room] of Object.entries(inventory.groups || {})) {
+      if (room.kind !== "room") continue;
+      const members = new Set(room.members);
+      const ids = all.filter(key => (lights.get(key).members || [key]).some(member => members.has(member)));
+      for (const key of ids) assigned.add(key);
+      tabs.push({key: "room:" + id, label: room.name, ids});
     }
-    const unassigned = lights.filter(light => !assigned.has(light.id));
-    if (unassigned.length) tabs.push({key: "unassigned", label: words[1], lights: unassigned});
-    if (!tabs.length) {
-      roomLighting.append(node("p", words[3]));
+    const unassigned = all.filter(id => !assigned.has(id));
+    if (tabs.length > 1 && unassigned.length) tabs.push({key: "unassigned", label: words[1], ids: unassigned});
+    if (tabs.length === 1) {
+      cards.replaceChildren(...(all.length ? choices.values() : [node("p", h(3))]));
       return;
     }
-
     const tabList = node("div", "", "house-room-tabs");
     tabList.setAttribute("role", "tablist");
     tabList.setAttribute("aria-labelledby", heading.id);
-    const panel = node("div", "", "house-room-light-panel");
-    panel.id = "house-room-light-panel";
-    panel.setAttribute("role", "tabpanel");
-    panel.tabIndex = 0;
-    function select(index) {
+    cards.id = "house-wall-lamp-choices";
+    cards.setAttribute("role", "tabpanel");
+    cards.tabIndex = 0;
+    function select(index, changing = false) {
       const tab = tabs[index];
-      selectedLightRoom = tab.key;
+      lampTab = tab.key;
       for (const [i, button] of buttons.entries()) {
         button.setAttribute("aria-selected", String(i === index));
         button.tabIndex = i === index ? 0 : -1;
       }
-      panel.setAttribute("aria-labelledby", buttons[index].id);
-      renderRoomLightCards(panel, tab.lights, words[2], true);
+      cards.setAttribute("aria-labelledby", buttons[index].id);
+      cards.replaceChildren(...(tab.ids.length ? tab.ids.map(id => choices.get(id)) : [node("p", words[2])]));
+      if (changing) {
+        cards.scrollTop = 0;
+        updateSelection(tab.ids);
+      }
     }
     const buttons = tabs.map((tab, index) => {
-      const button = action(tab.label, () => select(index));
-      button.id = "house-room-tab-" + index;
+      const button = action(tab.label, () => select(index, true));
+      button.id = "house-wall-lamp-tab-" + index;
       button.setAttribute("role", "tab");
-      button.setAttribute("aria-controls", panel.id);
+      button.setAttribute("aria-controls", cards.id);
       button.onkeydown = event => {
         const offsets = {ArrowLeft: -1, ArrowRight: 1};
         if (!(event.key in offsets) && !["Home", "End"].includes(event.key)) return;
         const next = event.key === "Home" ? 0 : event.key === "End" ? tabs.length - 1 :
           (index + offsets[event.key] + tabs.length) % tabs.length;
         event.preventDefault();
-        select(next);
+        select(next, true);
         buttons[next].focus();
       };
       tabList.append(button);
       return button;
     });
-    roomLighting.append(tabList, panel);
-    const current = tabs.findIndex(tab => tab.key === selectedLightRoom);
-    const firstWithLights = tabs.findIndex(tab => tab.lights.length);
-    select(current >= 0 ? current : Math.max(0, firstWithLights));
+    select(Math.max(0, tabs.findIndex(tab => tab.key === lampTab)));
+    return tabList;
   }
 
-  function renderRoomLightCards(panel, lights, empty, showArtwork = false) {
+  function renderRoomLightCards(panel, lights, empty) {
     panel.replaceChildren();
     if (!lights.length) {
       panel.append(node("p", empty));
@@ -939,12 +898,7 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, ro
     for (const light of available.values()) entries.push({light, targets: [light]});
     for (const {light, targets, group} of entries) {
       const card = node("article");
-      const title = node("h5", light.name);
-      if (showArtwork) {
-        const label = node("div", "", "house-room-light-label");
-        label.append(lampImage(light), title);
-        card.append(label);
-      } else card.append(title);
+      card.append(node("h5", light.name));
       roomLightControls(card, targets, feedback, group);
       cards.append(card);
     }
@@ -1158,7 +1112,6 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, ro
     try {
       snapshot ??= await api(planPath);
       if (request !== floorGeneration || floorPlan.hidden) return;
-      showRoomLighting(snapshot);
       const walls = snapshot.walls;
       floorPlan.replaceChildren(node("h3", floorText(0)), node("p", floorText(1)), status);
       const {links, groups} = homeRooms(snapshot);
@@ -1508,7 +1461,6 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, ro
     try {
       snapshot ??= await api(planPath);
       if (request !== planGeneration || plan.hidden) return;
-      showRoomLighting(snapshot);
       const {links, groups: linkedGroups} = homeRooms(snapshot);
       const roomNames = {...snapshot.room_names};
       for (const [room, id] of Object.entries(links)) if (linkedGroups.has(id)) roomNames[room] = linkedGroups.get(id).name;
@@ -2170,9 +2122,11 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, ro
       if (at && selected && lights.has(selected)) place(selected, at);
     };
     const cards = node("div", "", "house-lamp-list");
+    const choices = new Map();
     let focus;
     for (const light of lights.values()) {
       const point = placements.get(light.id);
+      if (light.kind === "room" && !point) continue;
       const choose = action("", () => {
         selected = light.id;
         renderSpatial("list");
@@ -2211,23 +2165,30 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, ro
       const model = [light.product_name, light.product_code || light.model].filter(value => value && value !== light.name);
       if (model.length) choose.append(node("small", model.join(" · ")));
       if (point) choose.append(node("small", h(5)));
-      cards.append(choose);
+      choices.set(light.id, choose);
       if (focusId === "list" && light.id === selected) focus = choose;
       if (!point) continue;
       const {item, marker} = lampMarker(photo, light, point);
       stage.append(item);
       if (light.id === focusId) focus = marker;
     }
-    if (!lights.size) cards.append(node("p", h(3)));
     const panel = node("aside", "", "house-lamp-panel");
-    panel.append(node("h3", h(1)), cards);
-    const selectedLight = lights.get(selected);
+    const heading = node("h3", h(1));
+    heading.id = "house-wall-lamps-title";
+    const placeCenter = action(t(20), () => setPosition(selected, 50, 50));
+    placeCenter.hidden = !choices.has(selected) || placements.has(selected);
+    const tabs = wallLampTabs(heading, cards, choices, lights, ids => {
+      if (ids.includes(selected)) return;
+      choices.get(selected)?.setAttribute("aria-pressed", "false");
+      if (!placements.has(selected)) selected = undefined;
+      placeCenter.hidden = true;
+    });
+    panel.append(heading);
+    if (tabs) panel.append(tabs);
+    panel.append(cards, placeCenter);
     if (layout.photoVersion) toolbar.append(action(t(23), () => {
       if (window.confirm(t(23) + "?")) return updateLayout(new Map(), {photo: null});
     }));
-    if (selectedLight && !placements.has(selected)) {
-      panel.append(action(t(20), () => setPosition(selected, 50, 50)));
-    }
     const editor = node("div", "", "house-editor");
     const canvas = node("div", "", "house-canvas");
     canvas.append(stage);
@@ -2264,10 +2225,6 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, ro
     }
     if (opening) {
       if (page === "shows") refreshShowPlayers();
-      if (page === "house") {
-        renderRoomLighting();
-        refreshRoomLighting();
-      }
       (page === "house" ? house : mount).append(syncStatus);
       if (!initialized) syncStatus.textContent = msg(0);
       refresh();
@@ -2280,7 +2237,6 @@ window.createLightingTools = ({mount, house, nav, api, node, field, language, ro
         light.has_product_image, light.has_catalog_image, hueProductImageRevisions.get(hueProductImagePath(light))])]);
     if (signature !== nextSignature) {
       signature = nextSignature;
-      if (page === "house") renderRoomLighting();
       if (initialized) {
         renderShows();
         renderSpatial();

@@ -122,7 +122,7 @@ class Lighting:
         for key, group in (groups or {}).items():
             members = group["members"]
             if members and frozenset(members) not in memberships:
-                targets[light_key("group", key)] = {"name": group["name"], "members": members}
+                targets[light_key("group", key)] = {"name": group["name"], "members": members, "kind": group.get("kind", "group")}
         return targets
 
     async def inventory(self, request):
