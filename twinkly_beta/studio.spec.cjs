@@ -717,6 +717,15 @@ test('Mijn Huis shows an existing Twinkly group as a single panel and identifies
  const editorShape = await shape(page.locator('.house-marker'));
  expect(editorShape).toEqual({position:['50%','50%'],ratio:2.3,stretch:2.3,rotation:'90deg',squareArtwork:true});
  expect(await shape(scene.locator('.house-3d-light'))).toEqual(editorShape);
+ const interior = scene.locator('.house-3d-wall[data-wall="default"] .house-3d-wall-interior');
+ const wallLamp = interior.locator('.house-3d-light');
+ await expect(wallLamp).toBeVisible();
+ expect(await interior.locator('.house-3d-pin').evaluateAll(([left,right]) =>
+  right.getBoundingClientRect().x - left.getBoundingClientRect().x)).toBeGreaterThan(0);
+ for (let i = 0; i < 6; i++) await page.getByRole('button',{name:'Rechts draaien'}).click();
+ await expect(wallLamp).toBeHidden();
+ await page.getByRole('button',{name:'Beginstand'}).click();
+ await expect(wallLamp).toBeVisible();
  const world = scene.locator('.house-3d-world');
  const before = await world.evaluate(element=>element.style.transform);
  await page.getByRole('button',{name:'Rechts draaien'}).click();
@@ -1366,6 +1375,7 @@ test('Mijn Huis places and removes a ceiling light and reloads its saved positio
  await page.getByRole('button',{name:'Plaats op plafond'}).click();
  const marker = page.locator('.house-3d-light[data-wall="ceiling-0"]');
  await expect(marker).toBeVisible();
+ expect(await marker.evaluate(el => new DOMMatrix(getComputedStyle(el).transform).m43)).toBeLessThan(0);
  await marker.getByRole('button',{name:'Plafondspot · Locatie'}).press('ArrowRight');
  await expect.poll(() => snapshot.ceiling_lights[0][0][1][0]).toBe(51);
  await page.reload();

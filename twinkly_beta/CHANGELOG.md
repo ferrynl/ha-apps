@@ -1,3 +1,7 @@
+## 2.0.0-beta.72
+
+- Mijn Huis toont wandlampen en lichtgordijnen aan de binnenkant van de kamer, met dezelfde links-rechtsrichting als in de wandeditor. Bij het draaien geeft de voorste wand zicht op de kamer.
+
 ## 2.0.0-beta.71
 
 - Mijn Huis tekent gedraaide en uitgerekte lichtgordijnen in 3D met dezelfde verhouding en rotatie als in de wandeditor.
