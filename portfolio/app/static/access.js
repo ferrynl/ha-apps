@@ -111,7 +111,23 @@ function bindPasskeys(){
   finally{button.disabled=false;form.elements.namedItem('password').value='';}
  });
 }
+function viewPreference(name,value){
+ const user=accessSession?.user;
+ if(!user)return '';
+ const key='homeinvest.view.'+JSON.stringify([currentProfile,user.id??user.username,name]);
+ try{
+  if(value===undefined)return sessionStorage.getItem(key)||'';
+  if(value)sessionStorage.setItem(key,value);
+  else sessionStorage.removeItem(key);
+ }catch{}
+ return '';
+}
 function lockApp(){
+ currentBroker='all';
+ $('account-filter').replaceChildren();
+ $('transaction-search').value='';
+ $('transaction-type').value='';
+ transactionSearches.clear();
  if(typeof clearHealthCenter==='function')clearHealthCenter();
  closeAllPopups();
  if(typeof clearDashboardLayout==='function')clearDashboardLayout();
@@ -171,6 +187,8 @@ async function startSession(){
  document.getElementById('user-management').hidden=!admin||!accessSession.enabled;
  document.getElementById('passkey-settings').hidden=!accessSession.enabled||!passkeySupported();
  if(accessSession.enabled&&passkeySupported())loadPasskeys().catch(error=>{$('passkey-feedback').textContent=error.message;});
+ const preferredBroker=viewPreference('broker');
+ currentBroker=/^\d+$/.test(preferredBroker)?preferredBroker:'all';
  if(currentProfile==='demo')homeCurrency='ALL';
  const layout=loadDashboardLayout();
  stateETag=null;rangeInitialized=false;showPage();await Promise.all([layout,load()]);

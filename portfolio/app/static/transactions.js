@@ -1,11 +1,12 @@
 /* UI strings use the shared catalogue; pure Node tests retain Dutch defaults. */
 var ui=globalThis.HomeInvestTranslate||((value)=>value);
 let transactionRows=[],editingTransaction=null,transactionPage=0,transactionLoad=0,deletePreview=null;
+const transactionSearches=new Map();
 const transactionLabels={COST:ui('Kosten'),TAX:ui('Belastingen'),TRANSFER:ui('Omboeking'),BUY:ui('Aankoop'),SELL:ui('Verkoop'),DIVIDEND:ui('Dividend'),CAPITAL_RETURN:ui('Kapitaalterugbetaling'),SPLIT:ui('Aandelensplitsing')};
 function clearTransactions(){transactionLoad++;transactionRows=[];editingTransaction=null;transactionPage=0;$('transaction-list').replaceChildren();closePopup('transaction-editor');$('transaction-form').reset();$('transaction-cost-rows').replaceChildren();$('transaction-cost-existing').replaceChildren();$('transaction-account').replaceChildren();$('transaction-edit-title').textContent='';$('transaction-identity').textContent='';$('transaction-edit-feedback').textContent='';$('delete-backup').hidden=true;$('delete-backup').removeAttribute('href');$('transaction-feedback').textContent='';$('transaction-changes').replaceChildren();deletePreview=null;$('delete-review').hidden=true;$('delete-summary').textContent='';$('delete-confirmation').value='';$('delete-submit').disabled=true;$('delete-feedback').textContent='';}
 async function loadTransactions({background=false}={}){
  const version=++transactionLoad,account=currentBroker;
- try{const response=await apiFetch('api/transactions?account_id='+encodeURIComponent(account),{background});const result=await response.json();if(!response.ok)throw Error(result.error);if(version!==transactionLoad||!accessSession?.user)return;transactionRows=result.transactions;const dateFilter=new URLSearchParams(location.hash.split('?')[1]||'').get('datum');if(dateFilter&&/^\d{4}-\d{2}-\d{2}$/.test(dateFilter))$('transaction-search').value=dateFilter;transactionPage=0;renderTransactions();}catch(error){if(version===transactionLoad)$('transaction-feedback').textContent=error.message;}
+ try{const response=await apiFetch('api/transactions?account_id='+encodeURIComponent(account),{background});const result=await response.json();if(!response.ok)throw Error(result.error);if(version!==transactionLoad||!accessSession?.user)return;transactionRows=result.transactions;transactionPage=0;renderTransactions();}catch(error){if(version===transactionLoad)$('transaction-feedback').textContent=error.message;}
 }
 function transactionColumnValues(entry){return [entry.day,transactionLabels[entry.type],entry.name||entry.symbol||entry.ticker,entry.account_name,entry.currency,entry.quantity==null?'—':quantityLabel(entry.quantity),entry.type==='TRANSFER'&&entry.transfer_cost?money(entry.transfer_cost,entry.currency):entry.amount?money(entry.amount,entry.currency):(entry.type==='SPLIT'||entry.type==='TRANSFER')?'—':money(entry.price,entry.currency),ui('Bekijken')];}
 function transactionInPage(row,page){
@@ -18,7 +19,11 @@ function configureTransactionPage(page){
  $('transaction-page-description').textContent=page==='transacties-dividend'?ui('Bekijk de geboekte dividendontvangsten per brokeraccount.'):page==='transacties-omzettingen'?ui('Bekijk aandelensplitsingen en omzettingen per brokeraccount.'):ui('Bekijk aankopen, verkopen, splitsingen, dividend en kapitaalterugbetalingen. De rekeningkeuze bovenaan filtert dit overzicht. Alleen admins kunnen gegevens wijzigen.');
  const type=$('transaction-type');
  for(const option of type.options)option.hidden=!!option.value&&!transactionInPage({type:option.value},page);
- if(type.selectedOptions[0]?.hidden)type.value='';
+ const dateFilter=new URLSearchParams(location.hash.split('?')[1]||'').get('datum');
+ const hasDate=reportDate(dateFilter);
+ $('transaction-search').value=hasDate?dateFilter:(transactionSearches.get(page)??viewPreference('transaction-date.'+page));
+ type.value=hasDate?'':viewPreference('transaction-type.'+page);
+ if(type.selectedOptions[0]?.hidden||type.selectedIndex<0)type.value='';
  type.closest('label').hidden=page==='transacties-dividend';
  transactionPage=0;
 }
@@ -89,7 +94,15 @@ function transactionSaveFailure(error){
 function bindTransactions(){
  $('transaction-cost-add').addEventListener('click',()=>addTransactionCost());
  $('transaction-cost-existing').addEventListener('change',event=>{const charge=transactionRows.find(r=>r.kind==='charge'&&String(r.id)===event.target.value);if(charge&&![...$('transaction-cost-rows').children].some(row=>row.dataset.id===String(charge.id)))addTransactionCost(charge);event.target.value='';});
- for(const id of ['transaction-search','transaction-type'])$(id).addEventListener('input',()=>{transactionPage=0;renderTransactions();});
+ for(const id of ['transaction-search','transaction-type'])$(id).addEventListener('input',event=>{
+  const page=location.hash.slice(1).split('?')[0],value=event.target.value;
+  if(id==='transaction-type')viewPreference('transaction-type.'+page,value);
+  else{
+   transactionSearches.set(page,value);
+   viewPreference('transaction-date.'+page,reportDate(value)?value:'');
+  }
+  transactionPage=0;renderTransactions();
+ });
  $('transaction-refresh').addEventListener('click',loadTransactions);$('transaction-prev').addEventListener('click',()=>{transactionPage--;renderTransactions();});$('transaction-next').addEventListener('click',()=>{transactionPage++;renderTransactions();});
  $('transaction-close').addEventListener('click',()=>{editingTransaction=null;closePopup('transaction-editor');});
  $('transaction-form').addEventListener('submit',async event=>{event.preventDefault();const entry=editingTransaction;if(!entry)return;const button=$('transaction-save');button.disabled=true;

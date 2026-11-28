@@ -199,3 +199,10 @@
 @media(max-width:550px){.fund-holdings-controls input{flex-basis:100%}.fund-holdings-controls span{flex:1}.fund-report{padding:16px}#stock-fund-panel .section-head{flex-wrap:wrap;gap:12px}}
 
 #stock-fund-charts{align-items:start}#stock-fund-charts .country-ranking{max-height:320px;overflow:auto}#stock-fund-charts .report-chart-detail:empty{display:none}
+
+/* Keep report figures and section labels inside narrow cards. */
+.reports-dashboard .home-metric strong{white-space:normal;overflow-wrap:anywhere}
+.reports-dashboard .report-insight strong,.report-donut-legend strong{overflow-wrap:anywhere}
+.report-ledger summary,.report-ledger .scroll{min-width:0}
+.report-ledger summary span,.report-ledger summary small{overflow-wrap:anywhere}
+@media(max-width:400px){.reports-dashboard .portfolio-metrics{grid-template-columns:minmax(0,1fr)}}

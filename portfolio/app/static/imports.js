@@ -109,7 +109,7 @@ function bindImports(){
  $('import-api-report-open').addEventListener('click',()=>openPopup('import-api-report'));
  $('import-form').addEventListener('change',()=>{importPreview=null;$('import-preview').hidden=true;refreshImportAccounts();});
  $('account-filter').addEventListener('change',async()=>{
-  currentBroker=$('account-filter').value;stateETag=null;stateRequest++;state=null;
+  currentBroker=$('account-filter').value;viewPreference('broker',currentBroker);stateETag=null;stateRequest++;state=null;
   clearHomeDashboard();clearStocksDashboard();clearCategoryOverview();clearDividendDashboard();clearStockDetail();clearTransactions();clearReports();
   for(const id of ['totals','chart','chart-days'])$(id).replaceChildren();
   await load();if(currentBroker!=='all')$('purchase-account').value=currentBroker;

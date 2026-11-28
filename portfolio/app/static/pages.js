@@ -141,7 +141,7 @@ function renderPages(){
  $('sidebar-version').textContent=ui('Versie ')+state.app_version;
  $('settings-version').textContent=state.app_version;$('settings-database').textContent=state.database_version;$('settings-interval').textContent=state.refresh_minutes+ui(' minuten');
  if(!settingsDirty)$('settings-form').elements.namedItem('default_range').value=state.settings.default_range;
- const selected=$('report-year').value,years=[...new Set([...Array.from({length:6},(_,i)=>String(new Date().getFullYear()+i)),...[...state.dividends,...(state.charges||[])].filter(d=>reportDate(d.paid_on)).map(d=>d.paid_on.slice(0,4))])].sort().reverse();
+ const selected=viewPreference('report-year'),years=[...new Set([...Array.from({length:6},(_,i)=>String(new Date().getFullYear()+i)),...[...state.dividends,...(state.charges||[])].filter(d=>reportDate(d.paid_on)).map(d=>d.paid_on.slice(0,4))])].sort().reverse();
  $('report-year').replaceChildren();for(const year of years){const option=document.createElement('option');option.value=year;option.textContent=year;$('report-year').append(option);}$('report-year').value=years.includes(selected)?selected:String(new Date().getFullYear());
  if(location.hash.startsWith('#rapporten'))renderReports();
  if(location.hash==='#instellingen')loadHomeAssistant();
@@ -160,7 +160,7 @@ async function loadHomeAssistant(){
 }
 let settingsDirty=false;
 $('settings-form').addEventListener('input',()=>{settingsDirty=true;});
-$('report-year').addEventListener('change',renderReports);
+$('report-year').addEventListener('change',event=>{viewPreference('report-year',event.target.value);renderReports();});
 $('stock-movers-period').addEventListener('change',loadStockMovers);
 $('settings-form').addEventListener('submit',async event=>{event.preventDefault();const button=event.target.querySelector('button');button.disabled=true;try{const response=await apiFetch('api/settings',{method:'POST',headers:{'Content-Type':'application/json','X-Portfolio-Request':'1'},body:JSON.stringify(Object.fromEntries(new FormData(event.target)))});if(!response.ok)throw Error(ui('Instellingen opslaan mislukt.'));settingsDirty=false;chartRange=event.target.elements.namedItem('default_range').value;syncRangeButtons();await load();$('settings-feedback').textContent=ui('Instellingen opgeslagen.');}catch(error){$('settings-feedback').textContent=error.message;}finally{button.disabled=false;}});
 bindPopups();bindDividendMonth();bindFeedback();showPage();

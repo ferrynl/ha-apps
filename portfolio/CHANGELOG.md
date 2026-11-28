@@ -1,3 +1,8 @@
+## 0.70.52
+
+- Zoek aandelen makkelijker op mobiel en toon exacte tickers boven alternatieve noteringen.
+- Onthoud de brokerkeuze, het transactietype, de transactiedatum en het rapportjaar na herladen in dezelfde browsertab.
+
 ## 0.70.51
 
 - Maak het mobiele menu makkelijker te bedienen met een groter aanraakvlak en zichtbare toetsenbordfocus. Verplaats de focus naar het menu bij openen, terug naar de knop bij sluiten en naar de pagina-inhoud na navigatie.
